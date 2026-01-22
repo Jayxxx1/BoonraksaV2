@@ -1,0 +1,180 @@
+// server/prisma/schema.prisma
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+// --------------------------------------------------------
+// 👥 ส่วนจัดการผู้ใช้งาน (User Management) - 8 Roles
+// --------------------------------------------------------
+
+enum Role {
+    ADMIN // ผู้ดูแลระบบ (Super Admin)
+    EXECUTIVE // ผู้บริหาร (ดู Dashboard)
+    SALES // ฝ่ายขาย
+    GRAPHIC // ฝ่ายกราฟิก (ออกแบบ/ทำไฟล์)
+    STOCK // ฝ่ายสต็อก (รับของ/จัดของ)
+    PRODUCTION // ฝ่ายผลิต (ปัก/สกรีน)
+    SEWING_QC // ฝ่ายตัดเย็บและ QC
+    DELIVERY // ฝ่ายจัดส่ง
+}
+
+model User {
+    id       Int     @id @default(autoincrement())
+    username String  @unique
+    password String
+    name     String
+    role     Role    @default(SALES)
+    isActive Boolean @default(true)
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    openedOrders  Order[] @relation("SalesOrders")
+    graphicOrders Order[] @relation("GraphicOrders")
+    qcOrders      Order[] @relation("QCOrders")
+
+    activityLogs ActivityLog[]
+    pushSubs     PushSubscription[]
+}
+
+// --------------------------------------------------------
+// 🛍️ ส่วนจัดการสินค้า (Product Management)
+// --------------------------------------------------------
+
+model Category {
+    id       Int       @id @default(autoincrement())
+    name     String
+    products Product[]
+}
+
+model Product {
+    id          Int     @id @default(autoincrement())
+    name        String
+    codePrefix  String? // เช่น "A", "P"
+    description String?
+    imageUrl    String? // Link รูปจาก S3
+
+    categoryId Int
+    category   Category @relation(fields: [categoryId], references: [id])
+
+    variants ProductVariant[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+enum Gender {
+    male
+    female
+    unisex
+}
+
+model ProductVariant {
+    id     Int    @id @default(autoincrement())
+    sku    String @unique // รหัสห้ามซ้ำ เช่น "A101-M"
+    code   String // รหัสสี/แบบ
+    color  String
+    size   String
+    gender Gender @default(unisex)
+
+    price Decimal @db.Decimal(10, 2)
+    cost  Decimal @default(0) @db.Decimal(10, 2)
+
+    stock    Int     @default(0)
+    minStock Int     @default(5) // จุดเตือนสั่งซื้อ
+    location String? // ตำแหน่งเก็บของ
+
+    productId Int
+    product   Product @relation(fields: [productId], references: [id])
+
+    orderItems OrderItem[]
+}
+
+// --------------------------------------------------------
+// 📦 ส่วนออเดอร์ (Order System)
+// --------------------------------------------------------
+
+enum OrderStatus {
+    PENDING // รอเงิน
+    CONFIRMED // ยืนยัน/ตัดสต็อกแล้ว
+    DESIGNING // กำลังทำแบบ
+    PRODUCTION // กำลังผลิต
+    PACKING // แพ็คของ
+    DELIVERY // ส่งแล้ว
+    COMPLETED // จบงาน
+    CANCELLED // ยกเลิก
+}
+
+model Order {
+    id    Int    @id @default(autoincrement())
+    jobId String @unique // JOB-6701-001
+
+    customerName    String
+    customerPhone   String?
+    customerAddress String?
+
+    totalPrice Decimal     @db.Decimal(10, 2)
+    deposit    Decimal     @default(0) @db.Decimal(10, 2)
+    status     OrderStatus @default(PENDING)
+    dueDate    DateTime?
+
+    // ผู้รับผิดชอบงาน
+    salesId Int
+    sales   User @relation("SalesOrders", fields: [salesId], references: [id])
+
+    graphicId Int?
+    graphic   User? @relation("GraphicOrders", fields: [graphicId], references: [id])
+
+    qcId Int?
+    qc   User? @relation("QCOrders", fields: [qcId], references: [id])
+
+    items OrderItem[]
+    logs  ActivityLog[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+model OrderItem {
+    id      Int   @id @default(autoincrement())
+    orderId Int
+    order   Order @relation(fields: [orderId], references: [id])
+
+    // ✅ เชื่อมกับสต็อกจริง (สำคัญมาก!)
+    variantId Int
+    variant   ProductVariant @relation(fields: [variantId], references: [id])
+
+    productName String // Snapshot ชื่อตอนซื้อ
+    price       Decimal @db.Decimal(10, 2)
+    quantity    Int
+    details     Json? // ข้อมูลสกรีน/ปัก
+}
+
+// --------------------------------------------------------
+// 📊 ส่วน Log และ Notification
+// --------------------------------------------------------
+
+model ActivityLog {
+    id        Int      @id @default(autoincrement())
+    action    String
+    details   String?
+    orderId   Int?
+    order     Order?   @relation(fields: [orderId], references: [id])
+    userId    Int
+    user      User     @relation(fields: [userId], references: [id])
+    timestamp DateTime @default(now())
+}
+
+model PushSubscription {
+    id        Int      @id @default(autoincrement())
+    endpoint  String
+    keys      Json
+    userId    Int
+    user      User     @relation(fields: [userId], references: [id])
+    createdAt DateTime @default(now())
+}
