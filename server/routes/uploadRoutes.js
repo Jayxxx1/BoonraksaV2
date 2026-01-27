@@ -14,12 +14,19 @@ router.post('/', upload.single('file'), asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'No file uploaded' });
   }
 
-  // req.file contains location (S3 URL) and key (S3 Key) thanks to multer-s3
+  // Determine the URL: req.file.location is for S3, req.file.path is for local
+  let fileUrl = req.file.location;
+  if (!fileUrl && req.file.path) {
+    // Normalize path to URL format and add protocol/host for frontend
+    const relativePath = req.file.path.replace(/\\/g, '/');
+    fileUrl = `http://localhost:8000/${relativePath}`;
+  }
+
   res.status(200).json({
     success: true,
     data: {
-      url: req.file.location,
-      key: req.file.key,
+      url: fileUrl,
+      key: req.file.key || req.file.filename,
       mimetype: req.file.mimetype,
       size: req.file.size
     }

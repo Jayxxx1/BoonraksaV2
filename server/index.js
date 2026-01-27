@@ -9,12 +9,20 @@ import { errorHandler } from './src/middleware/error.middleware.js';
 // Routes
 import productRoutes from './routes/productRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import orderRoutes from './routes/orderRoutes.js';
+import stockRoutes from './routes/stockRoutes.js';
+import blockRoutes from './routes/blockRoutes.js';
 import { getCategories } from './controllers/productController.js';
 
 const app = express();
 
+
 // --- Security & Production Middleware ---
-app.use(helmet()); // Sets various HTTP headers for security
+// --- Security & Production Middleware ---
+app.use(helmet({
+  crossOriginResourcePolicy: false, // Allows loading images from other origins (S3/Local)
+}));
 app.use(compression()); // Compress all responses
 app.use(express.json({ limit: '10mb' })); // Limit body size for security
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -24,7 +32,7 @@ app.use(morgan(config.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // CORS: Configurable whitelist from environment
 const corsOptions = {
-  origin: config.CORS_ORIGIN === '*' ? '*' : config.CORS_ORIGIN.split(','),
+  origin: true, // Allow all origins for dev or specify yours
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -40,8 +48,19 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.use('/api/auth', authRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/stock', stockRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/blocks', blockRoutes);
+
 app.use('/api/upload', uploadRoutes);
+
+// Serves static files in development (fallback for NIPA/S3)
+if (config.NODE_ENV === 'development') {
+  app.use('/uploads', express.static('uploads'));
+}
+
 app.get('/api/categories', getCategories);
 
 // --- 404 & Error Handling ---

@@ -105,7 +105,7 @@ export default function ProductDetail() {
               {product.name}
             </h1>
             <p className="text-slate-400 font-medium">
-              รหัสต้นบุญ:{" "}
+              รหัส:{" "}
               <span className="text-slate-600">
                 {product.codePrefix || "-"}
               </span>

@@ -1,18 +1,14 @@
-/**
- * Storage Service Abstraction
- * This allows us to swap storage providers (Local, S3, Google Cloud) 
- * without changing the business logic.
- */
-export class StorageService {
-  async uploadFile(file, folder) {
-    throw new Error('Method not implemented');
+// src/services/storage.service.js
+export default class StorageService {
+  async uploadFile() {
+    throw new Error('uploadFile() not implemented');
   }
 
-  async deleteFile(fileKey) {
-    throw new Error('Method not implemented');
+  async deleteFile() {
+    throw new Error('deleteFile() not implemented');
   }
 
-  async getSignedUrl(fileKey) {
-    throw new Error('Method not implemented');
+  async getSignedUrl() {
+    throw new Error('getSignedUrl() not implemented');
   }
 }

@@ -7,6 +7,7 @@ import {
   HiOutlineMagnifyingGlass,
   HiOutlineFunnel,
   HiArrowPath,
+  HiOutlineCube,
 } from "react-icons/hi2";
 
 export default function ProductList() {
@@ -170,7 +171,7 @@ export default function ProductList() {
                     {product.name}
                   </h3>
                   <p className="text-xs font-medium text-slate-400 mt-1">
-                    รหัสต้นบุญ:{" "}
+                    รหัส:{" "}
                     <span className="text-slate-600">
                       {product.codePrefix || "-"}
                     </span>
