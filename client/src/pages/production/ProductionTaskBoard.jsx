@@ -134,9 +134,10 @@ export default function ProductionTaskBoard() {
                           }`}
                         >
                           {{
-                            STOCK_RECHECKED: "รอการผลิต",
+                            PENDING_STOCK_CHECK: "รอเช็คสต็อกก่อนผลิต",
                             IN_PRODUCTION: "กำลังผลิต",
-                            QC_PASSED: "ผลิตเสร็จ/ผ่าน QC",
+                            PRODUCTION_FINISHED: "ผลิตเสร็จสมบูรณ์/รอ QC",
+                            QC_PASSED: "ผ่าน QC แล้ว",
                             COMPLETED: "ส่งของแล้ว",
                           }[order.status] || order.status}
                         </span>

@@ -12,6 +12,7 @@ import {
   HiOutlineCheckCircle,
   HiOutlineExclamationCircle,
   HiOutlineFire,
+  HiOutlineCheckBadge,
 } from "react-icons/hi2";
 
 const statusGroups = {
@@ -22,8 +23,9 @@ const statusGroups = {
     "PENDING_STOCK_CHECK",
     "STOCK_ISSUE",
     "IN_PRODUCTION",
+    "PRODUCTION_FINISHED",
   ],
-  ready: ["READY_TO_SHIP"],
+  ready: ["QC_PASSED", "READY_TO_SHIP"],
   completed: ["COMPLETED"],
   cancelled: ["CANCELLED"],
 };
@@ -130,6 +132,18 @@ export default function OrderList() {
         text: "text-yellow-700",
         label: "กำลังผลิต",
         icon: HiOutlineClock,
+      },
+      PRODUCTION_FINISHED: {
+        bg: "bg-blue-100",
+        text: "text-blue-700",
+        label: "ผลิตเสร็จสมบูรณ์",
+        icon: HiOutlineCheckBadge,
+      },
+      QC_PASSED: {
+        bg: "bg-emerald-50",
+        text: "text-emerald-600",
+        label: "ผ่าน QC แล้ว",
+        icon: HiOutlineCheckBadge,
       },
       READY_TO_SHIP: {
         bg: "bg-emerald-100",

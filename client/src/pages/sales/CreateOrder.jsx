@@ -349,6 +349,8 @@ const CreateOrder = () => {
         blockId: "",
         type: "ปัก (Embroidery)",
         note: "",
+        isFreeOption: false,
+        freeOptionName: "เซฟตี้",
       },
     ]);
   };
@@ -1122,34 +1124,79 @@ const CreateOrder = () => {
                     )}
 
                     <div>
-                      <label className="text-xs font-bold text-slate-500 mb-1 block">
-                        ประเภท
-                      </label>
-                      <select
-                        value={item.type}
-                        onChange={(e) => {
-                          const newEmb = [...embroidery];
-                          newEmb[index].type = e.target.value;
-                          setEmbroidery(newEmb);
-                        }}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none"
-                      >
-                        <option>ปัก (Embroidery)</option>
-                        <option>สกรีน (Screen)</option>
-                        <option>DTF</option>
-                        <option>Flex</option>
-                      </select>
-                    </div>
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={item.isFreeOption}
+                            onChange={(e) => {
+                              const newEmb = [...embroidery];
+                              newEmb[index].isFreeOption = e.target.checked;
+                              setEmbroidery(newEmb);
+                            }}
+                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="text-[10px] font-bold text-slate-600 uppercase">
+                            ปักฟรี (Free Option)
+                          </span>
+                        </label>
 
-                    <div
-                      className={isNewBlock ? "md:col-span-3" : "md:col-span-4"}
-                    >
-                      <label className="text-xs font-bold text-slate-500 mb-1 block">
-                        หมายเหตุ
-                      </label>
+                        {item.isFreeOption && (
+                          <select
+                            value={item.freeOptionName}
+                            onChange={(e) => {
+                              const newEmb = [...embroidery];
+                              newEmb[index].freeOptionName = e.target.value;
+                              setEmbroidery(newEmb);
+                            }}
+                            className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold outline-none ring-offset-2 focus:ring-2 focus:ring-indigo-100"
+                          >
+                            <option value="เซฟตี้">เซฟตี้</option>
+                            <option value="ธงชาติ">ธงชาติ</option>
+                            <option value="โลโก้สาขา">โลโก้สาขา</option>
+                            <option value="เครื่องหมายราชการ">
+                              เครื่องหมายราชการ
+                            </option>
+                            <option value="อื่นๆ">
+                              อื่นๆ (ระบุในหมายเหตุ)
+                            </option>
+                          </select>
+                        )}
+                      </div>
+
                       <div className="flex items-center gap-2">
+                        {!item.isFreeOption && (
+                          <>
+                            <input
+                              type="text"
+                              placeholder="กว้าง"
+                              value={item.width}
+                              onChange={(e) => {
+                                const newEmb = [...embroidery];
+                                newEmb[index].width = e.target.value;
+                                setEmbroidery(newEmb);
+                              }}
+                              className="w-20 px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none"
+                            />
+                            <span className="text-slate-400">x</span>
+                            <input
+                              type="text"
+                              placeholder="สูง"
+                              value={item.height}
+                              onChange={(e) => {
+                                const newEmb = [...embroidery];
+                                newEmb[index].height = e.target.value;
+                                setEmbroidery(newEmb);
+                              }}
+                              className="w-20 px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none"
+                            />
+                            <span className="text-xs text-slate-400 mr-2">
+                              ซม.
+                            </span>
+                          </>
+                        )}
                         <input
-                          placeholder="เช่น เส้นด้ายสีทอง, หมึกสีขาว"
+                          placeholder="รายละเอียดเพิ่มเติม (สีด้าย, หมายเหตุ...)"
                           value={item.note}
                           onChange={(e) => {
                             const newEmb = [...embroidery];

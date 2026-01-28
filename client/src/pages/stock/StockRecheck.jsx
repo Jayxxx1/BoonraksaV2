@@ -122,15 +122,14 @@ export default function StockRecheck() {
                       <td className="px-6 py-4">
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${
-                            order.status === "STOCK_RECHECKED"
+                            order.status === "IN_PRODUCTION"
                               ? "bg-emerald-100 text-emerald-600"
                               : "bg-indigo-50 text-indigo-600"
                           }`}
                         >
                           {{
-                            JOB_PRINTED: "รอเช็คของ",
-                            STOCK_ISSUE: "แจ้งปัญหาแล้ว",
-                            STOCK_RECHECKED: "เช็คของครบ",
+                            PENDING_STOCK_CHECK: "รอเช็คสต็อก",
+                            STOCK_ISSUE: "สต็อกมีปัญหา",
                             IN_PRODUCTION: "ส่งเข้าผลิตแล้ว",
                           }[order.status] || order.status}
                         </span>

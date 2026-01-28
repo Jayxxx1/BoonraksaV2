@@ -53,6 +53,7 @@ export const protect = asyncHandler(async (req, res, next) => {
  */
 export const restrictTo = (...roles) => {
   return (req, res, next) => {
+    console.log(`[AUTH] Checking Role: ${req.user.role}, Allowed: ${roles}`); // Debug Log
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         status: 'fail',

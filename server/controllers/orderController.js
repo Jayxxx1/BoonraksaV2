@@ -1,9 +1,9 @@
 import prisma from '../src/prisma/client.js';
 import { asyncHandler } from '../src/middleware/error.middleware.js';
-import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import s3Provider from '../src/services/providers/s3.provider.js';
 import config from '../src/config/config.js';
+import { generateJobSheetPDF } from '../services/pdfService.js';
 
 
 /**
@@ -145,6 +145,28 @@ export const createOrder = asyncHandler(async (req, res) => {
         }
       });
 
+      // 4.5 Create Initial Payment Slip if exists
+      console.log('DEBUG: Checking Initial Slip', { paid, depositSlipUrl });
+      if (paid > 0 && depositSlipUrl) {
+        console.log('DEBUG: Creating Payment Slip record...');
+        try {
+          await tx.paymentSlip.create({
+            data: {
+              orderId: order.id,
+              amount: paid,
+              slipUrl: depositSlipUrl,
+              note: 'เงินมัดจำ (Initial Deposit)',
+              uploadedBy: req.user.id
+            }
+          });
+          console.log('DEBUG: Payment Slip Created Successfully');
+        } catch (err) {
+          console.error('DEBUG: Payment Slip Creation Failed', err);
+        }
+      } else {
+        console.log('DEBUG: Skipping Payment Slip Creation');
+      }
+
       // 5. Deduct stock
       for (const item of items) {
         const variant = await tx.productVariant.findUnique({ 
@@ -232,33 +254,38 @@ export const getOrders = asyncHandler(async (req, res) => {
   } else if (view === 'available') {
     if (req.user.role === 'GRAPHIC') {
       where.graphicId = null;
-      where.status = 'READY_FOR_ARTWORK';
+      // Graphic sees orders waiting for artwork
+      where.status = { in: ['PENDING_ARTWORK', 'DESIGNING'] };
     } else if (req.user.role === 'STOCK') {
       where.stockId = null;
-      where.status = 'JOB_PRINTED';
+      // Stock sees orders sent from Graphic
+      where.status = { in: ['PENDING_STOCK_CHECK'] };
     } else if (req.user.role === 'PRODUCTION') {
       where.productionId = null;
-      where.status = 'STOCK_RECHECKED';
+      // Production sees orders confirmed by Stock
+      where.status = { in: ['IN_PRODUCTION'] }; 
     } else if (req.user.role === 'SEWING_QC') {
       where.qcId = null;
+      // QC sees orders finished by Production
       where.status = 'PRODUCTION_FINISHED';
     } else if (req.user.role === 'DELIVERY') {
-      where.status = 'READY_TO_SHIP';
+      // Delivery sees orders passed QC
+      where.status = { in: ['QC_PASSED', 'READY_TO_SHIP'] };
     }
   } else if (view === 'history') {
     // History is ALWAYS restricted to own tasks for technical roles
     switch (req.user.role) {
       case 'GRAPHIC': 
         where.graphicId = req.user.id; 
-        where.status = { notIn: ['READY_FOR_ARTWORK', 'ARTWORK_UPLOADED'] };
+        where.status = { notIn: ['PENDING_ARTWORK', 'DESIGNING'] };
         break;
       case 'STOCK': 
         where.stockId = req.user.id; 
-        where.status = { notIn: ['JOB_PRINTED'] };
+        where.status = { notIn: ['PENDING_STOCK_CHECK'] };
         break;
       case 'PRODUCTION': 
         where.productionId = req.user.id; 
-        where.status = { notIn: ['STOCK_RECHECKED', 'IN_PRODUCTION'] };
+        where.status = { notIn: ['PENDING_STOCK_CHECK', 'IN_PRODUCTION'] };
         break;
       case 'SEWING_QC': 
         where.qcId = req.user.id; 
@@ -380,6 +407,32 @@ export const updatePurchasingInfo = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Step 2: Graphic claims task (Assign Graphic)
+ */
+export const assignGraphic = asyncHandler(async (req, res) => {
+  const { orderId } = req.params;
+
+  const order = await prisma.order.update({
+    where: { id: parseInt(orderId) },
+    data: {
+      graphicId: req.user.id,
+      status: 'DESIGNING' // เปลี่ยนจาก PENDING_ARTWORK → DESIGNING
+    }
+  });
+
+  await prisma.activityLog.create({
+    data: {
+      action: 'CLAIM_GRAPHIC',
+      details: `ฝ่ายกราฟิก ${req.user.name} รับงานออกแบบ → กำลังวางแบบ`,
+      orderId: order.id,
+      userId: req.user.id
+    }
+  });
+
+  res.status(200).json({ status: 'success', data: { order } });
+});
+
+/**
  * Step 3: Graphic uploads artwork
  */
 export const uploadArtwork = asyncHandler(async (req, res) => {
@@ -390,7 +443,7 @@ export const uploadArtwork = asyncHandler(async (req, res) => {
     where: { id: parseInt(orderId) },
     data: {
       artworkUrl,
-      status: 'ARTWORK_UPLOADED',
+      status: 'PENDING_STOCK_CHECK', // เปลี่ยนจาก ARTWORK_UPLOADED
       graphicId: req.user.id
     }
   });
@@ -398,7 +451,7 @@ export const uploadArtwork = asyncHandler(async (req, res) => {
   await prisma.activityLog.create({
     data: {
       action: 'UPLOAD_ARTWORK',
-      details: `ฝ่ายกราฟิก ${req.user.name} อัปเดตไฟล์ Artwork เรียบร้อย`,
+      details: `ฝ่ายกราฟิก ${req.user.name} อัปเดตไฟล์ Artwork เรียบร้อย → รอสต็อคเช็ค`,
       orderId: order.id,
       userId: req.user.id
     }
@@ -419,21 +472,24 @@ export const updateOrderSpecs = asyncHandler(async (req, res) => {
     productionFileName 
   } = req.body;
 
+  const updateData = {};
+  if (embroideryDetails) updateData.embroideryDetails = embroideryDetails;
+  if (artworkUrl) updateData.artworkUrl = artworkUrl;
+  if (productionFileUrl) updateData.productionFileUrl = productionFileUrl;
+  if (productionFileName) updateData.productionFileName = productionFileName;
+
+  // Note: We do NOT auto-change status here anymore, because Graphic might upload multiple drafts.
+  // Status change happens explicitly via "Send to Stock" button.
+
   const order = await prisma.order.update({
     where: { id: parseInt(orderId) },
-    data: {
-      embroideryDetails: embroideryDetails || undefined,
-      artworkUrl: artworkUrl || undefined,
-      productionFileUrl: productionFileUrl || undefined,
-      productionFileName: productionFileName || undefined,
-      status: (artworkUrl || productionFileUrl) ? 'ARTWORK_UPLOADED' : undefined
-    }
+    data: updateData
   });
 
   await prisma.activityLog.create({
     data: {
       action: 'UPDATE_SPECS',
-      details: `Graphic ${req.user.name} อัพเดตงานปัก`,
+      details: `Graphic ${req.user.name} อัปเดตงานปัก/ไฟล์งาน`,
       orderId: order.id,
       userId: req.user.id
     }
@@ -448,21 +504,28 @@ export const updateOrderSpecs = asyncHandler(async (req, res) => {
 export const printJobSheetSignal = asyncHandler(async (req, res) => {
   const { orderId } = req.params;
 
-  const order = await prisma.order.update({
+  const order = await prisma.order.findUnique({ where: { id: parseInt(orderId) } });
+  if (!order) return res.status(404).json({ status: 'fail', message: 'Order not found' });
+
+  if (order.status !== 'PENDING_ARTWORK' && order.status !== 'DESIGNING') {
+    return res.status(400).json({ status: 'fail', message: 'ออเดอร์ไม่อยู่ในขั้นตอนที่สามารถส่งต่อสต็อกได้' });
+  }
+
+  const updatedOrder = await prisma.order.update({
     where: { id: parseInt(orderId) },
-    data: { status: 'JOB_PRINTED' }
+    data: { status: 'PENDING_STOCK_CHECK' }
   });
 
   await prisma.activityLog.create({
     data: {
       action: 'PRINT_JOB_SHEET',
-      details: `ฝ่ายกราฟิก ${req.user.name} พิมพ์ใบงาน (Job Sheet) แล้ว`,
-      orderId: order.id,
+      details: `ฝ่ายกราฟิก ${req.user.name} พิมพ์ใบงาน (Job Sheet) และส่งต่อฝ่ายสต็อกแล้ว`,
+      orderId: updatedOrder.id,
       userId: req.user.id
     }
   });
 
-  res.status(200).json({ status: 'success', data: { order } });
+  res.status(200).json({ status: 'success', data: { order: updatedOrder } });
 });
 
 /**
@@ -471,10 +534,17 @@ export const printJobSheetSignal = asyncHandler(async (req, res) => {
 export const confirmStockRecheck = asyncHandler(async (req, res) => {
   const { orderId } = req.params;
 
-  const order = await prisma.order.update({
+  const order = await prisma.order.findUnique({ where: { id: parseInt(orderId) } });
+  if (!order) return res.status(404).json({ status: 'fail', message: 'Order not found' });
+
+  if (order.status !== 'PENDING_STOCK_CHECK' && order.status !== 'STOCK_ISSUE') {
+    return res.status(400).json({ status: 'fail', message: 'ออเดอร์ไม่อยู่ในขั้นตอนรอเช็คสต็อก' });
+  }
+
+  const updatedOrder = await prisma.order.update({
     where: { id: parseInt(orderId) },
     data: { 
-      status: 'STOCK_RECHECKED',
+      status: 'IN_PRODUCTION', 
       stockId: req.user.id
     }
   });
@@ -482,13 +552,13 @@ export const confirmStockRecheck = asyncHandler(async (req, res) => {
   await prisma.activityLog.create({
     data: {
       action: 'STOCK_RECHECKED',
-      details: `ฝ่ายสต็อก ${req.user.name} ยืนยันสินค้าครบถ้วน พร้อมเข้าการผลิต`,
-      orderId: order.id,
+      details: `ฝ่ายสต็อก ${req.user.name} ยืนยันสินค้าครบถ้วน → ส่งเข้าผลิต`,
+      orderId: updatedOrder.id,
       userId: req.user.id
     }
   });
 
-  res.status(200).json({ status: 'success', data: { order } });
+  res.status(200).json({ status: 'success', data: { order: updatedOrder } });
 });
 
 /**
@@ -497,10 +567,10 @@ export const confirmStockRecheck = asyncHandler(async (req, res) => {
 export const startProduction = asyncHandler(async (req, res) => {
   const { orderId } = req.params;
 
-  const order = await prisma.order.update({
-    where: { id: parseInt(orderId) },
-    data: { status: 'IN_PRODUCTION' }
-  });
+  const order = await prisma.order.findUnique({ where: { id: parseInt(orderId) } });
+  if (order.status !== 'IN_PRODUCTION') {
+    return res.status(400).json({ status: 'fail', message: 'กรุณากดรับงานเข้าฝ่ายผลิตก่อน' });
+  }
 
   await prisma.activityLog.create({
     data: {
@@ -516,29 +586,36 @@ export const startProduction = asyncHandler(async (req, res) => {
 
 
 /**
- * Step 6.5: Production finishes
+ * Step 6: Production finishes (รวม QC)
  */
 export const finishProduction = asyncHandler(async (req, res) => {
   const { orderId } = req.params;
 
-  const order = await prisma.order.update({
+  const order = await prisma.order.findUnique({ where: { id: parseInt(orderId) } });
+  if (!order) return res.status(404).json({ status: 'fail', message: 'Order not found' });
+
+  if (order.status !== 'IN_PRODUCTION') {
+    return res.status(400).json({ status: 'fail', message: 'ออเดอร์ต้องอยู่ในกระบวนการผลิตเท่านั้น' });
+  }
+
+  const updatedOrder = await prisma.order.update({
     where: { id: parseInt(orderId) },
     data: { 
-      status: 'PRODUCTION_FINISHED',
-      productionId: req.user.id 
+      status: 'PRODUCTION_FINISHED', 
+      productionId: req.user.id
     }
   });
 
   await prisma.activityLog.create({
     data: {
       action: 'FINISH_PRODUCTION',
-      details: `ฝ่ายผลิต ${req.user.name} ผลิตเสร็จสมบูรณ์ ส่งต่อให้ฝ่าย QC ตรวจสอบ`,
-      orderId: order.id,
+      details: `ฝ่ายผลิต ${req.user.name} ผลิตเสร็จสมบูรณ์ → ส่งต่อฝ่าย QC`,
+      orderId: updatedOrder.id,
       userId: req.user.id
     }
   });
 
-  res.status(200).json({ status: 'success', data: { order } });
+  res.status(200).json({ status: 'success', data: { order: updatedOrder } });
 });
 
 /**
@@ -546,26 +623,48 @@ export const finishProduction = asyncHandler(async (req, res) => {
  */
 export const passQC = asyncHandler(async (req, res) => {
   const { orderId } = req.params;
-  const { pass } = req.body;
+  const { pass, reason, returnTo } = req.body; // Added reason and returnTo
 
-  const order = await prisma.order.update({
+  const order = await prisma.order.findUnique({ where: { id: parseInt(orderId) } });
+  if (order.status !== 'PRODUCTION_FINISHED') {
+    return res.status(400).json({ status: 'fail', message: 'ออเดอร์ต้องผลิตเสร็จก่อนตรวจสอบ QC' });
+  }
+
+  // Determine new status if fail
+  let nextStatus = order.status;
+  if (pass) {
+    nextStatus = 'QC_PASSED';
+  } else {
+    // Determine where to return
+    if (returnTo === 'GRAPHIC') {
+      nextStatus = 'DESIGNING';
+    } else {
+      nextStatus = 'IN_PRODUCTION';
+    }
+  }
+
+  const updatedOrder = await prisma.order.update({
     where: { id: parseInt(orderId) },
     data: { 
-      status: pass ? 'QC_PASSED' : 'IN_PRODUCTION',
+      status: nextStatus,
       qcId: req.user.id
     } 
   });
 
+  const returnLabel = returnTo === 'GRAPHIC' ? 'ฝ่ายกราฟิก' : 'ฝ่ายผลิต';
+
   await prisma.activityLog.create({
     data: {
-      action: 'QC_CHECK',
-      details: `QC ${req.user.name} result: ${pass ? 'PASS' : 'FAIL'}. Status: ${order.status}`,
-      orderId: order.id,
+      action: pass ? 'QC_PASS' : 'QC_FAIL',
+      details: pass 
+        ? `QC ${req.user.name} ตรวจสอบผล: ผ่าน (PASS)` 
+        : `QC ${req.user.name} ตรวจสอบผล: ไม่ผ่าน (FAIL) → ส่งกลับ${returnLabel} (เหตุผล: ${reason || 'ไม่ได้ระบุ'})`,
+      orderId: updatedOrder.id,
       userId: req.user.id
     }
   });
 
-  res.status(200).json({ status: 'success', data: { order } });
+  res.status(200).json({ status: 'success', data: { order: updatedOrder } });
 });
 
 /**
@@ -574,7 +673,12 @@ export const passQC = asyncHandler(async (req, res) => {
 export const readyToShip = asyncHandler(async (req, res) => {
   const { orderId } = req.params;
 
-  const order = await prisma.order.update({
+  const order = await prisma.order.findUnique({ where: { id: parseInt(orderId) } });
+  if (order.status !== 'QC_PASSED') {
+    return res.status(400).json({ status: 'fail', message: 'ออเดอร์ต้องผ่าน QC ก่อนเตรียมจัดส่ง' });
+  }
+
+  const updatedOrder = await prisma.order.update({
     where: { id: parseInt(orderId) },
     data: { 
       status: 'READY_TO_SHIP',
@@ -582,7 +686,7 @@ export const readyToShip = asyncHandler(async (req, res) => {
     }
   });
 
-  res.status(200).json({ status: 'success', data: { order } });
+  res.status(200).json({ status: 'success', data: { order: updatedOrder } });
 });
 
 /**
@@ -598,11 +702,23 @@ export const completeOrder = asyncHandler(async (req, res) => {
 
   if (!order) return res.status(404).json({ status: 'fail', message: 'Order not found' });
 
+  if (order.status !== 'READY_TO_SHIP' && order.status !== 'QC_PASSED') {
+    return res.status(400).json({ status: 'fail', message: 'ออเดอร์ต้องอยู่ในสถานะรอจัดส่งหรือผ่าน QC แล้วเท่านั้น' });
+  }
+
+  if (!trackingNo) {
+    return res.status(400).json({ status: 'fail', message: 'กรุณาระบุเลขพัสดุ (Tracking No.)' });
+  }
+
   // PAYMENT GATE LOGIC
-  if (parseFloat(order.balanceDue) > 0) {
+  const isPaid = parseFloat(order.balanceDue) <= 0;
+  const isCOD = order.paymentMethod === 'COD';
+
+  if (!isPaid && !isCOD) {
     return res.status(400).json({ 
       status: 'fail', 
-      message: `Payment Incomplete! Balance Due: ${order.balanceDue}. Please notify Sales.` 
+      message: `Payment Incomplete! Balance Due: ${order.balanceDue}. 
+      หากลูกค้าต้องการจ่ายปลายทาง กรุณาแจ้งฝ่ายขายให้เปลี่ยนเป็นระบบ COD ก่อนครับ` 
     });
   }
 
@@ -635,43 +751,37 @@ export const generateJobSheet = asyncHandler(async (req, res) => {
     where: { id: parseInt(orderId) },
     include: { 
       items: { include: { variant: { include: { product: true } } } },
-      sales: { select: { name: true } }
+      sales: { select: { name: true } },
+      salesChannel: true
     }
   });
 
   if (!order) return res.status(404).json({ status: 'fail', message: 'Order not found' });
 
-  const doc = new PDFDocument({ size: 'A4', margin: 50 });
-  const filename = `JobSheet-${order.jobId}.pdf`;
+  try {
+    // Generate PDF using Puppeteer service
+    const pdfBuffer = await generateJobSheetPDF(order);
+    const buffer = Buffer.from(pdfBuffer);
+    // console.log(`[ORDER-CTRL] PDF generated for ${order.jobId}, size: ${buffer.length} bytes`);
+    
+    const filename = `JobSheet-${order.jobId.replace(/\//g, '-')}.pdf`;
 
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-
-  doc.pipe(res);
-
-  // [HEADER]
-  doc.fontSize(22).text('Boonraksa System - Job Sheet', { align: 'center' });
-  doc.fontSize(14).text(`Job ID: ${order.jobId}`, { align: 'center' });
-  doc.moveDown();
-
-  // [BODY]
-  doc.fontSize(12).text('CUSTOMER INFO', { underline: true });
-  doc.fontSize(10).text(`Name: ${order.customerName}`);
-  doc.text(`Phone: ${order.customerPhone || '-'}`);
-  doc.text(`Payment Status: ${order.paymentStatus}`);
-  doc.moveDown();
-
-  doc.text('ORDER ITEMS', { underline: true });
-  order.items.forEach((item, i) => {
-    doc.text(`${i+1}. ${item.productName} - Size: ${item.variant.size} - Qty: ${item.quantity}`);
-  });
-
-  // [QR CODE]
-  const qrData = `https://boonraksa.in.th/order/${order.jobId}`;
-  const qrDataURL = await QRCode.toDataURL(qrData);
-  doc.image(qrDataURL, 450, 50, { width: 100 });
-
-  doc.end();
+    // Set headers exactly as suggested by user for maximum reliability
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": buffer.length,
+    });
+    
+    // Use end() to send raw binary buffer directly
+    res.end(buffer);
+  } catch (error) {
+    console.error("PDF GENERATION ERROR:", error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: `Failed to generate PDF: ${error.message}` 
+    });
+  }
 });
 
 /**
@@ -835,6 +945,8 @@ export const reportStockIssue = asyncHandler(async (req, res) => {
 
   res.status(200).json({ status: 'success', data: { order } });
 });
+
+
 
 
 

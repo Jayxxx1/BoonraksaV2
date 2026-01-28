@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../../context/auth-store";
 import {
+  HiOutlineShieldCheck,
   HiOutlineArrowLeft,
   HiOutlineDocumentArrowDown,
   HiOutlineClock,
@@ -25,7 +26,11 @@ import {
   HiOutlineMagnifyingGlass,
   HiOutlineNoSymbol,
   HiOutlineBellAlert,
+  HiOutlineArrowRightCircle,
+  HiOutlinePrinter,
 } from "react-icons/hi2";
+import PaymentModal from "../../components/Payment/PaymentModal";
+import PaymentHistory from "../../components/Payment/PaymentHistory";
 
 const OrderDetail = () => {
   const { orderId } = useParams();
@@ -52,6 +57,13 @@ const OrderDetail = () => {
   const [stockIssueReason, setStockIssueReason] = useState("");
   const [showUrgentModal, setShowUrgentModal] = useState(false);
   const [urgentNote, setUrgentNote] = useState("");
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [trackingNo, setTrackingNo] = useState("");
+
+  // QC Fail states
+  const [showQCFailModal, setShowQCFailModal] = useState(false);
+  const [qcFailReason, setQCFailReason] = useState("");
+  const [qcReturnTo, setQCReturnTo] = useState("PRODUCTION"); // Default to Production
 
   const getAuthHeader = useCallback(
     () => ({ Authorization: `Bearer ${token}` }),
@@ -84,6 +96,15 @@ const OrderDetail = () => {
     fetchOrder();
   }, [fetchOrder]);
 
+  // Auto-refresh every 30 seconds for real-time updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchOrder();
+    }, 30000); // 30 วินาที
+
+    return () => clearInterval(interval);
+  }, [fetchOrder]);
+
   const downloadJobSheet = async () => {
     try {
       const response = await axios.get(
@@ -93,7 +114,16 @@ const OrderDetail = () => {
           responseType: "blob",
         },
       );
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+
+      // If the response is JSON (error), it will still be a blob
+      if (response.data.type === "application/json") {
+        const text = await response.data.text();
+        const errorData = JSON.parse(text);
+        alert(`เกิดข้อผิดพลาด: ${errorData.message}`);
+        return;
+      }
+
+      const url = window.URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = url;
       link.setAttribute(
@@ -103,7 +133,9 @@ const OrderDetail = () => {
       document.body.appendChild(link);
       link.click();
       link.remove();
-    } catch {
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download error:", err);
       alert("ไม่สามารถดาวน์โหลด Job Sheet ได้");
     }
   };
@@ -142,6 +174,31 @@ const OrderDetail = () => {
       await fetchOrder();
     } catch {
       alert("Failed to update specs");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleQCFail = async () => {
+    if (!qcFailReason.trim()) return alert("กรุณาระบุเหตุผลที่ไม่ผ่าน QC");
+    try {
+      setIsUpdating(true);
+      await axios.patch(
+        `http://localhost:8000/api/orders/${orderId}/qc-pass`,
+        {
+          pass: false,
+          reason: qcFailReason,
+          returnTo: qcReturnTo,
+        },
+        {
+          headers: getAuthHeader(),
+        },
+      );
+      setShowQCFailModal(false);
+      setQCFailReason("");
+      await fetchOrder();
+    } catch (err) {
+      alert(err.response?.data?.message || "บันทึกข้อมูลไม่สำเร็จ");
     } finally {
       setIsUpdating(false);
     }
@@ -323,6 +380,16 @@ const OrderDetail = () => {
         text: "text-yellow-700",
         label: "กำลังผลิต",
       },
+      PRODUCTION_FINISHED: {
+        bg: "bg-blue-100",
+        text: "text-blue-700",
+        label: "ผลิตเสร็จสมบูรณ์",
+      },
+      QC_PASSED: {
+        bg: "bg-emerald-50",
+        text: "text-emerald-600",
+        label: "ผ่าน QC แล้ว",
+      },
       READY_TO_SHIP: {
         bg: "bg-emerald-100",
         text: "text-emerald-700",
@@ -419,16 +486,34 @@ const OrderDetail = () => {
   const isProductionRole = user?.role === "PRODUCTION";
   const isQCRole = user?.role === "SEWING_QC";
   const isDeliveryRole = user?.role === "DELIVERY";
+  const isMarketingRole = user?.role === "MARKETING";
+  const isFinanceRole = user?.role === "FINANCE";
+  const isExecutiveRole = user?.role === "EXECUTIVE";
 
   // Viewing permissions
+  // Viewing permissions
+
+  // 1. Technical (Graphic Specs, Artwork, Production Files) - RESTRICTED
+  // QC, PRODUCTION, GRAPHIC, ADMIN ดูได้
   const canViewTechnical =
-    isGraphicRole ||
-    isProductionRole ||
-    isStockRole ||
+    isGraphicRole || isProductionRole || isQCRole || isAdmin;
+
+  // 2. Financial (Prices, Deposit Slips, Balance) & General Order Info
+  // QC ดู Financial ได้, รวมทั้ง Sales, Delivery, Exec, Marketing, Finance
+  const canViewFinancial =
+    isSalesRole ||
     isQCRole ||
     isDeliveryRole ||
+    isExecutiveRole ||
+    isMarketingRole ||
+    isFinanceRole ||
     isAdmin;
-  const canViewFinancial = isSalesRole || isAdmin || isDeliveryRole;
+
+  // 3. Draft Images (Mockups) - Sales needs to see this, but not Source Files
+  // Generally everyone involved in the order flow usually sees the draft
+  // QC ไม่ต้องการดู Draft
+  const canViewDrafts = (canViewFinancial || canViewTechnical) && !isQCRole;
+
   const canViewOrderItems = !isGraphicRole; // ฝ่ายกราฟิกไม่จำเป็นต้องเห็นรายการสินค้า
 
   // Action permissions
@@ -439,6 +524,19 @@ const OrderDetail = () => {
   const canPerformQCAction = isQCRole;
   const canPerformDeliveryAction = isDeliveryRole;
 
+  // Role-based Dynamic Labels
+  const technicalHeader = isProductionRole
+    ? "รายละเอียดสเปคการผลิต (Production Specs)"
+    : isQCRole
+      ? "ข้อมูลประกอบการตรวจงาน (QC Specs)"
+      : "รายละเอียดทางเทคนิค (Graphic Specification)";
+  const assetsHeader = isQCRole
+    ? "ตรวจสอบข้อมูลการเงิน (Financial Review for QC)"
+    : "ไฟล์งานผลิตควบคุม (Production Assets)";
+
+  const dstLabel = isQCRole
+    ? "สรุปประวัติจ่ายเงิน (Payment Summary)"
+    : "Production File (.DST)";
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24">
       {/* Navigation & Header */}
@@ -581,7 +679,8 @@ const OrderDetail = () => {
                 <>
                   <button
                     onClick={() => setShowUrgentModal(true)}
-                    className={`px-6 py-3 rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2 ${order.isUrgent ? "bg-amber-400 text-amber-900 ring-4 ring-amber-300" : "bg-white text-indigo-600"}`}
+                    className={`px-6 py-3 rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${order.isUrgent ? "bg-amber-400 text-amber-900 ring-4 ring-amber-300" : "bg-white text-indigo-600"}`}
+                    disabled={isUpdating}
                   >
                     <HiOutlineBellAlert className="w-5 h-5" />
                     {order.isUrgent
@@ -590,7 +689,8 @@ const OrderDetail = () => {
                   </button>
                   <button
                     onClick={() => setShowCancelModal(true)}
-                    className="px-6 py-3 bg-red-100 text-red-600 rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2"
+                    className="px-6 py-3 bg-red-100 text-red-600 rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isUpdating}
                   >
                     <HiOutlineNoSymbol className="w-5 h-5" />
                     ยกเลิกออเดอร์
@@ -599,38 +699,62 @@ const OrderDetail = () => {
               )}
 
             {/* GRAPHIC ACTIONS */}
-            {canPerformGraphicAction && order.status === "PENDING_ARTWORK" && (
-              <p className="text-sm font-bold bg-white/10 px-4 py-2 rounded-xl border border-white/20">
-                ฝ่ายกราฟิก: รอส่งข้อมูลด้านเทคนิคและอัปโหลด Artwork
-              </p>
-            )}
-            {canPerformGraphicAction && order.status === "DESIGNING" && (
-              <button
-                onClick={() => handleUpdateStatus("print-signal")}
-                className="px-6 py-3 bg-white text-indigo-600 rounded-2xl font-black shadow-xl hover:scale-105 transition-all"
-                disabled={isUpdating}
-              >
-                ยืนยันพิมพ์ใบงาน (Job Printed)
-              </button>
-            )}
+            {canPerformGraphicAction &&
+              (order.status === "PENDING_ARTWORK" ||
+                order.status === "DESIGNING") && (
+                <div className="flex flex-col gap-2 items-center">
+                  <p className="text-xs font-bold bg-white/10 px-4 py-2 rounded-xl border border-white/20 mb-2">
+                    ขั้นตอน: อัปโหลด Artwork/ไฟล์ผลิต ให้เรียบร้อย
+                  </p>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={downloadJobSheet}
+                      className="px-6 py-3 bg-white text-slate-800 border-2 border-slate-200 rounded-2xl font-black shadow-xl hover:bg-slate-50 transition-all flex items-center gap-2"
+                    >
+                      <HiOutlinePrinter className="w-5 h-5 text-indigo-500" />
+                      พิมพ์ใบงาน (A4)
+                    </button>
+                    <button
+                      onClick={() => handleUpdateStatus("print-signal")}
+                      className="px-6 py-3 bg-indigo-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={isUpdating || order.status !== "DESIGNING"}
+                    >
+                      <HiOutlineArrowRightCircle className="w-5 h-5" />
+                      ส่งต่อฝ่ายสต็อก (Send to Stock)
+                    </button>
+                  </div>
+                </div>
+              )}
 
             {/* STOCK ACTIONS */}
             {canPerformStockAction &&
               (order.status === "PENDING_STOCK_CHECK" ||
                 order.status === "STOCK_ISSUE") && (
                 <div className="flex flex-wrap gap-3 justify-center">
+                  <button
+                    onClick={downloadJobSheet}
+                    className="p-3 bg-white text-slate-800 border-2 border-slate-200 rounded-2xl font-black shadow-xl hover:bg-slate-50 transition-all flex items-center gap-2"
+                    title="พิมพ์ใบงานสำหรับจัดของ"
+                  >
+                    <HiOutlinePrinter className="w-6 h-6 text-indigo-500" />
+                  </button>
                   {order.status === "PENDING_STOCK_CHECK" && (
                     <button
                       onClick={() => handleUpdateStatus("stock-recheck")}
-                      className="px-6 py-3 bg-emerald-400 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all"
-                      disabled={isUpdating}
+                      className="px-6 py-3 bg-emerald-400 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={
+                        isUpdating || order.status !== "PENDING_STOCK_CHECK"
+                      }
                     >
                       ยืนยันสต็อกครบ (Confirm Stock)
                     </button>
                   )}
                   <button
                     onClick={() => setShowStockIssueModal(true)}
-                    className="px-6 py-3 bg-red-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2"
+                    className="px-6 py-3 bg-red-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={
+                      isUpdating || order.status !== "PENDING_STOCK_CHECK"
+                    }
                   >
                     <HiOutlineExclamationCircle className="w-5 h-5" />
                     แจ้งตัวเลือก/สต็อกไม่ตรง
@@ -641,20 +765,29 @@ const OrderDetail = () => {
             {/* PRODUCTION ACTIONS */}
             {canPerformProductionAction &&
               order.status === "STOCK_RECHECKED" && (
-                <button
-                  onClick={() => handleUpdateStatus("production-start")}
-                  className="px-6 py-3 bg-orange-400 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all"
-                  disabled={isUpdating}
-                >
-                  เริ่มฝ่ายผลิต (Start Production)
-                </button>
+                <div className="flex gap-3 items-center">
+                  <button
+                    onClick={downloadJobSheet}
+                    className="p-3 bg-white text-slate-800 border-2 border-slate-200 rounded-2xl font-black shadow-xl hover:bg-slate-50 transition-all"
+                    title="พิมพ์ใบงานสำหรับฝ่ายผลิต"
+                  >
+                    <HiOutlinePrinter className="w-6 h-6 text-indigo-500" />
+                  </button>
+                  <button
+                    onClick={() => handleUpdateStatus("production-start")}
+                    className="px-6 py-3 bg-orange-400 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isUpdating}
+                  >
+                    เริ่มฝ่ายผลิต (Start Production)
+                  </button>
+                </div>
               )}
 
             {canPerformProductionAction && order.status === "IN_PRODUCTION" && (
               <button
                 onClick={() => handleUpdateStatus("production-finish")}
-                className="px-6 py-3 bg-orange-600 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all"
-                disabled={isUpdating}
+                className="px-6 py-3 bg-orange-600 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isUpdating || order.status !== "IN_PRODUCTION"}
               >
                 ผลิตเสร็จแล้ว (Finish Production)
               </button>
@@ -665,15 +798,19 @@ const OrderDetail = () => {
               <div className="flex gap-3">
                 <button
                   onClick={() => handleUpdateStatus("qc-pass", { pass: true })}
-                  className="px-6 py-3 bg-emerald-400 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all"
-                  disabled={isUpdating}
+                  className="px-6 py-3 bg-emerald-400 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={
+                    isUpdating || order.status !== "PRODUCTION_FINISHED"
+                  }
                 >
                   ผ่าน QC (Pass)
                 </button>
                 <button
-                  onClick={() => handleUpdateStatus("qc-pass", { pass: false })}
-                  className="px-6 py-3 bg-rose-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all"
-                  disabled={isUpdating}
+                  onClick={() => setShowQCFailModal(true)}
+                  className="px-6 py-3 bg-rose-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={
+                    isUpdating || order.status !== "PRODUCTION_FINISHED"
+                  }
                 >
                   ไม่ผ่าน (Fail)
                 </button>
@@ -681,14 +818,65 @@ const OrderDetail = () => {
             )}
 
             {/* DELIVERY ACTIONS */}
-            {canPerformDeliveryAction && order.status === "QC_PASSED" && (
-              <button
-                onClick={() => handleUpdateStatus("ready-to-ship")}
-                className="px-6 py-3 bg-blue-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all"
-                disabled={isUpdating}
-              >
-                เตรียมจัดส่ง (Ready to Ship)
-              </button>
+            {canPerformDeliveryAction && (
+              <div className="flex flex-col gap-3 items-center w-full">
+                {order.status === "QC_PASSED" && (
+                  <button
+                    onClick={() => handleUpdateStatus("ready-to-ship")}
+                    className="px-6 py-3 bg-blue-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isUpdating || order.status !== "QC_PASSED"}
+                  >
+                    เตรียมจัดส่ง (Ready to Ship)
+                  </button>
+                )}
+
+                {order.status === "READY_TO_SHIP" && (
+                  <div className="w-full max-w-md space-y-3 bg-white/20 p-4 rounded-3xl backdrop-blur-sm border border-white/30">
+                    <p className="text-sm font-bold text-white text-center mb-2 uppercase tracking-wide">
+                      ขั้นตอนการจัดส่ง (Shipping)
+                    </p>
+
+                    {/* PAYMENT GATE */}
+                    {order.paymentStatus !== "PAID" ? (
+                      <div className="bg-red-500/90 text-white p-4 rounded-2xl flex items-center gap-3 shadow-lg animate-pulse">
+                        <HiOutlineExclamationCircle className="w-8 h-8 shrink-0" />
+                        <div>
+                          <p className="font-black text-sm uppercase">
+                            ยังชำระเงินไม่ครบ!
+                          </p>
+                          <p className="text-xs font-medium opacity-90">
+                            ห้ามจัดส่งจนกว่าจะชำระครบ (ค้าง{" "}
+                            {parseFloat(order.balanceDue).toLocaleString()}฿)
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="text"
+                          placeholder="ระบุเลขพัสดุ (Tracking No.)"
+                          className="w-full px-4 py-3 rounded-xl text-slate-900 font-bold text-center outline-none focus:ring-2 focus:ring-emerald-400"
+                          value={trackingNo}
+                          onChange={(e) => setTrackingNo(e.target.value)}
+                        />
+                        <button
+                          onClick={() => {
+                            if (!trackingNo) return alert("กรุณาระบุเลขพัสดุ");
+                            handleUpdateStatus("complete", { trackingNo });
+                          }}
+                          className="w-full px-6 py-3 bg-emerald-500 text-white rounded-xl font-black shadow-lg hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={
+                            isUpdating || order.status !== "READY_TO_SHIP"
+                          }
+                        >
+                          <HiOutlineCheckCircle className="w-5 h-5" />
+                          ยืนยันจัดส่ง (Complete)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -824,13 +1012,17 @@ const OrderDetail = () => {
               <div className="p-8 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
                 <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
                   <HiOutlineAdjustmentsHorizontal className="w-6 h-6 text-indigo-500" />
-                  รายละเอียดทางเทคนิค (Graphic Specification)
+                  {technicalHeader}
                 </h2>
                 {canPerformGraphicAction && order.status !== "CANCELLED" && (
                   <button
                     onClick={handleUpdateSpecs}
-                    className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all border border-indigo-100"
-                    disabled={isUpdating}
+                    className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all border border-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={
+                      isUpdating ||
+                      (order.status !== "PENDING_ARTWORK" &&
+                        order.status !== "DESIGNING")
+                    }
                   >
                     บันทึกสเปคเทคนิค
                   </button>
@@ -854,57 +1046,115 @@ const OrderDetail = () => {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="col-span-1">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">
-                          ขนาด (กว้าง x สูง)
-                        </label>
-                        <div className="flex items-center gap-2 mt-1">
+                    {!isQCRole ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                        <div className="col-span-1">
+                          <label className="flex items-center gap-2 cursor-pointer mb-1">
+                            <input
+                              type="checkbox"
+                              checked={emb.isFreeOption || false}
+                              readOnly={!canPerformGraphicAction}
+                              onChange={(e) => {
+                                const n = [...editSpecs];
+                                n[idx].isFreeOption = e.target.checked;
+                                setEditSpecs(n);
+                              }}
+                              className="w-3 h-3 rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">
+                              ปักฟรี
+                            </span>
+                          </label>
+
+                          {emb.isFreeOption ? (
+                            <select
+                              value={emb.freeOptionName || "เซฟตี้"}
+                              disabled={!canPerformGraphicAction}
+                              onChange={(e) => {
+                                const n = [...editSpecs];
+                                n[idx].freeOptionName = e.target.value;
+                                setEditSpecs(n);
+                              }}
+                              className="w-full px-2 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                            >
+                              <option value="เซฟตี้">เซฟตี้</option>
+                              <option value="ธงชาติ">ธงชาติ</option>
+                              <option value="โลโก้สาขา">โลโก้สาขา</option>
+                              <option value="เครื่องหมายราชการ">
+                                เครื่องหมายราชการ
+                              </option>
+                              <option value="อื่นๆ">อื่นๆ</option>
+                            </select>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="W"
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
+                                value={emb.width || ""}
+                                readOnly={!canPerformGraphicAction}
+                                onChange={(e) => {
+                                  const n = [...editSpecs];
+                                  n[idx].width = e.target.value;
+                                  setEditSpecs(n);
+                                }}
+                              />
+                              <span className="text-slate-300">x</span>
+                              <input
+                                type="text"
+                                placeholder="H"
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
+                                value={emb.height || ""}
+                                readOnly={!canPerformGraphicAction}
+                                onChange={(e) => {
+                                  const n = [...editSpecs];
+                                  n[idx].height = e.target.value;
+                                  setEditSpecs(n);
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="col-span-3">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">
+                            หมายเหตุ / สีด้าย
+                          </label>
                           <input
                             type="text"
-                            placeholder="W"
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
-                            value={emb.width || ""}
+                            placeholder="ระบุสีด้ายหรือรายละเอียด..."
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold mt-1"
+                            value={emb.note || ""}
                             readOnly={!canPerformGraphicAction}
                             onChange={(e) => {
                               const n = [...editSpecs];
-                              n[idx].width = e.target.value;
-                              setEditSpecs(n);
-                            }}
-                          />
-                          <span className="text-slate-300">x</span>
-                          <input
-                            type="text"
-                            placeholder="H"
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
-                            value={emb.height || ""}
-                            readOnly={!canPerformGraphicAction}
-                            onChange={(e) => {
-                              const n = [...editSpecs];
-                              n[idx].height = e.target.value;
+                              n[idx].note = e.target.value;
                               setEditSpecs(n);
                             }}
                           />
                         </div>
                       </div>
-                      <div className="col-span-2">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">
-                          รายละเอียดสี
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="รหัสสีไหม/สีสกรีน"
-                          className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
-                          value={emb.colorDetail || ""}
-                          readOnly={!canPerformGraphicAction}
-                          onChange={(e) => {
-                            const n = [...editSpecs];
-                            n[idx].colorDetail = e.target.value;
-                            setEditSpecs(n);
-                          }}
-                        />
+                    ) : (
+                      <div className="flex items-start gap-2">
+                        <div className="p-2 bg-indigo-50 rounded-lg text-indigo-500">
+                          <HiOutlineDocumentText className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">
+                            รายละเอียดปัก / สีด้าย
+                          </p>
+                          <p className="text-sm font-black text-slate-700">
+                            {emb.isFreeOption ? (
+                              <span className="text-indigo-600">
+                                [FREE: {emb.freeOptionName}]
+                              </span>
+                            ) : (
+                              `W:${emb.width} H:${emb.height}`
+                            )}{" "}
+                            {emb.note || ""}
+                          </p>
+                        </div>
                       </div>
-                    </div>
+                    )}
                     <div>
                       <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">
                         หมายเหตุเดิม
@@ -924,8 +1174,8 @@ const OrderDetail = () => {
             </div>
           )}
 
-          {/* Media Sections - Visible to Technical Roles (Except Stock) */}
-          {canViewTechnical && !isStockRole && (
+          {/* Media Sections - Visible to General Roles (Drafts/Slips) */}
+          {canViewDrafts && (
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
               <div className="p-8 border-b border-slate-50 bg-slate-50/50">
                 <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
@@ -973,37 +1223,33 @@ const OrderDetail = () => {
                   </div>
                 </div>
 
-                {/* Deposit Slip - Restricted Visibility */}
-                {canViewFinancial && (
+                {/* Deposit Slip & Payment History - Visible via canViewFinancial */}
+                {canViewFinancial && !isQCRole && (
                   <div className="space-y-4">
-                    <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                      สลิปเงินมัดจำ (Sales Only)
-                    </p>
-                    <div className="aspect-[3/4] bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 overflow-hidden flex items-center justify-center relative group">
-                      {order.depositSlipUrl ? (
-                        <>
-                          <img
-                            src={order.depositSlipUrl}
-                            className="w-full h-full object-cover"
-                            alt="Slip"
-                          />
-                          <a
-                            href={order.depositSlipUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs"
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                        ประวัติการชำระเงิน (Payment History)
+                      </p>
+                      {(canPerformSalesAction || isFinanceRole) &&
+                        order.status !== "CANCELLED" && (
+                          <button
+                            onClick={() => setShowPaymentModal(true)}
+                            className="text-[10px] font-bold text-emerald-600 cursor-pointer hover:underline flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                            disabled={order.balanceDue <= 0}
                           >
-                            ขยายรูปสลิป
-                          </a>
-                        </>
-                      ) : (
-                        <div className="text-center p-6">
-                          <HiOutlineCurrencyDollar className="w-12 h-12 text-slate-200 mx-auto mb-2" />
-                          <p className="text-xs font-bold text-slate-300 uppercase">
-                            ยังไม่มีสลิป
-                          </p>
-                        </div>
-                      )}
+                            <HiOutlineCurrencyDollar className="w-4 h-4" />
+                            {order.balanceDue <= 0
+                              ? "ชำระเงินครบแล้ว"
+                              : "แจ้งชำระเงิน"}
+                          </button>
+                        )}
+                    </div>
+
+                    <div className="bg-slate-50 rounded-[2rem] border border-slate-200 p-4">
+                      <PaymentHistory
+                        orderId={order.id}
+                        refreshTrigger={order}
+                      />
                     </div>
                   </div>
                 )}
@@ -1017,7 +1263,7 @@ const OrderDetail = () => {
               <div className="p-8 border-b border-slate-50 bg-indigo-50/30">
                 <h2 className="text-lg font-black text-indigo-800 flex items-center gap-2">
                   <HiOutlineAdjustmentsHorizontal className="w-6 h-6 text-indigo-500" />
-                  ไฟล์งานผลิตควบคุม (Production Assets)
+                  {assetsHeader}
                 </h2>
               </div>
               <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1074,14 +1320,15 @@ const OrderDetail = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                      Production File (.DST)
+                      {dstLabel}
                     </p>
                     {canPerformGraphicAction &&
+                      !isQCRole &&
                       order.status !== "CANCELLED" && (
-                        <label className="text-[10px] font-bold text-emerald-600 cursor-pointer hover:underline">
+                        <label className="text-[10px] font-bold text-indigo-600 cursor-pointer hover:underline">
                           {uploadingField === "production"
                             ? "กำลังอัปโหลด..."
-                            : "อัปโหลดไฟล์ผลิต"}
+                            : "อัปโหลดไฟล์ DST"}
                           <input
                             type="file"
                             className="hidden"
@@ -1091,35 +1338,46 @@ const OrderDetail = () => {
                         </label>
                       )}
                   </div>
-                  <div className="flex flex-col h-full bg-slate-50 rounded-[2.5rem] border border-slate-200 p-6 min-h-[220px]">
-                    {order.productionFileUrl ? (
-                      <a
-                        href={order.productionFileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-6 bg-slate-900 rounded-[2.5rem] shadow-xl text-white flex items-center gap-4 hover:bg-black transition-all group mt-auto"
-                      >
-                        <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                          <HiOutlineDocumentText className="w-6 h-6" />
-                        </div>
-                        <div className="flex-1 min-w-0 text-left">
-                          <p className="font-black text-sm truncate">
-                            {order.productionFileName || "Technical_File"}
+                  {!isQCRole ? (
+                    <div className="flex flex-col h-full bg-slate-50 rounded-[2.5rem] border border-slate-200 p-6 min-h-[220px]">
+                      {order.productionFileUrl ? (
+                        <a
+                          href={order.productionFileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-6 bg-slate-900 rounded-[2.5rem] shadow-xl text-white flex items-center gap-4 hover:bg-black transition-all group mt-auto"
+                        >
+                          <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                            <HiOutlineDocumentText className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1 min-w-0 text-left">
+                            <p className="font-black text-sm truncate">
+                              {order.productionFileName || "Technical_File"}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                              Ready for Machine
+                            </p>
+                          </div>
+                        </a>
+                      ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
+                          <HiOutlineDocumentText className="w-16 h-16 mb-2" />
+                          <p className="text-xs font-black uppercase">
+                            No DST File
                           </p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                            Ready for Machine
-                          </p>
                         </div>
-                      </a>
-                    ) : (
-                      <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
-                        <HiOutlineDocumentText className="w-16 h-16 mb-2" />
-                        <p className="text-xs font-black uppercase">
-                          No DST File
-                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col h-full space-y-4">
+                      <div className="bg-slate-50 rounded-[2rem] border border-slate-200 p-4 h-full overflow-y-auto">
+                        <PaymentHistory
+                          orderId={order.id}
+                          refreshTrigger={order}
+                        />
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1144,6 +1402,12 @@ const OrderDetail = () => {
                   <p className="font-bold text-slate-700">
                     {order.customerName}
                   </p>
+                  {order.customerFb && (
+                    <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                      <HiOutlineChatBubbleLeftRight className="w-3 h-3" />
+                      FB: {order.customerFb}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -1160,6 +1424,20 @@ const OrderDetail = () => {
                 </div>
               </div>
             </div>
+
+            {(isGraphicRole || isSalesRole || isAdmin) &&
+              Number(order.blockPrice) > 0 && (
+                <div className="pt-6 border-t border-slate-50 space-y-3">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400 font-bold uppercase text-[10px]">
+                      ราคาค่าบล็อก
+                    </span>
+                    <span className="font-black text-emerald-600">
+                      {(Number(order.blockPrice) || 0).toLocaleString()} ฿
+                    </span>
+                  </div>
+                </div>
+              )}
 
             {canViewFinancial && (
               <div className="pt-6 border-t border-slate-50 space-y-3">
@@ -1197,43 +1475,122 @@ const OrderDetail = () => {
             )}
           </div>
 
-          <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8 max-h-[500px] overflow-y-auto">
+          <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8 max-h-[600px] overflow-y-auto">
             <h2 className="text-md font-black text-slate-800 border-l-4 border-emerald-400 pl-3 mb-6">
-              ความเคลื่อนไหว (Log)
+              ความเคลื่อนไหว (Timeline)
             </h2>
-            <div className="space-y-6">
-              {order.logs?.map((log, idx) => (
-                <div key={idx} className="relative pl-6 pb-6 last:pb-0">
-                  <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-indigo-500" />
-                  <div>
-                    <p className="text-[10px] font-black text-slate-800 leading-tight uppercase">
-                      {{
-                        CREATED: "รับออเดอร์ใหม่",
-                        PURCHASING_UPDATE: "อัปเดตสต็อกพัสดุ",
-                        UPLOAD_ARTWORK: "อัปโหลดงานออกแบบ",
-                        UPDATE_SPECS: "อัปเดตงานปัก",
-                        PRINT_JOB_SHEET: "พิมพ์ใบงาน",
-                        STOCK_RECHECKED: "ส่งผลิต",
-                        START_PRODUCTION: "ส่งเข้าผลิต",
-                        QC_PASS: "ตรวจสอบ QC ผ่าน",
-                        QC_FAIL: "ตรวจสอบ QC ไม่ผ่าน",
-                        COMPLETED: "จัดส่งเรียบร้อย",
-                        CANCEL_ORDER: "ยกเลิกออเดอร์",
-                        BUMP_URGENT: "เร่งงานด่วน",
-                        CLAIM_GRAPHIC: "กราฟิกรับงาน",
-                        CLAIM_QC: "QC รับงาน",
-                      }[log.action] || log.action}
-                    </p>
-                    <p className="text-[10px] text-slate-500 leading-relaxed">
-                      {log.details}
-                    </p>
-                    <p className="text-[9px] font-bold text-indigo-400 mt-1 uppercase">
-                      {log.user?.name} •{" "}
-                      {new Date(log.timestamp).toLocaleTimeString("th-TH")}
-                    </p>
+            <div className="relative">
+              {order.logs?.map((log, idx) => {
+                // Frontend status label validation
+                const ACTION_LABELS = {
+                  CREATED: "สร้างออเดอร์",
+                  PURCHASING_UPDATE: "อัปเดตสต็อคพัสดุ",
+                  UPLOAD_ARTWORK: "อัปโหลดงานออกแบบ",
+                  UPDATE_SPECS: "อัปเดตงานปัก",
+                  PRINT_JOB_SHEET: "พิมพ์ใบงาน",
+                  START_PRODUCTION: "ส่งเข้าผลิต",
+                  QC_PASS: "ตรวจสอบ QC ผ่าน",
+                  QC_FAIL: "ตรวจสอบ QC ไม่ผ่าน",
+                  COMPLETED: "จัดส่งเรียบร้อย",
+                  CANCEL_ORDER: "ยกเลิกออเดอร์",
+                  BUMP_URGENT: "เร่งงานด่วน",
+                  CLAIM_GRAPHIC: "กราฟิกรับงาน",
+                  CLAIM_QC: "QC รับงาน",
+                  CLAIM_STOCK: "สต็อกรับงาน",
+                  CLAIM_PRODUCTION: "ฝ่ายผลิตรับงาน",
+                  // New statuses
+                  PENDING_ARTWORK: "เปลี่ยนเป็น: รอวางแบบ",
+                  DESIGNING: "เปลี่ยนเป็น: กำลังวางแบบ",
+                  PENDING_PAYMENT: "เปลี่ยนเป็น: รอชำระส่วนที่เหลือ",
+                  PENDING_STOCK_CHECK: "เปลี่ยนเป็น: รอสต็อคเช็ค",
+                  STOCK_ISSUE: "เปลี่ยนเป็น: สต็อกมีปัญหา",
+                  IN_PRODUCTION: "เปลี่ยนเป็น: กำลังผลิต",
+                  READY_TO_SHIP: "เปลี่ยนเป็น: พร้อมจัดส่ง",
+                };
+
+                const actionLabel = ACTION_LABELS[log.action] || log.action;
+                const isLatest = idx === 0;
+
+                return (
+                  <div key={idx} className="flex gap-4 relative">
+                    {/* Timeline Line */}
+                    {idx < (order.logs?.length || 0) - 1 && (
+                      <div className="absolute left-[7px] top-8 bottom-0 w-0.5 bg-slate-200" />
+                    )}
+
+                    {/* Timeline Dot */}
+                    <div className="relative z-10 mt-1.5">
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 transition-all ${
+                          isLatest
+                            ? "bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200 animate-pulse"
+                            : "bg-white border-slate-300"
+                        }`}
+                      />
+                    </div>
+
+                    {/* Content */}
+                    <div className={`flex-1 pb-8 ${isLatest ? "pt-0" : ""}`}>
+                      <div
+                        className={`p-4 rounded-2xl ${
+                          isLatest
+                            ? "bg-emerald-50 border-2 border-emerald-200"
+                            : "bg-slate-50 border border-slate-100"
+                        }`}
+                      >
+                        <p
+                          className={`font-black text-sm mb-1 ${
+                            isLatest ? "text-emerald-900" : "text-slate-800"
+                          }`}
+                        >
+                          {actionLabel}
+                        </p>
+
+                        {log.details && (
+                          <p className="text-xs text-slate-600 mb-2 leading-relaxed">
+                            {log.details}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-2 text-[10px]">
+                          <span
+                            className={`font-bold ${
+                              isLatest ? "text-emerald-600" : "text-slate-500"
+                            }`}
+                          >
+                            {log.user?.name || "ระบบ"}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-slate-400">
+                            {new Date(log.timestamp).toLocaleDateString(
+                              "th-TH",
+                              {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              },
+                            )}{" "}
+                            {new Date(log.timestamp).toLocaleTimeString(
+                              "th-TH",
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
+                );
+              })}
+
+              {(!order.logs || order.logs.length === 0) && (
+                <div className="text-center py-12 text-slate-400">
+                  <HiOutlineClock className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-bold">ยังไม่มีความเคลื่อนไหว</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -1269,6 +1626,17 @@ const OrderDetail = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showPaymentModal && (
+        <PaymentModal
+          order={order}
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={() => {
+            fetchOrder();
+            // Optional: Show success toast
+          }}
+        />
       )}
 
       {showUrgentModal && (
@@ -1360,6 +1728,83 @@ const OrderDetail = () => {
           </div>
         </div>
       )}
+      {/* QC Fail Modal */}
+      {showQCFailModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-300">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-2xl">
+                <HiOutlineXMark className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-800">
+                แจ้งผล QC ไม่ผ่าน
+              </h3>
+            </div>
+
+            <div className="mb-6 space-y-4">
+              <div>
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">
+                  1. ส่งกลับไปแก้ไขที่ฝ่ายไหน?
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setQCReturnTo("PRODUCTION")}
+                    className={`py-3 rounded-2xl font-black border-2 transition-all ${
+                      qcReturnTo === "PRODUCTION"
+                        ? "border-indigo-600 bg-indigo-50 text-indigo-600"
+                        : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"
+                    }`}
+                  >
+                    ฝ่ายผลิต (Production)
+                  </button>
+                  <button
+                    onClick={() => setQCReturnTo("GRAPHIC")}
+                    className={`py-3 rounded-2xl font-black border-2 transition-all ${
+                      qcReturnTo === "GRAPHIC"
+                        ? "border-indigo-600 bg-indigo-50 text-indigo-600"
+                        : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"
+                    }`}
+                  >
+                    ฝ่ายกราฟิก (Graphic)
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">
+                  2. ระบุเหตุผลที่ไม่ผ่าน
+                </label>
+                <textarea
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-rose-50 focus:border-rose-400 outline-none transition-all min-h-[120px] font-medium text-slate-800"
+                  placeholder="เช่น สีด้ายไม่ตรงสเปค, งานปักเบี้ยว, มีรอยเปื้อน..."
+                  value={qcFailReason}
+                  onChange={(e) => setQCFailReason(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowQCFailModal(false);
+                  setQCFailReason("");
+                }}
+                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all font-bold"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleQCFail}
+                disabled={!qcFailReason.trim() || isUpdating}
+                className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black shadow-xl shadow-rose-200 hover:bg-rose-700 disabled:opacity-50 transition-all font-black"
+              >
+                {isUpdating ? "กำลังส่ง..." : "ยืนยันส่งแก้ไข"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stock Issue Modal */}
       {showStockIssueModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">

@@ -64,7 +64,7 @@ export const receiveStock = asyncHandler(async (req, res) => {
           if (otherPRs === 0) {
             await tx.order.update({
               where: { id: pr.orderId },
-              data: { status: 'PENDING' }
+              data: { status: 'PENDING_ARTWORK' }
             });
             fulfilledInThisStep.push(pr.order.jobId);
             totalFulfilled.push(pr.order.jobId);

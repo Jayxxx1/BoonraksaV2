@@ -2,6 +2,7 @@ import express from 'express';
 import { 
   createOrder, 
   getOrders, 
+  assignGraphic,  // ✅ เพิ่ม
   uploadArtwork, 
   generateJobSheet, 
   updatePurchasingInfo,
@@ -30,6 +31,9 @@ router.post('/', protect, restrictTo('ADMIN', 'SALES'), createOrder);
 
 // Step 2: Purchasing handles waiting stock
 router.patch('/:orderId/purchasing', protect, restrictTo('ADMIN', 'PURCHASING'), updatePurchasingInfo);
+
+// Step 2.5: Graphic claims task
+router.patch('/:orderId/assign-graphic', protect, restrictTo('ADMIN', 'GRAPHIC'), assignGraphic);
 
 // Step 3: Graphic uploads artwork
 router.patch('/:orderId/artwork', protect, restrictTo('ADMIN', 'GRAPHIC'), uploadArtwork);
@@ -74,6 +78,15 @@ router.patch('/:orderId/urgent', protect, restrictTo('ADMIN', 'SALES'), bumpUrge
 router.patch('/:orderId/claim', protect, restrictTo('GRAPHIC', 'SEWING_QC', 'STOCK', 'PRODUCTION'), claimOrder);
 router.patch('/:orderId/stock-issue', protect, restrictTo('STOCK'), reportStockIssue);
 
+// Payment routes
+router.post('/:orderId/payment', protect, restrictTo('ADMIN', 'SALES'), async (req, res) => {
+  const { uploadPaymentSlip } = await import('../controllers/paymentController.js');
+  return uploadPaymentSlip(req, res);
+});
+router.get('/:orderId/payments', protect, async (req, res) => {
+  const { getPaymentHistory } = await import('../controllers/paymentController.js');
+  return getPaymentHistory(req, res);
+});
 
 
 

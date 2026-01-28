@@ -15,11 +15,33 @@ export default function DeliveryDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const getStatusLabel = (status) => {
+    const config = {
+      QC_PASSED: {
+        label: "ผ่าน QC แล้ว",
+        bg: "bg-emerald-100",
+        text: "text-emerald-700",
+      },
+      READY_TO_SHIP: {
+        label: "รอส่งของ",
+        bg: "bg-blue-100",
+        text: "text-blue-700",
+      },
+    };
+    return (
+      config[status] || {
+        label: status,
+        bg: "bg-slate-100",
+        text: "text-slate-600",
+      }
+    );
+  };
+
   const fetchReadyToShip = useCallback(async () => {
     try {
       setLoading(true);
       const res = await axios.get(
-        "http://localhost:8000/api/orders?status=READY_TO_SHIP",
+        "http://localhost:8000/api/orders?view=available",
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -98,9 +120,21 @@ export default function DeliveryDashboard() {
               <div className="p-5">
                 <div className="flex justify-between items-start mb-6">
                   <div>
-                    <span className="text-[10px] font-black bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full mb-1 inline-block">
-                      {order.jobId}
-                    </span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                        {order.jobId}
+                      </span>
+                      {(() => {
+                        const config = getStatusLabel(order.status);
+                        return (
+                          <span
+                            className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${config.bg} ${config.text}`}
+                          >
+                            {config.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <h3 className="text-base font-bold text-slate-800">
                       {order.customerName}
                     </h3>
@@ -135,7 +169,7 @@ export default function DeliveryDashboard() {
                   </p>
                 </div>
 
-                {order.balanceDue > 0 ? (
+                {order.balanceDue > 0 && order.paymentMethod !== "COD" ? (
                   <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 flex items-center gap-4">
                     <div className="w-12 h-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center shrink-0 shadow-lg">
                       <HiOutlineShieldCheck className="w-6 h-6" />
@@ -146,11 +180,18 @@ export default function DeliveryDashboard() {
                       </p>
                       <p className="text-xs text-rose-500 font-medium">
                         บล็อกการส่งชั่วคราว จนกว่าฝ่ายขายจะอัปเดตยอด
+                        (หรือเปลี่ยนเป็น COD)
                       </p>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {order.paymentMethod === "COD" && order.balanceDue > 0 && (
+                      <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 text-orange-700 text-[10px] font-black uppercase flex items-center gap-2">
+                        <HiOutlineCreditCard className="w-4 h-4" />
+                        ยอดเก็บเงินปลายทาง: {order.balanceDue} ฿
+                      </div>
+                    )}
                     <div className="relative">
                       <input
                         type="text"
