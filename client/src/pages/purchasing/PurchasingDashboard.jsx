@@ -8,6 +8,7 @@ import {
   HiOutlineClipboardDocumentList,
 } from "react-icons/hi2";
 import { Link } from "react-router-dom";
+import DateInput from "../../components/Common/DateInput";
 
 export default function PurchasingDashboard() {
   const { token } = useAuth();
@@ -18,7 +19,7 @@ export default function PurchasingDashboard() {
     try {
       setLoading(true);
       const res = await axios.get(
-        "http://localhost:8000/api/orders?status=WAITING_STOCK",
+        "http://localhost:8000/api/orders?view=available",
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -49,8 +50,8 @@ export default function PurchasingDashboard() {
         },
       );
       fetchWaitingOrders();
-    } catch (err) {
-      alert("Failed to update ETA");
+    } catch {
+      alert("ไม่สามารถอัปเดตวันของเข้าได้");
     }
   };
 
@@ -66,12 +67,17 @@ export default function PurchasingDashboard() {
         },
       );
       fetchWaitingOrders();
-    } catch (err) {
-      alert("Failed to confirm arrival");
+    } catch {
+      alert("ไม่สามารถยืนยันข่าวเข้าได้");
     }
   };
 
-  if (loading) return <div className="p-8 text-center">Loading...</div>;
+  if (loading)
+    return (
+      <div className="p-8 text-center text-slate-400 font-bold">
+        กำลังโหลด...
+      </div>
+    );
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -107,7 +113,7 @@ export default function PurchasingDashboard() {
                   className="inline-flex items-center gap-2 mb-4 text-xs font-black text-indigo-600 hover:text-indigo-800 transition-colors uppercase tracking-widest"
                 >
                   <HiOutlineClipboardDocumentList className="w-4 h-4" />
-                  View Details ออเดอร์
+                  ดูรายละเอียดออเดอร์
                 </Link>
 
                 <div className="flex flex-wrap gap-4">
@@ -115,9 +121,8 @@ export default function PurchasingDashboard() {
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
                       ETA (วันที่ของจะเข้า)
                     </p>
-                    <input
-                      type="date"
-                      defaultValue={order.purchasingEta?.split("T")[0]}
+                    <DateInput
+                      value={order.purchasingEta?.split("T")[0]}
                       onChange={(e) =>
                         handleUpdateETA(
                           order.id,
@@ -125,7 +130,7 @@ export default function PurchasingDashboard() {
                           order.purchasingReason,
                         )
                       }
-                      className="bg-transparent font-bold text-slate-700 outline-none"
+                      className="bg-transparent font-bold text-slate-700 outline-none w-full"
                     />
                   </div>
                   <div className="bg-slate-50 p-3 rounded-xl flex-1">
@@ -155,7 +160,7 @@ export default function PurchasingDashboard() {
                   className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:shadow-emerald-100 transition-all flex items-center gap-2"
                 >
                   <HiOutlineCheckCircle className="w-6 h-6" />
-                  ของเข้าแล้ว (Confirm)
+                  สินค้าเข้าคลังแล้ว (Confirm)
                 </button>
               </div>
             </div>

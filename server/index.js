@@ -13,6 +13,7 @@ import authRoutes from './routes/authRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import stockRoutes from './routes/stockRoutes.js';
 import blockRoutes from './routes/blockRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 import { getCategories } from './controllers/productController.js';
 
 const app = express();
@@ -53,6 +54,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/blocks', blockRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.use('/api/upload', uploadRoutes);
 

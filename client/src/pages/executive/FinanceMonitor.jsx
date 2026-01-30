@@ -42,7 +42,7 @@ export default function FinanceMonitor() {
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <h1 className="text-4xl font-black text-slate-800 mb-12 tracking-tight">
-        Finance Overview
+        ภาพรวมการเงิน (Finance Overview)
       </h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
@@ -50,14 +50,14 @@ export default function FinanceMonitor() {
           <div>
             <HiOutlineArrowTrendingUp className="w-12 h-12 text-indigo-600 mb-6" />
             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">
-              Booking Value (Total Orders)
+              ยอดจองรวม (ออเดอร์ทั้งหมด)
             </p>
             <h3 className="text-5xl font-black text-slate-800">
               {data.booking.toLocaleString()} ฿
             </h3>
           </div>
           <div className="mt-8 pt-8 border-t border-slate-50 flex justify-between items-center text-slate-400 font-bold">
-            <span>Realized Collection</span>
+            <span>ยอดที่เก็บเงินได้แล้ว (Realized Collection)</span>
             <span className="text-emerald-500">
               {data.realized.toLocaleString()} ฿
             </span>
@@ -68,7 +68,7 @@ export default function FinanceMonitor() {
           <div>
             <HiOutlineBanknotes className="w-12 h-12 text-emerald-400 mb-6" />
             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">
-              Uncollected Balance
+              ยอดค้างชำระทั้งหมด (Uncollected)
             </p>
             <h3 className="text-5xl font-black">
               {(data.booking - data.realized).toLocaleString()} ฿
@@ -90,7 +90,7 @@ export default function FinanceMonitor() {
         <div className="flex items-center gap-4 mb-8">
           <HiOutlineShieldExclamation className="w-8 h-8 text-rose-500" />
           <h2 className="text-2xl font-black text-slate-800">
-            Unmatched Orders (Money Missing)
+            ออเดอร์ที่ส่งของแล้วแต่ยังชำระไม่ครบ
           </h2>
         </div>
 
@@ -98,11 +98,11 @@ export default function FinanceMonitor() {
           <table className="w-full text-left">
             <thead>
               <tr className="text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                <td className="py-4">Job ID</td>
-                <td className="py-4">Customer</td>
-                <td className="py-4">Total</td>
-                <td className="py-4">Paid</td>
-                <td className="py-4 text-rose-500">Missing</td>
+                <td className="py-4">รหัสงาน (Job ID)</td>
+                <td className="py-4">ชื่อลูกค้า</td>
+                <td className="py-4">รวม</td>
+                <td className="py-4">ชำระแล้ว</td>
+                <td className="py-4 text-rose-500">ค้างชำระ</td>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">

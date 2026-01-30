@@ -291,7 +291,7 @@ export default function CreateProduct() {
                         />
                         {stockAdditions[v.id] > 0 && (
                           <span className="text-xs font-bold text-emerald-500 flex items-center gap-1">
-                            <HiOutlineCheckCircle /> รวมเปน:{" "}
+                            <HiOutlineCheckCircle /> รวมเป็น:{" "}
                             {v.stock + parseInt(stockAdditions[v.id])}
                           </span>
                         )}
@@ -453,11 +453,11 @@ export default function CreateProduct() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50/30 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                <th className="px-8 py-4">SKU</th>
+                <th className="px-8 py-4">รหัส SKU</th>
                 <th className="px-8 py-4">สี</th>
                 <th className="px-8 py-4">ไซส์</th>
-                <th className="px-8 py-4">ราคาขาย</th>
-                <th className="px-8 py-4">สต็อกแรกเข้า</th>
+                <th className="px-8 py-4">ราคา (Price)</th>
+                <th className="px-8 py-4">สต็อก (Stock)</th>
                 <th className="px-8 py-4"></th>
               </tr>
             </thead>

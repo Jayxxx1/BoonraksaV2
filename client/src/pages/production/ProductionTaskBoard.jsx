@@ -8,6 +8,8 @@ import {
   HiOutlineCheckBadge,
 } from "react-icons/hi2";
 import { Link } from "react-router-dom";
+import RoleStatsHeader from "../../components/dashboard/RoleStatsHeader";
+import { getStatusLabel } from "../../utils/statusMapper";
 
 export default function ProductionTaskBoard() {
   const { token } = useAuth();
@@ -22,7 +24,14 @@ export default function ProductionTaskBoard() {
         headers: { Authorization: `Bearer ${token}` },
         params: { view: viewTab },
       });
-      setOrders(res.data.data.orders);
+      const productionOrders = res.data.data.orders;
+      // Sort: Urgent first
+      productionOrders.sort((a, b) => {
+        if (a.isUrgent && !b.isUrgent) return -1;
+        if (!a.isUrgent && b.isUrgent) return 1;
+        return new Date(b.updatedAt) - new Date(a.updatedAt);
+      });
+      setOrders(productionOrders);
     } catch (err) {
       console.error(err);
     } finally {
@@ -55,23 +64,20 @@ export default function ProductionTaskBoard() {
               รับงานผลิต อ่านสเปคงานปัก และอัปเดตสถานะเมื่อผลิตเสร็จ
             </p>
           </div>
-          <div className="flex bg-white border border-slate-200 rounded-2xl p-1 shadow-sm">
+
+          <div className="flex bg-white/60 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-200/50 shadow-sm">
             {[
-              { id: "me", label: "งานของฉัน", color: "bg-orange-600" },
-              { id: "available", label: "รอการผลิต", color: "bg-emerald-500" },
-              {
-                id: "history",
-                label: "ประวัติผลิตเสร็จ",
-                color: "bg-slate-700",
-              },
+              { id: "available", label: "งานที่รับได้" },
+              { id: "me", label: "งานของฉัน" },
+              { id: "all", label: "ทั้งหมด" },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setViewTab(tab.id)}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                className={`px-5 py-2 rounded-xl text-xs font-black transition-all duration-300 ${
                   viewTab === tab.id
-                    ? `${tab.color} text-white shadow-lg`
-                    : "text-slate-400 hover:text-slate-600"
+                    ? "bg-orange-500 text-white shadow-lg shadow-orange-200 translate-y-[-1px]"
+                    : "text-slate-500 hover:text-slate-800"
                 }`}
               >
                 {tab.label}
@@ -79,6 +85,8 @@ export default function ProductionTaskBoard() {
             ))}
           </div>
         </div>
+
+        <RoleStatsHeader />
 
         {/* List View */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -106,7 +114,11 @@ export default function ProductionTaskBoard() {
                   orders.map((order) => (
                     <tr
                       key={order.id}
-                      className="hover:bg-orange-50/20 transition-colors group"
+                      className={`transition-colors group ${
+                        order.isUrgent
+                          ? "bg-rose-50 border-l-4 border-l-rose-500 hover:bg-rose-100"
+                          : "hover:bg-orange-50/20"
+                      }`}
                     >
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-0.5">
@@ -133,13 +145,7 @@ export default function ProductionTaskBoard() {
                               : "bg-blue-100 text-blue-600"
                           }`}
                         >
-                          {{
-                            PENDING_STOCK_CHECK: "รอเช็คสต็อกก่อนผลิต",
-                            IN_PRODUCTION: "กำลังผลิต",
-                            PRODUCTION_FINISHED: "ผลิตเสร็จสมบูรณ์/รอ QC",
-                            QC_PASSED: "ผ่าน QC แล้ว",
-                            COMPLETED: "ส่งของแล้ว",
-                          }[order.status] || order.status}
+                          {getStatusLabel(order.status)}
                         </span>
                       </td>
                       <td className="px-6 py-4">

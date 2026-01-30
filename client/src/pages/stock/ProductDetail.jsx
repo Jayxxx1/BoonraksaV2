@@ -1,20 +1,17 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams, Link } from "react-router-dom";
-
 import {
   HiOutlineArrowLeft,
   HiOutlineCube,
   HiOutlineTag,
   HiOutlineSwatch,
   HiOutlinePencilSquare,
-  HiOutlineTrash,
 } from "react-icons/hi2";
 
 export default function ProductDetail() {
   const { id } = useParams();
   const [product, setProduct] = useState(null);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -28,7 +25,7 @@ export default function ProductDetail() {
         }
       } catch (err) {
         console.error(err);
-        setError("ไม่สามารถโหลดข้อมูลสินค้าได้");
+        setError("ไม่สามารถโหลดรายละเอียดสินค้าได้");
       } finally {
         setLoading(false);
       }
@@ -38,139 +35,130 @@ export default function ProductDetail() {
 
   if (loading)
     return (
-      <div className="flex flex-col items-center justify-center p-20">
-        <div className="w-12 h-12 border-4 border-pastel-blue border-t-pastel-pink rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-500 font-medium">
-          กำลังโหลดรายละเอียดสินค้า...
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="w-10 h-10 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-500 text-sm font-medium">
+          กำลังโหลดรายละเอียด...
         </p>
       </div>
     );
 
   if (error || !product)
     return (
-      <div className="container mx-auto px-4 py-20 text-center">
+      <div className="max-w-7xl mx-auto px-4 py-20 text-center animate-erp-in">
         <p className="text-rose-500 font-bold mb-4">{error || "ไม่พบสินค้า"}</p>
-        <Link to="/" className="text-indigo-600 hover:underline">
-          กลับหน้าหลัก
+        <Link to="/" className="text-indigo-600 font-bold hover:underline">
+          กลับไปหน้าหลัก
         </Link>
       </div>
     );
 
   return (
-    <div className="container mx-auto px-4 py-10 max-w-6xl">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="max-w-7xl mx-auto px-4 py-8 animate-erp-in">
+      {/* Page Navigation */}
+      <div className="mb-6 flex items-center justify-between">
         <Link
           to="/"
-          className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors font-bold"
+          className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors font-bold text-sm"
         >
           <HiOutlineArrowLeft className="w-5 h-5" />
-          กลับไปหน้ารวม
+          กลับไปหน้ารายการ
         </Link>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-indigo-600 hover:border-indigo-100 transition-all shadow-sm font-bold text-sm">
-            <HiOutlinePencilSquare className="w-4 h-4" />
-            แก้ไขข้อมูล
-          </button>
-        </div>
+        <button className="erp-button erp-button-secondary">
+          <HiOutlinePencilSquare className="w-4 h-4" />
+          แก้ไขสินค้า
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        {/* Left: Image */}
-        <div className="lg:col-span-5">
-          <div className="aspect-square bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden p-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left: Product Image */}
+        <div className="lg:col-span-4">
+          <div className="aspect-square bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden p-2">
             {product.imageUrl ? (
               <img
                 src={product.imageUrl}
                 alt={product.name}
-                className="w-full h-full object-contain rounded-[2rem]"
+                className="w-full h-full object-contain"
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-200">
-                <HiOutlineCube className="w-32 h-32 opacity-10" />
-                <span className="font-bold tracking-widest uppercase">
-                  No Image
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-200 bg-slate-50 rounded-md">
+                <HiOutlineCube className="w-24 h-24 opacity-10" />
+                <span className="text-[10px] font-bold tracking-widest uppercase text-slate-400">
+                  ไม่มีรูปภาพ
                 </span>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right: Info */}
-        <div className="lg:col-span-7 space-y-8">
-          <div>
-            <span className="px-4 py-1.5 bg-pastel-blue/20 text-pastel-blue text-xs font-black uppercase tracking-widest rounded-full">
-              {product.category?.name || "Uncategorized"}
+        {/* Right: Product Info */}
+        <div className="lg:col-span-8 space-y-6">
+          <div className="pb-4 border-b border-slate-200">
+            <span className="erp-badge bg-indigo-50 text-indigo-700 border border-indigo-100 mb-2">
+              {product.category?.name || "ไม่ระบุหมวดหมู่"}
             </span>
-            <h1 className="text-4xl font-black text-slate-800 mt-4 mb-2">
+            <h1 className="text-2xl font-bold text-slate-900 mt-2 mb-1">
               {product.name}
             </h1>
-            <p className="text-slate-400 font-medium">
-              รหัส:{" "}
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              รหัสสินค้า:{" "}
               <span className="text-slate-600">
                 {product.codePrefix || "-"}
               </span>
             </p>
           </div>
 
-          <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <HiOutlineTag className="text-pastel-pink" />
+          <div className="erp-card p-6">
+            <h3 className="erp-label flex items-center gap-2 mb-4">
+              <HiOutlineTag className="w-4 h-4 text-indigo-500" />
               รายละเอียดสินค้า
             </h3>
-            <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
-              {product.description || "ไม่มีรายละเอียดสินค้า"}
+            <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap">
+              {product.description || "ไม่มีข้อมูลรายละเอียดสินค้า"}
             </p>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-4">
-              <HiOutlineSwatch className="text-pastel-blue" />
-              รูปแบบและสต็อก (Variants)
+          <div className="space-y-3">
+            <h3 className="erp-label flex items-center gap-2 ml-1">
+              <HiOutlineSwatch className="w-4 h-4 text-indigo-500" />
+              รายการสต็อกและไซส์
             </h3>
 
-            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+            <div className="erp-card overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
+                <table className="erp-table">
                   <thead>
-                    <tr className="bg-slate-50 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="px-6 py-4">SKU</th>
-                      <th className="px-6 py-4">สี</th>
-                      <th className="px-6 py-4">ไซส์</th>
-                      <th className="px-6 py-4 text-right">ราคา</th>
-                      <th className="px-6 py-4 text-center">คงเหลือ</th>
+                    <tr>
+                      <th>SKU</th>
+                      <th>สี (Color)</th>
+                      <th>ไซส์ (Size)</th>
+                      <th className="text-right">ราคา (Price)</th>
+                      <th className="text-center">คงเหลือ (Available)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody>
                     {product.variants?.map((v) => (
-                      <tr
-                        key={v.id}
-                        className="hover:bg-slate-50/50 transition-colors"
-                      >
-                        <td className="px-6 py-4 font-mono text-slate-500">
+                      <tr key={v.id}>
+                        <td className="font-mono text-[12px] text-slate-500">
                           {v.sku}
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="font-bold text-slate-700">
-                            {v.color}
-                          </span>
+                        <td className="font-bold text-slate-700">{v.color}</td>
+                        <td className="font-bold text-slate-600">{v.size}</td>
+                        <td className="text-right font-bold text-slate-900">
+                          ฿{parseFloat(v.price).toLocaleString()}
                         </td>
-                        <td className="px-6 py-4 font-bold text-slate-600">
-                          {v.size}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <span className="text-emerald-600 font-black">
-                            ฿{parseFloat(v.price).toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="text-center">
                           <span
-                            className={`px-3 py-1 rounded-full text-[11px] font-bold ${
+                            className={`erp-badge ${
                               v.stock > 0
-                                ? "bg-indigo-50 text-indigo-600"
-                                : "bg-rose-50 text-rose-600"
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-rose-50 text-rose-700"
                             }`}
                           >
-                            {v.stock} <span className="opacity-70">ชิ้น</span>
+                            {v.stock}{" "}
+                            <span className="lowercase font-medium ml-0.5">
+                              ตัว (pcs)
+                            </span>
                           </span>
                         </td>
                       </tr>

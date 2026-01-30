@@ -52,7 +52,7 @@ export default function SearchableSelect({
   };
 
   return (
-    <div ref={dropdownRef} className={`relative z-50 ${className}`}>
+    <div ref={dropdownRef} className={`relative z-[100] ${className}`}>
       {/* Trigger Button */}
       <button
         type="button"
@@ -82,7 +82,7 @@ export default function SearchableSelect({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-[100] w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-80 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="absolute z-[200] w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-80 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           {/* Search Input */}
           <div className="p-3 border-b border-slate-100 sticky top-0 bg-white">
             <div className="relative">

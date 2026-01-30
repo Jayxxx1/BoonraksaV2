@@ -183,20 +183,18 @@ export default function PaymentModal({ order, onClose, onSuccess }) {
                   ? "ยอดโอน (บาท)"
                   : "ยืนยันยอดเก็บจริง (บาท)"}
               </label>
-              {paymentMethod === "TRANSFER" &&
-                amount > Number(order.balanceDue) && (
-                  <span className="text-[10px] text-rose-500 font-bold animate-bounce">
-                    ⚠️ เกินยอดค้าง!
-                  </span>
-                )}
+              {Number(amount) > Number(order.balanceDue) && (
+                <span className="text-[10px] text-rose-500 font-bold animate-bounce">
+                  ⚠️ เกินยอดค้าง!
+                </span>
+              )}
             </div>
             <input
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className={`w-full px-4 py-3 bg-slate-50 border rounded-xl font-bold text-slate-800 outline-none transition-all ${
-                paymentMethod === "TRANSFER" &&
-                amount > Number(order.balanceDue)
+                Number(amount) > Number(order.balanceDue)
                   ? "border-rose-300 focus:ring-2 focus:ring-rose-100 text-rose-600"
                   : "border-slate-200 focus:ring-2 focus:ring-indigo-200"
               }`}
@@ -266,30 +264,36 @@ export default function PaymentModal({ order, onClose, onSuccess }) {
           </div>
 
           {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={
-              isSubmitting ||
-              !amount ||
-              (paymentMethod === "TRANSFER" &&
-                (!file ||
-                  amount > Number(order.balanceDue) ||
-                  Number(order.balanceDue) <= 0))
-            }
-            className={`w-full py-4 text-white rounded-2xl font-black shadow-lg transition-all disabled:opacity-50 disabled:shadow-none ${
-              paymentMethod === "TRANSFER"
-                ? "bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600"
-                : "bg-orange-500 shadow-orange-200 hover:bg-orange-600"
-            }`}
-          >
-            {isSubmitting
-              ? "กำลังบันทึก..."
-              : paymentMethod === "TRANSFER"
-                ? Number(order.balanceDue) <= 0
-                  ? "จ่ายครบแล้ว"
-                  : "ยืนยันการชำระเงิน"
-                : "ยืนยันเก็บเงินปลายทาง"}
-          </button>
+          {Number(order.balanceDue) <= 0 ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-4 text-white bg-emerald-500 rounded-2xl font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-all"
+            >
+              ปิดหน้าต่าง (ชำระครบแล้ว)
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={
+                isSubmitting ||
+                !amount ||
+                Number(amount) > Number(order.balanceDue) || // Global validation
+                (paymentMethod === "TRANSFER" && !file)
+              }
+              className={`w-full py-4 text-white rounded-2xl font-black shadow-lg transition-all disabled:opacity-50 disabled:shadow-none ${
+                paymentMethod === "TRANSFER"
+                  ? "bg-emerald-500 shadow-emerald-200 hover:bg-emerald-600"
+                  : "bg-orange-500 shadow-orange-200 hover:bg-orange-600"
+              }`}
+            >
+              {isSubmitting
+                ? "กำลังบันทึก..."
+                : paymentMethod === "TRANSFER"
+                  ? "ยืนยันการชำระเงิน"
+                  : "ยืนยันเก็บเงินปลายทาง"}
+            </button>
+          )}
         </form>
       </div>
     </div>

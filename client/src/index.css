@@ -1,20 +1,128 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: "Inter", "Sarabun", "sans-serif";
-  --color-pastel-pink: #ffd1dc;
-  --color-pastel-blue: #aec6cf;
-  --color-pastel-indigo: #c3dafb;
-  --color-pastel-rose: #fbcce1;
-}
+/* 
+  Boonraksa Mini ERP - Global Design System
+  Theme: Professional, Compact, Ultra-Efficient.
+*/
 
 :root {
-  background-color: #f8fafc;
-  color: #1e293b;
+  /* Brand Colors */
+  --color-primary: #0f172a; /* Slate 900 */
+  --color-primary-light: #1e293b; /* Slate 800 */
+  --color-accent: #4f46e5; /* Indigo 600 */
+  --color-accent-light: #f8fafc; /* Slate 50 */
+  
+  /* Status Colors */
+  --color-success: #10b981; /* Emerald 500 */
+  --color-warning: #f59e0b; /* Amber 500 */
+  --color-error: #ef4444; /* Red 500 */
+  --color-info: #3b82f6; /* Blue 500 */
+
+  /* UI Tokens - Compacted */
+  --radius-erp: 0.375rem; /* 6px - sharper, more professional */
+  --shadow-erp: 0 1px 2px 0 rgb(0 0 0 / 0.05); /* Subtler */
+  --shadow-erp-hover: 0 4px 6px -1px rgb(0 0 0 / 0.07);
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
+@theme {
+  --font-sans: "Inter", "Sarabun", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-erp-navy: var(--color-primary);
+  --color-erp-slate: var(--color-primary-light);
+  --color-erp-accent: var(--color-accent);
+}
+
+/* Custom Utilities & Components */
+@layer base {
+  body {
+    /* Reduce base font from 14px to 13px (approx 7-10% reduction, layout will handle the rest) */
+    @apply bg-[#F8FAFC] text-slate-900 antialiased text-[13px] leading-relaxed;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1 { @apply text-xl font-bold tracking-tight text-slate-800 mb-4; }
+  h2 { @apply text-lg font-bold tracking-tight text-slate-800 mb-3; }
+  h3 { @apply text-base font-bold tracking-tight text-slate-800 mb-2; }
+  h4 { @apply text-sm font-bold tracking-tight text-slate-800 mb-1; }
+}
+
+@layer components {
+  .erp-card {
+    @apply bg-white border border-slate-200 rounded-[var(--radius-erp)] shadow-[var(--shadow-erp)] transition-all duration-200;
+  }
+  
+  .erp-card-hover {
+    @apply hover:shadow-[var(--shadow-erp-hover)] hover:border-slate-300;
+  }
+
+  /* Compact Buttons */
+  .erp-button {
+    @apply px-3 py-1.5 rounded-[var(--radius-erp)] font-bold transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 text-[12px] tracking-tight;
+  }
+
+  .erp-button-primary {
+    @apply bg-indigo-600 text-white hover:bg-indigo-700;
+  }
+
+  .erp-button-secondary {
+    @apply bg-white border border-slate-200 text-slate-600 hover:bg-slate-50;
+  }
+
+  .erp-input {
+    @apply w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-[var(--radius-erp)] outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all text-[13px] placeholder:text-slate-400;
+  }
+
+  .erp-label {
+    @apply block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-widest;
+  }
+
+  /* High-Density Table Styles */
+  .erp-table {
+    @apply w-full text-left border-collapse;
+  }
+
+  .erp-table thead tr {
+    @apply bg-slate-50/80 border-b border-slate-200;
+  }
+
+  .erp-table th {
+    @apply px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest;
+  }
+
+  .erp-table td {
+    @apply px-3 py-2 border-b border-slate-50 align-middle text-[12.5px];
+  }
+
+  .erp-table tbody tr:hover {
+    @apply bg-slate-50/50;
+  }
+
+  /* Compact Badge/Status Styles */
+  .erp-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight;
+  }
+
+  /* Scrollbar Polish */
+  ::-webkit-scrollbar {
+    @apply w-1 h-1;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full hover:bg-slate-300;
+  }
+}
+
+/* Animations - Subtle */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-erp-in {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

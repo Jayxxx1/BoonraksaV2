@@ -23,8 +23,8 @@ export default function MarketingMonitor() {
         const bySales = {};
 
         orders.forEach((o) => {
-          const page = o.salesChannel?.name || "Unknown Page";
-          const salesUser = o.sales?.name || "Unknown Sales";
+          const page = o.salesChannel?.name || "ไม่ระบุช่องทาง";
+          const salesUser = o.sales?.name || "ไม่ระบุผู้ขาย";
 
           byPage[page] = (byPage[page] || 0) + parseFloat(o.totalPrice);
           bySales[salesUser] =
@@ -42,7 +42,7 @@ export default function MarketingMonitor() {
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <h1 className="text-4xl font-black text-slate-800 mb-12 tracking-tight">
-        Marketing Analytics
+        วิเคราะห์การตลาด (Marketing Analytics)
       </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -53,7 +53,7 @@ export default function MarketingMonitor() {
               <HiOutlineCursorArrowRays className="w-6 h-6" />
             </div>
             <h2 className="text-2xl font-black text-slate-800">
-              Sales Breakdown by FB Page
+              ยอดขายแยกตามช่องทางขาย (Facebook Page)
             </h2>
           </div>
           <div className="space-y-6">
@@ -81,7 +81,7 @@ export default function MarketingMonitor() {
               <HiOutlineUsers className="w-6 h-6" />
             </div>
             <h2 className="text-2xl font-black text-slate-800">
-              Individual Sales Performance
+              ผลงานยอดขายรายบุคคล (Sales Performance)
             </h2>
           </div>
           <div className="space-y-6">

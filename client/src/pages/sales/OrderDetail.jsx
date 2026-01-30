@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../../context/auth-store";
 import {
+  HiOutlineCheckBadge,
   HiOutlineShieldCheck,
   HiOutlineArrowLeft,
   HiOutlineDocumentArrowDown,
@@ -31,6 +32,13 @@ import {
 } from "react-icons/hi2";
 import PaymentModal from "../../components/Payment/PaymentModal";
 import PaymentHistory from "../../components/Payment/PaymentHistory";
+import { getDisplayName } from "../../utils/namePrivacy";
+import { formatDate, formatTime } from "../../utils/dateFormat"; // Import utils
+import {
+  getStatusLabel,
+  getActionLabel,
+  statusColors,
+} from "../../utils/statusMapper";
 
 const OrderDetail = () => {
   const { orderId } = useParams();
@@ -96,14 +104,14 @@ const OrderDetail = () => {
     fetchOrder();
   }, [fetchOrder]);
 
-  // Auto-refresh every 30 seconds for real-time updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchOrder();
-    }, 30000); // 30 วินาที
+  // Auto-refresh removed as per user request
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     fetchOrder();
+  //   }, 30000); // 30 วินาที
 
-    return () => clearInterval(interval);
-  }, [fetchOrder]);
+  //   return () => clearInterval(interval);
+  // }, [fetchOrder]);
 
   const downloadJobSheet = async () => {
     try {
@@ -349,64 +357,7 @@ const OrderDetail = () => {
   };
 
   const getStatusBadge = (status) => {
-    const statusConfig = {
-      PENDING_ARTWORK: {
-        bg: "bg-blue-100",
-        text: "text-blue-700",
-        label: "รอวางแบบ",
-      },
-      DESIGNING: {
-        bg: "bg-purple-100",
-        text: "text-purple-700",
-        label: "กำลังวางแบบ",
-      },
-      PENDING_PAYMENT: {
-        bg: "bg-orange-100",
-        text: "text-orange-700",
-        label: "รอชำระส่วนที่เหลือ",
-      },
-      PENDING_STOCK_CHECK: {
-        bg: "bg-indigo-100",
-        text: "text-indigo-700",
-        label: "รอสต็อคเช็ค",
-      },
-      STOCK_ISSUE: {
-        bg: "bg-red-100",
-        text: "text-red-700",
-        label: "สต็อกมีปัญหา",
-      },
-      IN_PRODUCTION: {
-        bg: "bg-yellow-100",
-        text: "text-yellow-700",
-        label: "กำลังผลิต",
-      },
-      PRODUCTION_FINISHED: {
-        bg: "bg-blue-100",
-        text: "text-blue-700",
-        label: "ผลิตเสร็จสมบูรณ์",
-      },
-      QC_PASSED: {
-        bg: "bg-emerald-50",
-        text: "text-emerald-600",
-        label: "ผ่าน QC แล้ว",
-      },
-      READY_TO_SHIP: {
-        bg: "bg-emerald-100",
-        text: "text-emerald-700",
-        label: "รอจัดส่ง",
-      },
-      COMPLETED: {
-        bg: "bg-green-100",
-        text: "text-green-700",
-        label: "เสร็จสิ้น",
-      },
-      CANCELLED: {
-        bg: "bg-slate-100",
-        text: "text-slate-700",
-        label: "ยกเลิกแล้ว",
-      },
-    };
-    const config = statusConfig[status] || {
+    const config = statusColors[status] || {
       bg: "bg-slate-100",
       text: "text-slate-700",
       label: status,
@@ -415,7 +366,7 @@ const OrderDetail = () => {
       <span
         className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${config.bg} ${config.text}`}
       >
-        {config.label}
+        {getStatusLabel(status)}
       </span>
     );
   };
@@ -496,7 +447,7 @@ const OrderDetail = () => {
   // 1. Technical (Graphic Specs, Artwork, Production Files) - RESTRICTED
   // QC, PRODUCTION, GRAPHIC, ADMIN ดูได้
   const canViewTechnical =
-    isGraphicRole || isProductionRole || isQCRole || isAdmin;
+    isSalesRole || isProductionRole || isQCRole || isGraphicRole || isAdmin; // ฝ่ายขายเห็นได้ทั้งหมด
 
   // 2. Financial (Prices, Deposit Slips, Balance) & General Order Info
   // QC ดู Financial ได้, รวมทั้ง Sales, Delivery, Exec, Marketing, Finance
@@ -512,17 +463,24 @@ const OrderDetail = () => {
   // 3. Draft Images (Mockups) - Sales needs to see this, but not Source Files
   // Generally everyone involved in the order flow usually sees the draft
   // QC ไม่ต้องการดู Draft
-  const canViewDrafts = (canViewFinancial || canViewTechnical) && !isQCRole;
 
   const canViewOrderItems = !isGraphicRole; // ฝ่ายกราฟิกไม่จำเป็นต้องเห็นรายการสินค้า
 
-  // Action permissions
+  // Helper to check if task is claimed by current user
+  const isClaimedByMe = (claimId) => claimId === user?.id;
+
+  // Action permissions - Now enforced by claimId
   const canPerformSalesAction = isSalesRole || isAdmin;
-  const canPerformGraphicAction = isGraphicRole;
-  const canPerformStockAction = isStockRole;
-  const canPerformProductionAction = isProductionRole;
-  const canPerformQCAction = isQCRole;
-  const canPerformDeliveryAction = isDeliveryRole;
+  const canPerformGraphicAction =
+    (isGraphicRole && isClaimedByMe(order.graphicId)) || isAdmin;
+  const canPerformStockAction =
+    (isStockRole && isClaimedByMe(order.stockId)) || isAdmin;
+  const canPerformProductionAction =
+    (isProductionRole && isClaimedByMe(order.productionId)) || isAdmin;
+  const canPerformQCAction = (isQCRole && isClaimedByMe(order.qcId)) || isAdmin;
+  const canPerformDeliveryAction = isDeliveryRole || isAdmin;
+  const canViewProductionFiles =
+    (isAdmin || isGraphicRole || isProductionRole || isQCRole) && !isSalesRole;
 
   // Role-based Dynamic Labels
   const technicalHeader = isProductionRole
@@ -530,148 +488,157 @@ const OrderDetail = () => {
     : isQCRole
       ? "ข้อมูลประกอบการตรวจงาน (QC Specs)"
       : "รายละเอียดทางเทคนิค (Graphic Specification)";
-  const assetsHeader = isQCRole
-    ? "ตรวจสอบข้อมูลการเงิน (Financial Review for QC)"
-    : "ไฟล์งานผลิตควบคุม (Production Assets)";
 
   const dstLabel = isQCRole
     ? "สรุปประวัติจ่ายเงิน (Payment Summary)"
     : "Production File (.DST)";
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-24">
+    <div className="min-h-screen bg-slate-50 pb-24 animate-erp-in">
       {/* Navigation & Header */}
-      <div className="bg-white border-b border-slate-100 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-50 h-14">
+        <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-indigo-600 transition-all"
+              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-md transition-all"
+              title="กลับ (Back)"
             >
-              <HiOutlineArrowLeft className="w-6 h-6" />
+              <HiOutlineArrowLeft className="w-5 h-5" />
             </button>
-            <div>
+            <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-slate-800 leading-tight">
+                <h1 className="text-lg font-bold text-slate-900 leading-none">
                   Job ID: {order.jobId}
                 </h1>
                 {order.isUrgent && (
-                  <HiOutlineFire className="w-5 h-5 text-red-500 animate-bounce" />
+                  <span className="erp-badge bg-rose-50 text-rose-700 animate-pulse border-rose-100 flex items-center gap-1">
+                    <HiOutlineFire className="w-3 h-3" />
+                    งานด่วน
+                  </span>
                 )}
               </div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                Created: {new Date(order.createdAt).toLocaleDateString("th-TH")}
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                Ref: {order.globalRunning?.toString().padStart(6, "0")} |{" "}
+                {formatDate(order.createdAt)}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={downloadJobSheet}
-              className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-black transition-all flex items-center gap-2"
+              className="erp-button erp-button-secondary py-1.5 px-3 text-xs"
             >
-              <HiOutlineDocumentArrowDown className="w-5 h-5" />
-              <span className="hidden sm:inline">PDF Job Sheet</span>
+              <HiOutlinePrinter className="w-4 h-4" />
+              <span>พิมพ์ใบงาน (Print Sheet)</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Assignment Bar (Real-time awareness) */}
+      {/* Assignment Bar (High-density Awareness) */}
       {(order.graphic ||
         order.qc ||
         (isGraphicRole && !order.graphicId) ||
         (isQCRole && !order.qcId)) && (
-        <div className="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white shadow-inner">
-          <div className="max-w-6xl mx-auto px-6 py-2 flex items-center justify-between text-[11px] font-bold">
-            <div className="flex items-center gap-6">
+        <div className="bg-slate-900 text-white shadow-sm border-b border-slate-800">
+          <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between flex-wrap gap-4 text-[11px] font-bold">
+            <div className="flex items-center gap-4 overflow-x-auto no-scrollbar">
               {order.graphic && (
-                <div className="flex items-center gap-2">
-                  <span className="opacity-70">🎨 กราฟิก:</span>
-                  <span className="bg-white/20 px-2 py-0.5 rounded-lg">
-                    {order.graphic.name}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-slate-500 uppercase tracking-tighter">
+                    กราฟิก (Graphic):
+                  </span>
+                  <span className="bg-slate-800 px-2 py-0.5 rounded text-white border border-slate-700">
+                    {getDisplayName(order.graphic, user)}
                   </span>
                 </div>
               )}
               {order.stock && (
-                <div className="flex items-center gap-2">
-                  <span className="opacity-70">📦 สต็อก:</span>
-                  <span className="bg-white/20 px-2 py-0.5 rounded-lg">
-                    {order.stock.name}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-slate-500 uppercase tracking-tighter">
+                    สต็อก (Stock):
                   </span>
-                </div>
-              )}
-              {order.qc && (
-                <div className="flex items-center gap-2">
-                  <span className="opacity-70">✅ QC:</span>
-                  <span className="bg-white/20 px-2 py-0.5 rounded-lg">
-                    {order.qc.name}
+                  <span className="bg-slate-800 px-2 py-0.5 rounded text-white border border-slate-700">
+                    {getDisplayName(order.stock, user)}
                   </span>
                 </div>
               )}
               {order.production && (
-                <div className="flex items-center gap-2">
-                  <span className="opacity-70">⚙️ ฝ่ายผลิต:</span>
-                  <span className="bg-white/20 px-2 py-0.5 rounded-lg">
-                    {order.production.name}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-slate-500 uppercase tracking-tighter">
+                    โรงงาน (Factory):
+                  </span>
+                  <span className="bg-slate-800 px-2 py-0.5 rounded text-white border border-slate-700">
+                    {getDisplayName(order.production, user)}
                   </span>
                 </div>
               )}
-              {!order.graphicId && isGraphicRole && (
-                <div className="flex items-center gap-2 text-yellow-300">
-                  <HiOutlineBellAlert className="w-4 h-4" />
-                  <span>รอคนรับงานออกแบบ</span>
-                </div>
-              )}
-              {!order.stockId && isStockRole && (
-                <div className="flex items-center gap-2 text-yellow-300">
-                  <HiOutlineBellAlert className="w-4 h-4" />
-                  <span>รอคนรับงานเช็คสต็อก</span>
-                </div>
-              )}
-              {!order.qcId && isQCRole && (
-                <div className="flex items-center gap-2 text-yellow-300">
-                  <HiOutlineBellAlert className="w-4 h-4" />
-                  <span>รอคนรับงาน QC</span>
+              {order.qc && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-slate-500 uppercase tracking-tighter">
+                    ฝ่ายตรวจสอบ (QC):
+                  </span>
+                  <span className="bg-slate-800 px-2 py-0.5 rounded text-white border border-slate-700">
+                    {getDisplayName(order.qc, user)}
+                  </span>
                 </div>
               )}
             </div>
+
             {((isGraphicRole && !order.graphicId) ||
               (isStockRole && !order.stockId) ||
               (isProductionRole && !order.productionId) ||
               (isQCRole && !order.qcId)) && (
-              <button
-                onClick={handleClaim}
-                disabled={isUpdating}
-                className="bg-white text-indigo-600 px-4 py-1 rounded-full hover:bg-yellow-300 hover:text-slate-900 transition-all shadow-lg animate-pulse hover:animate-none"
-              >
-                {isUpdating ? "กำลังบันทึก..." : "กดรับงานที่นี่ (Claim)"}
-              </button>
+              <div className="flex items-center gap-3">
+                <span className="text-indigo-300 animate-pulse hidden sm:inline">
+                  กรุณากดรับงานก่อนเพื่อดำเนินการต่อ →
+                </span>
+                <button
+                  onClick={handleClaim}
+                  disabled={isUpdating}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-lg transition-all shadow-lg shadow-indigo-900/40 animate-pulse hover:animate-none flex items-center gap-2 border border-indigo-400 font-black text-xs"
+                >
+                  <HiOutlineCheckBadge className="w-4 h-4" />
+                  {isUpdating
+                    ? "กำลังบันทึก..."
+                    : "กดรับงานเพื่อเริ่มทำ (Claim Task)"}
+                </button>
+              </div>
             )}
           </div>
         </div>
       )}
 
       {/* Role Action Panel */}
-      <div className="max-w-6xl mx-auto px-4 mt-8">
+      <div className="max-w-7xl mx-auto px-4 mt-6">
         <div
-          className={`rounded-[2.5rem] p-8 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative ${order.status === "CANCELLED" ? "bg-red-500 text-white" : "bg-indigo-600 text-white"}`}
+          className={`erp-card p-6 border-l-4 flex flex-col md:flex-row items-center justify-between gap-6 ${order.status === "CANCELLED" ? "border-rose-500 bg-rose-50/30" : "border-indigo-600 bg-white"}`}
         >
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
-
-          <div className="relative z-10 text-center md:text-left">
-            <p className="text-white/70 text-[10px] font-black uppercase tracking-[0.2em] mb-2">
-              Current Step Workflow
-            </p>
-            <div className="flex items-center gap-4 justify-center md:justify-start">
-              <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md">
-                <HiOutlineAdjustmentsHorizontal className="w-8 h-8" />
+          <div className="flex items-center gap-4">
+            <div
+              className={`p-3 rounded-lg ${order.status === "CANCELLED" ? "bg-rose-100 text-rose-600" : "bg-indigo-50 text-indigo-600"}`}
+            >
+              <HiOutlineAdjustmentsHorizontal className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">
+                สถานะคำสั่งซื้อในปัจจุบัน
+              </p>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-slate-900 leading-tight">
+                  {getStatusBadge(order.status).props.children}
+                </h2>
+                {order.status !== "CANCELLED" && (
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                  </span>
+                )}
               </div>
-              <h2 className="text-3xl font-black">
-                {getStatusBadge(order.status).props.children}
-              </h2>
             </div>
           </div>
 
-          <div className="relative z-10 flex flex-wrap gap-3 justify-center">
+          <div className="flex flex-wrap gap-2 justify-center">
             {/* SALES ACTIONS */}
             {canPerformSalesAction &&
               order.status !== "CANCELLED" &&
@@ -679,21 +646,21 @@ const OrderDetail = () => {
                 <>
                   <button
                     onClick={() => setShowUrgentModal(true)}
-                    className={`px-6 py-3 rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${order.isUrgent ? "bg-amber-400 text-amber-900 ring-4 ring-amber-300" : "bg-white text-indigo-600"}`}
+                    className={`erp-button flex items-center gap-1.5 py-2 px-4 ${order.isUrgent ? "bg-amber-100 text-amber-700 border-amber-200" : "erp-button-secondary"}`}
                     disabled={isUpdating}
                   >
-                    <HiOutlineBellAlert className="w-5 h-5" />
+                    <HiOutlineBellAlert className="w-4 h-4" />
                     {order.isUrgent
-                      ? "เร่งออเดอร์แล้ว"
-                      : "ส่งสัญญาณเร่งงาน (Urgent)"}
+                      ? "งานด่วน (ตั้งค่าแล้ว)"
+                      : "ตั้งค่าเป็นงานด่วน"}
                   </button>
                   <button
                     onClick={() => setShowCancelModal(true)}
-                    className="px-6 py-3 bg-red-100 text-red-600 rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="erp-button bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 flex items-center gap-1.5 py-2 px-4"
                     disabled={isUpdating}
                   >
-                    <HiOutlineNoSymbol className="w-5 h-5" />
-                    ยกเลิกออเดอร์
+                    <HiOutlineNoSymbol className="w-4 h-4" />
+                    ยกเลิกคำสั่งซื้อ
                   </button>
                 </>
               )}
@@ -702,25 +669,15 @@ const OrderDetail = () => {
             {canPerformGraphicAction &&
               (order.status === "PENDING_ARTWORK" ||
                 order.status === "DESIGNING") && (
-                <div className="flex flex-col gap-2 items-center">
-                  <p className="text-xs font-bold bg-white/10 px-4 py-2 rounded-xl border border-white/20 mb-2">
-                    ขั้นตอน: อัปโหลด Artwork/ไฟล์ผลิต ให้เรียบร้อย
-                  </p>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={downloadJobSheet}
-                      className="px-6 py-3 bg-white text-slate-800 border-2 border-slate-200 rounded-2xl font-black shadow-xl hover:bg-slate-50 transition-all flex items-center gap-2"
-                    >
-                      <HiOutlinePrinter className="w-5 h-5 text-indigo-500" />
-                      พิมพ์ใบงาน (A4)
-                    </button>
+                <div className="flex flex-col sm:flex-row gap-2 items-center">
+                  <div className="flex gap-2">
                     <button
                       onClick={() => handleUpdateStatus("print-signal")}
-                      className="px-6 py-3 bg-indigo-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={isUpdating || order.status !== "DESIGNING"}
+                      className="erp-button erp-button-primary flex items-center gap-1.5 py-2 px-4"
+                      disabled={isUpdating}
                     >
-                      <HiOutlineArrowRightCircle className="w-5 h-5" />
-                      ส่งต่อฝ่ายสต็อก (Send to Stock)
+                      <HiOutlineArrowRightCircle className="w-4 h-4" />
+                      ส่งให้ฝ่ายสต็อก (Send to Stock)
                     </button>
                   </div>
                 </div>
@@ -730,55 +687,22 @@ const OrderDetail = () => {
             {canPerformStockAction &&
               (order.status === "PENDING_STOCK_CHECK" ||
                 order.status === "STOCK_ISSUE") && (
-                <div className="flex flex-wrap gap-3 justify-center">
-                  <button
-                    onClick={downloadJobSheet}
-                    className="p-3 bg-white text-slate-800 border-2 border-slate-200 rounded-2xl font-black shadow-xl hover:bg-slate-50 transition-all flex items-center gap-2"
-                    title="พิมพ์ใบงานสำหรับจัดของ"
-                  >
-                    <HiOutlinePrinter className="w-6 h-6 text-indigo-500" />
-                  </button>
+                <div className="flex items-center gap-2">
                   {order.status === "PENDING_STOCK_CHECK" && (
                     <button
                       onClick={() => handleUpdateStatus("stock-recheck")}
-                      className="px-6 py-3 bg-emerald-400 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={
-                        isUpdating || order.status !== "PENDING_STOCK_CHECK"
-                      }
+                      className="erp-button erp-button-primary bg-emerald-600 hover:bg-emerald-700 border-emerald-500 py-2 px-4"
+                      disabled={isUpdating}
                     >
                       ยืนยันสต็อกครบ (Confirm Stock)
                     </button>
                   )}
                   <button
                     onClick={() => setShowStockIssueModal(true)}
-                    className="px-6 py-3 bg-red-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={
-                      isUpdating || order.status !== "PENDING_STOCK_CHECK"
-                    }
-                  >
-                    <HiOutlineExclamationCircle className="w-5 h-5" />
-                    แจ้งตัวเลือก/สต็อกไม่ตรง
-                  </button>
-                </div>
-              )}
-
-            {/* PRODUCTION ACTIONS */}
-            {canPerformProductionAction &&
-              order.status === "STOCK_RECHECKED" && (
-                <div className="flex gap-3 items-center">
-                  <button
-                    onClick={downloadJobSheet}
-                    className="p-3 bg-white text-slate-800 border-2 border-slate-200 rounded-2xl font-black shadow-xl hover:bg-slate-50 transition-all"
-                    title="พิมพ์ใบงานสำหรับฝ่ายผลิต"
-                  >
-                    <HiOutlinePrinter className="w-6 h-6 text-indigo-500" />
-                  </button>
-                  <button
-                    onClick={() => handleUpdateStatus("production-start")}
-                    className="px-6 py-3 bg-orange-400 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="erp-button bg-rose-50 text-rose-600 border-rose-100 py-2 px-4"
                     disabled={isUpdating}
                   >
-                    เริ่มฝ่ายผลิต (Start Production)
+                    แจ้งปัญหาสินค้า
                   </button>
                 </div>
               )}
@@ -786,16 +710,16 @@ const OrderDetail = () => {
             {canPerformProductionAction && order.status === "IN_PRODUCTION" && (
               <button
                 onClick={() => handleUpdateStatus("production-finish")}
-                className="px-6 py-3 bg-orange-600 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={isUpdating || order.status !== "IN_PRODUCTION"}
+                className="erp-button erp-button-primary bg-indigo-600 py-2 px-4"
+                disabled={isUpdating}
               >
-                ผลิตเสร็จแล้ว (Finish Production)
+                บันทึกผลิตเสร็จ (Finish)
               </button>
             )}
 
             {/* QC ACTIONS */}
             {canPerformQCAction && order.status === "PRODUCTION_FINISHED" && (
-              <div className="flex gap-3">
+              <div className="flex gap-2">
                 <button
                   onClick={() => handleUpdateStatus("qc-pass", { pass: true })}
                   className="px-6 py-3 bg-emerald-400 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -821,13 +745,22 @@ const OrderDetail = () => {
             {canPerformDeliveryAction && (
               <div className="flex flex-col gap-3 items-center w-full">
                 {order.status === "QC_PASSED" && (
-                  <button
-                    onClick={() => handleUpdateStatus("ready-to-ship")}
-                    className="px-6 py-3 bg-blue-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isUpdating || order.status !== "QC_PASSED"}
-                  >
-                    เตรียมจัดส่ง (Ready to Ship)
-                  </button>
+                  <div className="flex flex-col gap-3 items-center w-full max-w-xs">
+                    <button
+                      onClick={() => handleUpdateStatus("ready-to-ship")}
+                      className="px-6 py-3 bg-blue-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={isUpdating || order.status !== "QC_PASSED"}
+                    >
+                      รับงานเข้าฝ่ายจัดส่ง
+                    </button>
+                    <button
+                      onClick={() => setShowPaymentModal(true)}
+                      className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold border border-emerald-100 hover:bg-emerald-100 transition-all text-xs w-full flex items-center justify-center gap-1.5"
+                    >
+                      <HiOutlineCurrencyDollar className="w-4 h-4" />
+                      แจ้งชำระเงิน / อัปโหลดสลิป
+                    </button>
+                  </div>
                 )}
 
                 {order.status === "READY_TO_SHIP" && (
@@ -840,7 +773,7 @@ const OrderDetail = () => {
                     {order.paymentStatus !== "PAID" ? (
                       <div className="bg-red-500/90 text-white p-4 rounded-2xl flex items-center gap-3 shadow-lg animate-pulse">
                         <HiOutlineExclamationCircle className="w-8 h-8 shrink-0" />
-                        <div>
+                        <div className="flex-1">
                           <p className="font-black text-sm uppercase">
                             ยังชำระเงินไม่ครบ!
                           </p>
@@ -848,6 +781,12 @@ const OrderDetail = () => {
                             ห้ามจัดส่งจนกว่าจะชำระครบ (ค้าง{" "}
                             {parseFloat(order.balanceDue).toLocaleString()}฿)
                           </p>
+                          <button
+                            onClick={() => setShowPaymentModal(true)}
+                            className="mt-3 w-full py-2.5 bg-white text-red-600 rounded-xl font-black text-xs shadow-md border border-red-200 hover:bg-red-50 transition-all flex items-center justify-center gap-2"
+                          >
+                            📌 คลิกเพื่ออัปโหลดสลิป / แจ้งชำระเงิน
+                          </button>
                         </div>
                       </div>
                     ) : (
@@ -876,62 +815,92 @@ const OrderDetail = () => {
                     )}
                   </div>
                 )}
+
+                {/* CLAIM REMINDERS FOR OTHER ROLES */}
+                {((isStockRole &&
+                  !isClaimedByMe(order.stockId) &&
+                  (order.status === "PENDING_STOCK_CHECK" ||
+                    order.status === "STOCK_ISSUE")) ||
+                  (isProductionRole &&
+                    !isClaimedByMe(order.productionId) &&
+                    (order.status === "STOCK_RECHECKED" ||
+                      order.status === "IN_PRODUCTION")) ||
+                  (isQCRole &&
+                    !isClaimedByMe(order.qcId) &&
+                    order.status === "PRODUCTION_FINISHED")) &&
+                  !isAdmin && (
+                    <div className="flex flex-col items-center gap-2 bg-white/10 p-4 rounded-2xl backdrop-blur-sm border border-white/20">
+                      <HiOutlineExclamationCircle className="w-8 h-8 text-indigo-300 animate-pulse" />
+                      <p className="text-white font-black text-sm uppercase tracking-wide">
+                        กรุณากดรับงานก่อนเพื่อดำเนินการ
+                      </p>
+                      <p className="text-indigo-200 text-[10px] font-bold">
+                        ปุ่มรับงาน (Claim Task) อยู่ด้านบนสุดของหน้าจอครับ
+                      </p>
+                    </div>
+                  )}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-7xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Order Content */}
-        <div className="lg:col-span-2 space-y-8">
+        <div className="lg:col-span-2 space-y-6">
           {(order.purchasingReason ||
             order.urgentNote ||
             order.cancelReason) && (
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8 space-y-4">
+            <div className="space-y-4">
               {order.cancelReason && (
-                <div className="p-6 bg-red-50 border border-red-100 rounded-[2rem] flex items-start gap-4">
-                  <HiOutlineNoSymbol className="w-8 h-8 text-red-500 shrink-0" />
-                  <div>
-                    <p className="text-xs font-black text-red-500 uppercase tracking-widest mb-1">
-                      เหตุผลการยกเลิก
-                    </p>
-                    <p className="font-bold text-red-900 leading-relaxed">
+                <div className="erp-card p-4 bg-rose-50 border-rose-200 flex items-start gap-4 animate-erp-in">
+                  <div className="p-2 bg-rose-100 rounded text-rose-600">
+                    <HiOutlineNoSymbol className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-[10px] font-bold text-rose-500 uppercase tracking-widest mb-1">
+                      เหตุผลการยกเลิก (Cancellation Reason)
+                    </h4>
+                    <p className="font-bold text-rose-900 text-sm leading-snug">
                       {order.cancelReason}
                     </p>
                   </div>
                 </div>
               )}
               {order.urgentNote && (
-                <div className="p-6 bg-amber-50 border border-amber-100 rounded-[2rem] flex items-start gap-4">
-                  <HiOutlineBellAlert className="w-8 h-8 text-amber-500 shrink-0" />
-                  <div>
-                    <p className="text-xs font-black text-amber-500 uppercase tracking-widest mb-1">
-                      หมายเหตุเร่งด่วน (แจ้งกราฟิก)
-                    </p>
-                    <p className="font-bold text-amber-900 leading-relaxed">
+                <div className="erp-card p-4 bg-amber-50 border-amber-200 flex items-start gap-4 animate-erp-in">
+                  <div className="p-2 bg-amber-100 rounded text-amber-600">
+                    <HiOutlineBellAlert className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-1">
+                      หมายเหตุงานด่วน (Urgent Note)
+                    </h4>
+                    <p className="font-bold text-amber-900 text-sm leading-snug">
                       {order.urgentNote}
                     </p>
                   </div>
                 </div>
               )}
               {order.purchasingReason && (
-                <div className="p-6 bg-orange-50 border border-orange-100 rounded-[2rem] flex items-start gap-4">
-                  <HiOutlineExclamationCircle className="w-8 h-8 text-orange-500 shrink-0" />
-                  <div>
-                    <p className="text-xs font-black text-orange-500 uppercase tracking-widest mb-1">
-                      ปัญหาจากฝ่ายสต็อก/จัดซื้อ
-                    </p>
-                    <p className="font-bold text-orange-900 leading-relaxed">
+                <div className="erp-card p-4 bg-orange-50 border-orange-200 flex items-start gap-4 animate-erp-in">
+                  <div className="p-2 bg-orange-100 rounded text-orange-600">
+                    <HiOutlineExclamationCircle className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-[10px] font-bold text-orange-500 uppercase tracking-widest mb-1">
+                      แจ้งปัญหาจากฝ่ายสต็อก (Stock Issue)
+                    </h4>
+                    <p className="font-bold text-orange-900 text-sm leading-snug">
                       {order.purchasingReason}
                     </p>
                     {order.purchasingEta && (
-                      <p className="mt-2 text-[10px] font-black text-orange-600">
-                        คาดว่าของจะเข้า:{" "}
+                      <div className="mt-2 text-[10px] bg-orange-200/50 w-fit px-2 py-0.5 rounded text-orange-800 font-bold">
+                        ETA:{" "}
                         {new Date(order.purchasingEta).toLocaleDateString(
                           "th-TH",
                         )}
-                      </p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -940,66 +909,64 @@ const OrderDetail = () => {
           )}
 
           {canViewOrderItems && (
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-              <div className="p-8 border-b border-slate-50 bg-slate-50/50">
-                <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                  <HiOutlineCube className="w-6 h-6 text-emerald-500" />
+            <div className="erp-card overflow-hidden">
+              <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+                <HiOutlineCube className="w-5 h-5 text-emerald-500" />
+                <h3 className="font-bold text-slate-800 text-sm">
                   รายการสินค้าในออเดอร์
-                </h2>
+                </h3>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                <table className="erp-table">
+                  <thead>
                     <tr>
-                      <th className="px-8 py-4">สินค้า / รหัส (SKU)</th>
-                      <th className="px-4 py-4 text-center">สี/ไซส์</th>
-                      <th className="px-4 py-4 text-center">จำนวน</th>
-                      <th className="px-8 py-4 text-right">ราคาหน่วย</th>
+                      <th>สินค้า / SKU (Product)</th>
+                      <th className="text-center">สี/ไซส์ (Variant)</th>
+                      <th className="text-center">จำนวน (Qty)</th>
+                      <th className="text-right">ราคาต่อชิ้น (Price)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody>
                     {order.items.map((item, idx) => (
-                      <tr
-                        key={idx}
-                        className="hover:bg-slate-50/50 transition-colors"
-                      >
-                        <td className="px-8 py-4">
-                          <p className="font-black text-slate-700">
+                      <tr key={idx}>
+                        <td>
+                          <p className="font-bold text-slate-800 text-[13px]">
                             {item.productName}
                           </p>
-                          <p className="text-[10px] text-slate-400 font-mono tracking-tighter">
+                          <p className="text-[10px] text-slate-400 font-mono tracking-tighter uppercase">
                             {item.variant.sku}
                           </p>
                         </td>
-                        <td className="px-4 py-4 text-center">
-                          <span className="px-2 py-1 bg-slate-100 rounded-md text-[10px] font-black text-slate-600">
+                        <td className="text-center">
+                          <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-bold text-slate-600">
                             {item.variant.color} / {item.variant.size}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-center font-black text-slate-700">
+                        <td className="text-center font-bold text-slate-700">
                           {item.quantity}
                         </td>
-                        <td className="px-8 py-4 text-right font-black text-slate-700">
-                          {item.price.toLocaleString()} ฿
+                        <td className="text-right font-bold text-slate-900">
+                          ฿{item.price.toLocaleString()}
                         </td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot>
-                    <tr className="bg-indigo-50/50">
+                  <tfoot className="bg-slate-50/80">
+                    <tr>
                       <td
-                        colSpan="3"
-                        className="px-8 py-4 font-black text-indigo-700"
+                        colSpan="2"
+                        className="py-3 font-bold text-slate-500 text-xs"
                       >
                         จำนวนรวมทั้งหมด
                       </td>
-                      <td className="px-8 py-4 text-right font-black text-indigo-700 text-xl">
+                      <td className="text-center font-black text-indigo-600">
                         {order.items.reduce(
                           (sum, item) => sum + item.quantity,
                           0,
                         )}{" "}
-                        ชิ้น
+                        ตัว (Pcs)
                       </td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -1008,123 +975,151 @@ const OrderDetail = () => {
           )}
 
           {canViewTechnical && (
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-              <div className="p-8 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
-                <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                  <HiOutlineAdjustmentsHorizontal className="w-6 h-6 text-indigo-500" />
-                  {technicalHeader}
-                </h2>
-                {canPerformGraphicAction && order.status !== "CANCELLED" && (
+            <div className="erp-card">
+              <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <HiOutlineAdjustmentsHorizontal className="w-5 h-5 text-indigo-500" />
+                  <h3 className="font-bold text-slate-800 text-sm">
+                    {technicalHeader}
+                  </h3>
+                  <div className="ml-4 flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase">
+                      ประเภทบล็อก:
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                        order.blockType === "NEW"
+                          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                          : order.blockType === "EDIT"
+                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                            : "bg-slate-50 text-slate-600 border-slate-200"
+                      }`}
+                    >
+                      {order.blockType === "NEW"
+                        ? "3 (ใหม่)"
+                        : order.blockType === "EDIT"
+                          ? "2 (แก้)"
+                          : "1 (เดิม)"}
+                    </span>
+                  </div>
+                </div>
+                {canPerformGraphicAction && order.status !== "CANCELLED" ? (
                   <button
                     onClick={handleUpdateSpecs}
-                    className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all border border-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="erp-button erp-button-primary py-1.5 px-3 text-xs"
                     disabled={
                       isUpdating ||
                       (order.status !== "PENDING_ARTWORK" &&
                         order.status !== "DESIGNING")
                     }
                   >
-                    บันทึกสเปคเทคนิค
+                    บันทึกอัตโนมัติ (Auto Saved)
                   </button>
+                ) : (
+                  isGraphicRole &&
+                  !isAdmin && (
+                    <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded border border-rose-100 uppercase tracking-tighter animate-pulse">
+                      กรุณากดรับงานด้านบนก่อนแก้ไขสเปค
+                    </span>
+                  )
                 )}
               </div>
 
-              <div className="p-8 space-y-4">
-                {editSpecs.map((emb, idx) => (
-                  <div
-                    key={idx}
-                    className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4"
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="px-3 py-1 bg-white text-indigo-600 rounded-lg text-xs font-black shadow-sm ring-1 ring-slate-200">
-                        {emb.position === "อื่นๆ"
-                          ? emb.customPosition
-                          : emb.position}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        {emb.type}
-                      </span>
-                    </div>
+              <div className="p-5 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {editSpecs.map((emb, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3 shadow-sm"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="bg-white px-2 py-0.5 rounded text-[10px] font-bold text-indigo-600 border border-indigo-100 uppercase">
+                          {emb.position === "อื่นๆ"
+                            ? emb.customPosition
+                            : emb.position}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                          {emb.type}
+                        </span>
+                      </div>
 
-                    {!isQCRole ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                        <div className="col-span-1">
-                          <label className="flex items-center gap-2 cursor-pointer mb-1">
-                            <input
-                              type="checkbox"
-                              checked={emb.isFreeOption || false}
-                              readOnly={!canPerformGraphicAction}
-                              onChange={(e) => {
-                                const n = [...editSpecs];
-                                n[idx].isFreeOption = e.target.checked;
-                                setEditSpecs(n);
-                              }}
-                              className="w-3 h-3 rounded text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">
-                              ปักฟรี
-                            </span>
-                          </label>
-
-                          {emb.isFreeOption ? (
-                            <select
-                              value={emb.freeOptionName || "เซฟตี้"}
-                              disabled={!canPerformGraphicAction}
-                              onChange={(e) => {
-                                const n = [...editSpecs];
-                                n[idx].freeOptionName = e.target.value;
-                                setEditSpecs(n);
-                              }}
-                              className="w-full px-2 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
-                            >
-                              <option value="เซฟตี้">เซฟตี้</option>
-                              <option value="ธงชาติ">ธงชาติ</option>
-                              <option value="โลโก้สาขา">โลโก้สาขา</option>
-                              <option value="เครื่องหมายราชการ">
-                                เครื่องหมายราชการ
-                              </option>
-                              <option value="อื่นๆ">อื่นๆ</option>
-                            </select>
-                          ) : (
-                            <div className="flex items-center gap-2">
+                      {canPerformGraphicAction ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
                               <input
-                                type="text"
-                                placeholder="W"
-                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
-                                value={emb.width || ""}
-                                readOnly={!canPerformGraphicAction}
+                                type="checkbox"
+                                checked={emb.isFreeOption || false}
+                                disabled={emb.isFreeOption} // Cannot uncheck if already set
                                 onChange={(e) => {
                                   const n = [...editSpecs];
-                                  n[idx].width = e.target.value;
+                                  n[idx].isFreeOption = e.target.checked;
                                   setEditSpecs(n);
                                 }}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                onBlur={handleUpdateSpecs}
                               />
-                              <span className="text-slate-300">x</span>
-                              <input
-                                type="text"
-                                placeholder="H"
-                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
-                                value={emb.height || ""}
-                                readOnly={!canPerformGraphicAction}
+                              <span className="text-[10px] font-bold text-slate-500 uppercase">
+                                ตัวเลือกเสริม (Free)
+                              </span>
+                            </label>
+
+                            {emb.isFreeOption ? (
+                              <select
+                                value={emb.freeOptionName || "เซฟตี้"}
                                 onChange={(e) => {
                                   const n = [...editSpecs];
-                                  n[idx].height = e.target.value;
+                                  n[idx].freeOptionName = e.target.value;
                                   setEditSpecs(n);
                                 }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                        <div className="col-span-3">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">
-                            หมายเหตุ / สีด้าย
-                          </label>
+                                className="erp-input py-1 text-xs font-bold w-full"
+                                disabled={true} // Always lock if checked
+                              >
+                                <option value="เซฟตี้">เซฟตี้</option>
+                                <option value="ธงชาติ">ธงชาติ</option>
+                                <option value="โลโก้สาขา">โลโก้สาขา</option>
+                                <option value="เครื่องหมายราชการ">
+                                  เครื่องหมายราชการ
+                                </option>
+                                <option value="อื่นๆ">อื่นๆ</option>
+                              </select>
+                            ) : (
+                              <div className="flex items-center gap-1.5 flex-1">
+                                <input
+                                  type="text"
+                                  placeholder="กว้าง"
+                                  className="erp-input py-1 text-xs font-bold text-center"
+                                  value={emb.width || ""}
+                                  onChange={(e) => {
+                                    const n = [...editSpecs];
+                                    n[idx].width = e.target.value;
+                                    setEditSpecs(n);
+                                  }}
+                                  onBlur={handleUpdateSpecs}
+                                />
+                                <span className="text-slate-300 text-[10px] font-bold">
+                                  ×
+                                </span>
+                                <input
+                                  type="text"
+                                  placeholder="สูง"
+                                  className="erp-input py-1 text-xs font-bold text-center"
+                                  value={emb.height || ""}
+                                  onChange={(e) => {
+                                    const n = [...editSpecs];
+                                    n[idx].height = e.target.value;
+                                    setEditSpecs(n);
+                                  }}
+                                  onBlur={handleUpdateSpecs}
+                                />
+                              </div>
+                            )}
+                          </div>
                           <input
                             type="text"
-                            placeholder="ระบุสีด้ายหรือรายละเอียด..."
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold mt-1"
+                            placeholder="สีไหม / หมายเหตุเพิ่มเติม (Thread color / Notes)..."
+                            className="erp-input py-1.5 text-xs font-semibold w-full"
                             value={emb.note || ""}
-                            readOnly={!canPerformGraphicAction}
                             onChange={(e) => {
                               const n = [...editSpecs];
                               n[idx].note = e.target.value;
@@ -1132,250 +1127,190 @@ const OrderDetail = () => {
                             }}
                           />
                         </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-2">
-                        <div className="p-2 bg-indigo-50 rounded-lg text-indigo-500">
-                          <HiOutlineDocumentText className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">
-                            รายละเอียดปัก / สีด้าย
-                          </p>
-                          <p className="text-sm font-black text-slate-700">
-                            {emb.isFreeOption ? (
-                              <span className="text-indigo-600">
-                                [FREE: {emb.freeOptionName}]
+                      ) : (
+                        <div className="bg-white/50 p-2.5 rounded border border-slate-100">
+                          <p className="text-xs font-bold text-slate-700 leading-snug">
+                            {emb.isFreeOption
+                              ? `[FREE: ${emb.freeOptionName}]`
+                              : `Size: ${emb.width}x${emb.height} cm`}
+                            {emb.note && (
+                              <span className="block mt-1 text-indigo-600 font-semibold">
+                                {emb.note}
                               </span>
-                            ) : (
-                              `W:${emb.width} H:${emb.height}`
-                            )}{" "}
-                            {emb.note || ""}
+                            )}
                           </p>
                         </div>
-                      </div>
-                    )}
-                    <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">
-                        หมายเหตุเดิม
-                      </label>
-                      <p className="text-xs text-slate-600 font-medium italic mt-1">
-                        {emb.note || "-"}
+                      )}
+                    </div>
+                  ))}
+                  {editSpecs.length === 0 && (
+                    <div className="col-span-full py-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+                      <p className="text-xs font-bold text-slate-400 italic uppercase tracking-widest">
+                        ไม่มีการระบุรายละเอียดเพิ่มเติม
                       </p>
                     </div>
-                  </div>
-                ))}
-                {editSpecs.length === 0 && (
-                  <p className="text-center py-8 text-slate-400 font-bold italic">
-                    ไม่มีรายละเอียดการปัก/สกรีนเพิ่มเติม
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Media Sections - Visible to General Roles (Drafts/Slips) */}
-          {canViewDrafts && (
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-              <div className="p-8 border-b border-slate-50 bg-slate-50/50">
-                <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                  <HiOutlinePhoto className="w-6 h-6 text-purple-500" />
-                  สื่อดิจิทัลและไฟล์งาน (Media & Assets)
-                </h2>
-              </div>
-              <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Draft Images - Visible to EVERYONE as Source of Truth */}
-                <div className="space-y-4">
-                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                    ภาพร่างจำลองจากแชท (Draft Mockups)
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {Array.isArray(order.draftImages) &&
-                    order.draftImages.length > 0 ? (
-                      order.draftImages.map((img, i) => (
-                        <div
-                          key={i}
-                          className="aspect-square bg-white rounded-3xl overflow-hidden relative group border border-slate-100"
-                        >
-                          <img
-                            src={img}
-                            className="w-full h-full object-cover"
-                            alt={`Draft ${i}`}
-                          />
-                          <a
-                            href={img}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-black uppercase"
-                          >
-                            ดูภาพ
-                          </a>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="col-span-2 aspect-square bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center p-8 text-center text-slate-300">
-                        <HiOutlinePhoto className="w-10 h-10 mb-2" />
-                        <p className="text-[10px] font-bold uppercase">
-                          ไม่มีภาพสเปคจากแชท
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
 
-                {/* Deposit Slip & Payment History - Visible via canViewFinancial */}
-                {canViewFinancial && !isQCRole && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                        ประวัติการชำระเงิน (Payment History)
-                      </p>
-                      {(canPerformSalesAction || isFinanceRole) &&
-                        order.status !== "CANCELLED" && (
-                          <button
-                            onClick={() => setShowPaymentModal(true)}
-                            className="text-[10px] font-bold text-emerald-600 cursor-pointer hover:underline flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                            disabled={order.balanceDue <= 0}
-                          >
-                            <HiOutlineCurrencyDollar className="w-4 h-4" />
-                            {order.balanceDue <= 0
-                              ? "ชำระเงินครบแล้ว"
-                              : "แจ้งชำระเงิน"}
-                          </button>
-                        )}
-                    </div>
-
-                    <div className="bg-slate-50 rounded-[2rem] border border-slate-200 p-4">
-                      <PaymentHistory
-                        orderId={order.id}
-                        refreshTrigger={order}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Technical Assets: Production focus - HIDDEN FOR STOCK */}
-          {canViewTechnical && !isStockRole && (
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-              <div className="p-8 border-b border-slate-50 bg-indigo-50/30">
-                <h2 className="text-lg font-black text-indigo-800 flex items-center gap-2">
-                  <HiOutlineAdjustmentsHorizontal className="w-6 h-6 text-indigo-500" />
-                  {assetsHeader}
-                </h2>
-              </div>
-              <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Artwork Preview */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                      Artwork (Final Design)
+                {/* Media Assets (Split view) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      แบบปัก / ม็อคอัพ (Final Mockup)
                     </p>
-                    {canPerformGraphicAction &&
-                      order.status !== "CANCELLED" && (
-                        <label className="text-[10px] font-bold text-indigo-600 cursor-pointer hover:underline">
-                          {uploadingField === "artwork"
-                            ? "กำลังอัปโหลด..."
-                            : "อัปโหลด Artwork"}
-                          <input
-                            type="file"
-                            className="hidden"
-                            onChange={(e) => handleFileUpload(e, "artwork")}
-                            disabled={!!uploadingField}
-                          />
-                        </label>
-                      )}
-                  </div>
-                  <div className="aspect-square bg-gray-800 rounded-[2.5rem] flex items-center justify-center relative group overflow-hidden border-4 border-slate-800">
                     {order.artworkUrl ? (
-                      <>
+                      <div className="relative group aspect-video rounded-lg overflow-hidden border border-slate-200 bg-slate-900 shadow-sm">
                         <img
                           src={order.artworkUrl}
                           className="w-full h-full object-contain"
-                          alt="Artwork"
+                          alt="Final Design"
                         />
-                        <a
-                          href={order.artworkUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="absolute inset-0 bg-gray-800 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs"
-                        >
-                          ดูรูปเต็ม
-                        </a>
-                      </>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <a
+                            href={order.artworkUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="bg-white text-slate-900 px-3 py-1.5 rounded-md text-xs font-bold shadow-lg hover:bg-slate-50 transition-all"
+                          >
+                            ดูรูปภาพขนาดเต็ม
+                          </a>
+                        </div>
+                      </div>
                     ) : (
-                      <div className="text-center p-6">
-                        <HiOutlinePhoto className="w-12 h-12 text-slate-700 mx-auto mb-2" />
-                        <p className="text-xs font-black text-slate-600 uppercase">
-                          รอฝ่ายกราฟิก...
+                      <div className="aspect-video rounded-lg bg-slate-50 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 opacity-60">
+                        <HiOutlinePhoto className="w-8 h-8 mb-1" />
+                        <p className="text-[10px] font-bold uppercase">
+                          รอการอัปโหลด
+                        </p>
+                      </div>
+                    )}
+                    {canPerformGraphicAction &&
+                      order.status !== "CANCELLED" && (
+                        <div className="relative overflow-hidden erp-button erp-button-secondary py-1.5 text-xs">
+                          <input
+                            type="file"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={(e) => handleFileUpload(e, "artwork")}
+                            disabled={!!uploadingField}
+                          />
+                          <HiOutlineCloudArrowUp className="w-4 h-4 mr-1.5" />
+                          {uploadingField === "artwork"
+                            ? "กำลังอัปโหลด..."
+                            : "อัปโหลดรูปภาพแบบ"}
+                        </div>
+                      )}
+                  </div>
+
+                  {/* Draft Images (Visual Mockups) */}
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      ภาพร่างจากฝ่ายขาย (Visual Mockups)
+                    </p>
+                    {order.draftImages && order.draftImages.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        {order.draftImages.map((img, i) => (
+                          <div
+                            key={i}
+                            className="aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100 group relative"
+                          >
+                            <img
+                              src={img}
+                              className="w-full h-full object-cover"
+                              alt={`Draft ${i + 1}`}
+                            />
+                            <a
+                              href={img}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs"
+                            >
+                              ดูรูป
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-lg bg-slate-50 border border-dashed border-slate-200 text-center">
+                        <p className="text-[10px] text-slate-400">
+                          ไม่มีภาพร่าง
                         </p>
                       </div>
                     )}
                   </div>
-                </div>
 
-                {/* Production File */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                      {dstLabel}
-                    </p>
-                    {canPerformGraphicAction &&
-                      !isQCRole &&
-                      order.status !== "CANCELLED" && (
-                        <label className="text-[10px] font-bold text-indigo-600 cursor-pointer hover:underline">
-                          {uploadingField === "production"
-                            ? "กำลังอัปโหลด..."
-                            : "อัปโหลดไฟล์ DST"}
-                          <input
-                            type="file"
-                            className="hidden"
-                            onChange={(e) => handleFileUpload(e, "production")}
-                            disabled={!!uploadingField}
-                          />
-                        </label>
-                      )}
-                  </div>
-                  {!isQCRole ? (
-                    <div className="flex flex-col h-full bg-slate-50 rounded-[2.5rem] border border-slate-200 p-6 min-h-[220px]">
-                      {order.productionFileUrl ? (
-                        <a
-                          href={order.productionFileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="p-6 bg-slate-900 rounded-[2.5rem] shadow-xl text-white flex items-center gap-4 hover:bg-black transition-all group mt-auto"
-                        >
-                          <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                            <HiOutlineDocumentText className="w-6 h-6" />
+                  {canViewProductionFiles && (
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        {dstLabel}
+                      </p>
+                      {!isQCRole ? (
+                        <div className="space-y-3 h-full">
+                          <div className="bg-slate-900 rounded-lg p-4 h-[100px] flex flex-col justify-center border border-slate-800 shadow-inner">
+                            {order.productionFileUrl ? (
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-indigo-500/20 rounded text-indigo-400">
+                                    <HiOutlineDocumentText className="w-5 h-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold text-white truncate max-w-[120px]">
+                                      {order.productionFileName ||
+                                        "Technical_Spec"}
+                                    </p>
+                                    <p className="text-[9px] text-slate-500 uppercase font-bold">
+                                      พร้อมสำหรับการผลิต
+                                    </p>
+                                  </div>
+                                </div>
+                                <a
+                                  href={order.productionFileUrl}
+                                  download
+                                  className="p-1.5 bg-indigo-600 rounded text-white hover:bg-indigo-500 shadow-lg shadow-indigo-600/40"
+                                >
+                                  <HiOutlineDocumentArrowDown className="w-4 h-4" />
+                                </a>
+                              </div>
+                            ) : (
+                              <p className="text-[10px] font-bold text-slate-600 text-center italic">
+                                No technical file uploaded yet
+                              </p>
+                            )}
                           </div>
-                          <div className="flex-1 min-w-0 text-left">
-                            <p className="font-black text-sm truncate">
-                              {order.productionFileName || "Technical_File"}
-                            </p>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                              Ready for Machine
-                            </p>
-                          </div>
-                        </a>
+                          {canPerformGraphicAction &&
+                            order.status !== "CANCELLED" && (
+                              <div className="flex gap-2">
+                                <div className="relative overflow-hidden erp-button erp-button-secondary flex-1 py-1.5 text-xs text-indigo-600">
+                                  <input
+                                    type="file"
+                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                    onChange={(e) =>
+                                      handleFileUpload(e, "production")
+                                    }
+                                    disabled={!!uploadingField}
+                                  />
+                                  {uploadingField === "production"
+                                    ? "..."
+                                    : "อัปโหลดไฟล์ .DST"}
+                                </div>
+                                <button
+                                  onClick={() => setIsLibraryOpen(true)}
+                                  className="erp-button erp-button-secondary py-1.5 text-xs text-slate-500"
+                                >
+                                  <HiOutlineMagnifyingGlass className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                        </div>
                       ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
-                          <HiOutlineDocumentText className="w-16 h-16 mb-2" />
-                          <p className="text-xs font-black uppercase">
-                            No DST File
+                        <div className="bg-indigo-50 rounded-lg p-4 h-[100px] border border-indigo-100 flex flex-col justify-center text-center">
+                          <p className="text-xs font-bold text-indigo-700 uppercase">
+                            QC Mode
+                          </p>
+                          <p className="text-[10px] text-indigo-400 font-semibold mt-1">
+                            กรุณาตรวจสอบม็อคอัพด้านซ้ายมือ
                           </p>
                         </div>
                       )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col h-full space-y-4">
-                      <div className="bg-slate-50 rounded-[2rem] border border-slate-200 p-4 h-full overflow-y-auto">
-                        <PaymentHistory
-                          orderId={order.id}
-                          refreshTrigger={order}
-                        />
-                      </div>
                     </div>
                   )}
                 </div>
@@ -1384,213 +1319,264 @@ const OrderDetail = () => {
           )}
         </div>
 
-        {/* Right Column */}
-        <div className="space-y-8">
-          <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8 space-y-6">
-            <h2 className="text-md font-black text-slate-800 border-l-4 border-blue-400 pl-3">
-              ข้อมูลลูกค้า
-            </h2>
-            <div className="space-y-6">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-blue-50 text-blue-500 rounded-lg">
-                  <HiOutlineUser className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase">
-                    ชื่อลูกค้า
-                  </p>
-                  <p className="font-bold text-slate-700">
-                    {order.customerName}
-                  </p>
-                  {order.customerFb && (
-                    <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                      <HiOutlineChatBubbleLeftRight className="w-3 h-3" />
-                      FB: {order.customerFb}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-green-50 text-green-500 rounded-lg">
-                  <HiOutlinePhone className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase">
-                    เบอร์โทร
-                  </p>
-                  <p className="font-bold text-slate-700">
-                    {order.customerPhone || "ไม่ได้ระบุ"}
-                  </p>
-                </div>
-              </div>
+        {/* Right Column: Sidebar */}
+        <div className="space-y-6">
+          {/* Customer Profile */}
+          <div className="erp-card">
+            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+              <HiOutlineUser className="w-5 h-5 text-indigo-600" />
+              <h3 className="font-bold text-slate-800 text-sm">ข้อมูลลูกค้า</h3>
             </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  ชื่อ-นามสกุล
+                </p>
+                <p className="text-base font-bold text-slate-900">
+                  {order.customerName}
+                </p>
+              </div>
 
-            {(isGraphicRole || isSalesRole || isAdmin) &&
-              Number(order.blockPrice) > 0 && (
-                <div className="pt-6 border-t border-slate-50 space-y-3">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-400 font-bold uppercase text-[10px]">
-                      ราคาค่าบล็อก
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                    <HiOutlinePhone className="w-3 h-3" /> เบอร์โทรศัพท์
+                  </p>
+                  <a
+                    href={`tel:${order.customerPhone}`}
+                    className="text-sm font-bold text-indigo-600 hover:underline"
+                  >
+                    {order.customerPhone || "-"}
+                  </a>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                    <HiOutlineChatBubbleLeftRight className="w-3 h-3" /> ชื่อ
+                    Facebook / LINE
+                  </p>
+                  <span className="text-sm font-bold text-slate-700 truncate block">
+                    {order.customerFb || "-"}
+                  </span>
+                </div>
+
+                <div className="col-span-2 w-full pt-2 border-t border-slate-100 mt-2">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
+                    <HiOutlineShieldCheck className="w-3 h-3 text-indigo-500" />{" "}
+                    ช่องทาง / เพจ (Sales Channel)
+                  </p>
+                  <div className="w-full space-y-2">
+                    <div className="w-full bg-slate-50 p-2.5 rounded-lg border border-slate-100 grid grid-cols-2 items-center">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase">
+                        เพจ (Page):
+                      </span>
+                      <span className="text-[11px] font-black text-slate-900 text-right">
+                        {order.salesChannel?.name || "-"}
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-slate-50 p-2.5 rounded-lg border border-slate-100 grid grid-cols-2 items-center">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase">
+                        หมายเลขเพจ (Code):
+                      </span>
+                      <span className="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 justify-self-end">
+                        {order.salesChannel?.code || "-"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                  <HiOutlineMapPin className="w-3 h-3" /> ที่อยู่สำหรับจัดส่ง
+                </p>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-[11px] font-semibold text-slate-600 leading-relaxed shadow-inner">
+                  {order.customerAddress || "ไม่มีข้อมูลที่อยู่"}
+                </div>
+              </div>
+
+              {canPerformSalesAction && (
+                <Link
+                  to={`/order/edit/${order.id}`}
+                  className="erp-button erp-button-secondary w-full py-2.5 text-xs bg-slate-50 border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 flex items-center justify-center gap-2"
+                >
+                  <HiOutlineAdjustmentsHorizontal className="w-4 h-4" />
+                  แก้ไขข้อมูล (กรณีใส่ข้อมูลผิด)
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Financial Summary */}
+          {canViewFinancial && (
+            <div className="erp-card border-t-4 border-t-emerald-500">
+              <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <HiOutlineCurrencyDollar className="w-5 h-5 text-emerald-600" />
+                  <h3 className="font-bold text-slate-800 text-sm">
+                    สรุปสถานะการเงิน
+                  </h3>
+                </div>
+                {getPaymentStatusBadge(order.paymentStatus)}
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-slate-500">
+                      ยอดรวมทั้งหมด
                     </span>
-                    <span className="font-black text-emerald-600">
-                      {(Number(order.blockPrice) || 0).toLocaleString()} ฿
+                    <span className="font-bold text-slate-900">
+                      ฿{parseFloat(order.totalPrice).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-slate-500 text-emerald-600">
+                      ชำระแล้ว
+                    </span>
+                    <span className="font-bold text-emerald-600">
+                      ฿{parseFloat(order.paidAmount).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="h-px bg-slate-100" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-rose-500">
+                      ยอดคงเหลือที่ต้องชำระ
+                    </span>
+                    <span className="text-lg font-black text-rose-600">
+                      ฿{parseFloat(order.balanceDue).toLocaleString()}
                     </span>
                   </div>
                 </div>
-              )}
 
-            {canViewFinancial && (
-              <div className="pt-6 border-t border-slate-50 space-y-3">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400 font-bold uppercase text-[10px]">
-                    ยอดรวมทั้งสิ้น
-                  </span>
-                  <span className="font-black text-slate-800">
-                    {(Number(order.totalPrice) || 0).toLocaleString()} ฿
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400 font-bold uppercase text-[10px]">
-                    ยอดมัดจำที่ชำระแล้ว
-                  </span>
-                  <span className="font-black text-emerald-600">
-                    {(Number(order.paidAmount) || 0).toLocaleString()} ฿
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400 font-bold uppercase text-[10px]">
-                    ค้างชำระ
-                  </span>
-                  <span className="font-black text-rose-600">
-                    {(Number(order.balanceDue) || 0).toLocaleString()} ฿
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400 font-bold uppercase text-[10px]">
-                    สถานะชำระ
-                  </span>
-                  {getPaymentStatusBadge(order.paymentStatus)}
-                </div>
-              </div>
-            )}
-          </div>
+                {canPerformSalesAction &&
+                  order.status !== "CANCELLED" &&
+                  order.status !== "COMPLETED" && (
+                    <button
+                      onClick={() => setShowPaymentModal(true)}
+                      className="erp-button erp-button-primary w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-100"
+                      disabled={isUpdating}
+                    >
+                      อัพเดตยอดคงเหลือ / อัปโหลดสลิป
+                    </button>
+                  )}
 
-          <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8 max-h-[600px] overflow-y-auto">
-            <h2 className="text-md font-black text-slate-800 border-l-4 border-emerald-400 pl-3 mb-6">
-              ความเคลื่อนไหว (Timeline)
-            </h2>
-            <div className="relative">
-              {order.logs?.map((log, idx) => {
-                // Frontend status label validation
-                const ACTION_LABELS = {
-                  CREATED: "สร้างออเดอร์",
-                  PURCHASING_UPDATE: "อัปเดตสต็อคพัสดุ",
-                  UPLOAD_ARTWORK: "อัปโหลดงานออกแบบ",
-                  UPDATE_SPECS: "อัปเดตงานปัก",
-                  PRINT_JOB_SHEET: "พิมพ์ใบงาน",
-                  START_PRODUCTION: "ส่งเข้าผลิต",
-                  QC_PASS: "ตรวจสอบ QC ผ่าน",
-                  QC_FAIL: "ตรวจสอบ QC ไม่ผ่าน",
-                  COMPLETED: "จัดส่งเรียบร้อย",
-                  CANCEL_ORDER: "ยกเลิกออเดอร์",
-                  BUMP_URGENT: "เร่งงานด่วน",
-                  CLAIM_GRAPHIC: "กราฟิกรับงาน",
-                  CLAIM_QC: "QC รับงาน",
-                  CLAIM_STOCK: "สต็อกรับงาน",
-                  CLAIM_PRODUCTION: "ฝ่ายผลิตรับงาน",
-                  // New statuses
-                  PENDING_ARTWORK: "เปลี่ยนเป็น: รอวางแบบ",
-                  DESIGNING: "เปลี่ยนเป็น: กำลังวางแบบ",
-                  PENDING_PAYMENT: "เปลี่ยนเป็น: รอชำระส่วนที่เหลือ",
-                  PENDING_STOCK_CHECK: "เปลี่ยนเป็น: รอสต็อคเช็ค",
-                  STOCK_ISSUE: "เปลี่ยนเป็น: สต็อกมีปัญหา",
-                  IN_PRODUCTION: "เปลี่ยนเป็น: กำลังผลิต",
-                  READY_TO_SHIP: "เปลี่ยนเป็น: พร้อมจัดส่ง",
-                };
-
-                const actionLabel = ACTION_LABELS[log.action] || log.action;
-                const isLatest = idx === 0;
-
-                return (
-                  <div key={idx} className="flex gap-4 relative">
-                    {/* Timeline Line */}
-                    {idx < (order.logs?.length || 0) - 1 && (
-                      <div className="absolute left-[7px] top-8 bottom-0 w-0.5 bg-slate-200" />
-                    )}
-
-                    {/* Timeline Dot */}
-                    <div className="relative z-10 mt-1.5">
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 transition-all ${
-                          isLatest
-                            ? "bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200 animate-pulse"
-                            : "bg-white border-slate-300"
-                        }`}
-                      />
-                    </div>
-
-                    {/* Content */}
-                    <div className={`flex-1 pb-8 ${isLatest ? "pt-0" : ""}`}>
-                      <div
-                        className={`p-4 rounded-2xl ${
-                          isLatest
-                            ? "bg-emerald-50 border-2 border-emerald-200"
-                            : "bg-slate-50 border border-slate-100"
-                        }`}
-                      >
-                        <p
-                          className={`font-black text-sm mb-1 ${
-                            isLatest ? "text-emerald-900" : "text-slate-800"
-                          }`}
+                {/* รายประวัติการจ่ายเงิน (Sub-list) */}
+                {(order.paymentSlips?.length > 0 || order.depositSlipUrl) && (
+                  <div className="pt-4 border-t border-slate-100 mt-4 h-[120px] overflow-y-auto no-scrollbar">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-3 flex items-center justify-between">
+                      ประวัติการชำระเงิน
+                      <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[9px]">
+                        {(order.paymentSlips?.length || 0) +
+                          (order.depositSlipUrl ? 1 : 0)}{" "}
+                        รายการ
+                      </span>
+                    </p>
+                    <div className="space-y-2 pb-2">
+                      {/* New Slips */}
+                      {order.paymentSlips?.map((slip) => (
+                        <div
+                          key={slip.id}
+                          className="bg-slate-50 p-2 rounded border border-slate-100 flex justify-between items-center group"
                         >
-                          {actionLabel}
-                        </p>
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-700">
+                              ฿{parseFloat(slip.amount).toLocaleString()}
+                            </p>
+                            <p className="text-[9px] text-slate-400">
+                              {formatDate(slip.createdAt)} •{" "}
+                              {slip.uploader?.name || "Unknown"}
+                            </p>
+                          </div>
+                          <a
+                            href={slip.slipUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 underline"
+                          >
+                            ดูสลิป
+                          </a>
+                        </div>
+                      ))}
 
+                      {/* Legacy Deposit */}
+                      {order.depositSlipUrl &&
+                        !order.paymentSlips?.some(
+                          (s) => s.slipUrl === order.depositSlipUrl,
+                        ) && (
+                          <div className="bg-emerald-50/50 p-2 rounded border border-emerald-100 flex justify-between items-center">
+                            <div>
+                              <p className="text-[10px] font-bold text-emerald-700">
+                                ฿
+                                {parseFloat(
+                                  order.deposit || 0,
+                                ).toLocaleString()}
+                              </p>
+                              <p className="text-[9px] text-emerald-500 font-medium">
+                                มัดจำ (ข้อมูลเดิม)
+                              </p>
+                            </div>
+                            <a
+                              href={order.depositSlipUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 underline"
+                            >
+                              ดูสลิป
+                            </a>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Activity Timeline */}
+          <div className="erp-card overflow-hidden">
+            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+              <HiOutlineClock className="w-5 h-5 text-indigo-600" />
+              <h3 className="font-bold text-slate-800 text-sm">
+                ประวัติกิจกรรม (Timeline)
+              </h3>
+            </div>
+            <div className="p-5 max-h-[400px] overflow-y-auto no-scrollbar space-y-4">
+              {order.logs
+                ?.filter((log) => log.action !== "อัปเดตสเปคทางเทคนิค")
+                .map((log, idx, filteredLogs) => {
+                  const isLatest = idx === 0;
+                  return (
+                    <div key={idx} className="flex gap-3 relative">
+                      {idx < filteredLogs.length - 1 && (
+                        <div className="absolute left-[7px] top-4 bottom-0 w-0.5 bg-slate-100" />
+                      )}
+                      <div
+                        className={`shrink-0 w-4 h-4 rounded-full border-2 z-10 mt-1 transition-all ${isLatest ? "bg-indigo-600 border-indigo-200 animate-pulse" : "bg-white border-slate-200"}`}
+                      />
+                      <div className="flex-1 min-w-0 pb-4">
+                        <p
+                          className={`text-[11px] font-bold leading-tight ${isLatest ? "text-indigo-600" : "text-slate-800"}`}
+                        >
+                          {getActionLabel(log.action)}
+                        </p>
                         {log.details && (
-                          <p className="text-xs text-slate-600 mb-2 leading-relaxed">
+                          <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
                             {log.details}
                           </p>
                         )}
-
-                        <div className="flex items-center gap-2 text-[10px]">
-                          <span
-                            className={`font-bold ${
-                              isLatest ? "text-emerald-600" : "text-slate-500"
-                            }`}
-                          >
-                            {log.user?.name || "ระบบ"}
+                        <div className="flex items-center gap-1.5 mt-1 opacity-60">
+                          <span className="text-[9px] font-bold text-slate-400">
+                            {log.user?.name || "ระบบอัตโนมัติ"}
                           </span>
-                          <span className="text-slate-300">•</span>
-                          <span className="text-slate-400">
-                            {new Date(log.timestamp).toLocaleDateString(
-                              "th-TH",
-                              {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              },
-                            )}{" "}
-                            {new Date(log.timestamp).toLocaleTimeString(
-                              "th-TH",
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              },
-                            )}
+                          <span className="w-1 h-1 rounded-full bg-slate-300" />
+                          <span className="text-[9px] font-medium text-slate-400">
+                            {formatTime(log.timestamp)}
                           </span>
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-
-              {(!order.logs || order.logs.length === 0) && (
-                <div className="text-center py-12 text-slate-400">
-                  <HiOutlineClock className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm font-bold">ยังไม่มีความเคลื่อนไหว</p>
-                </div>
-              )}
+                  );
+                })}
             </div>
           </div>
         </div>
@@ -1643,11 +1629,11 @@ const OrderDetail = () => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95 duration-200">
             <h2 className="text-xl font-black text-slate-800 mb-4">
-              เร่งออเดอร์ (Urgent)
+              เร่งออเดอร์
             </h2>
             <textarea
               className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-3xl font-bold h-32 focus:ring-4 focus:ring-amber-200 outline-none"
-              placeholder="หมายเหตุเร่งด่วนสำหรับกราฟิก..."
+              placeholder="หมายเหตุเร่งด่วน...."
               value={urgentNote}
               onChange={(e) => setUrgentNote(e.target.value)}
             />
@@ -1675,7 +1661,7 @@ const OrderDetail = () => {
           <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in slide-in-from-bottom-8 duration-300">
             <div className="p-8 border-b flex items-center justify-between">
               <h2 className="text-2xl font-black text-slate-800">
-                Embroidery Library
+                คลังแบบปัก (Embroidery Library)
               </h2>
               <button
                 onClick={() => setIsLibraryOpen(false)}

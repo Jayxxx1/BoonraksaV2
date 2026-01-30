@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "../../context/auth-store";
 import { HiOutlineReceiptRefund, HiOutlineCalendar } from "react-icons/hi2";
+import { formatDateTime } from "../../utils/dateFormat";
 
 export default function PaymentHistory({ orderId, refreshTrigger }) {
   const { token } = useAuth();
@@ -85,7 +86,7 @@ export default function PaymentHistory({ orderId, refreshTrigger }) {
 
             <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-1">
               <HiOutlineCalendar className="w-3 h-3" />
-              {new Date(payment.createdAt).toLocaleString("th-TH")}
+              {formatDateTime(payment.createdAt)}
             </div>
 
             {payment.note && (

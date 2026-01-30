@@ -131,8 +131,7 @@ export default function QCTaskBoard() {
                           }`}
                         >
                           {{
-                            IN_PRODUCTION: "รอตรวจ QC",
-                            QC_PASSED: "ตรวจผ่านแล้ว",
+                            PRODUCTION_FINISHED: "รอตรวจ QC",
                             READY_TO_SHIP: "รอจัดส่ง",
                             COMPLETED: "เสร็จสิ้น",
                           }[order.status] || order.status}

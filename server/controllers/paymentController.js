@@ -66,38 +66,46 @@ export const uploadPaymentSlip = asyncHandler(async (req, res) => {
   }
 
   // Update order payment info
-  // COD amounts should NOT be added to paidAmount as they are to be collected later
-  const finalPaidAmount = paymentMethod === 'TRANSFER' ? parseFloat(order.paidAmount) + amt : parseFloat(order.paidAmount);
+  // USER REQUIREMENT: COD amount should also reduce "Balance Due" to clear it from UI (treated as "Covered")
+  const finalPaidAmount = parseFloat(order.paidAmount) + amt;
   const balanceDue = Math.max(0, total - finalPaidAmount); // Ensure never negative
 
-  await prisma.order.update({
+  // Activity log
+  const actionText = paymentMethod === 'COD' ? 'เปลี่ยนเป็นเก็บเงินปลายทาง (COD)' : 'แจ้งชำระเงิน/อัปโหลดสลิป';
+  const detailText = paymentMethod === 'COD' 
+    ? `${req.user.name} เปลี่ยนรูปแบบการชำระเป็น COD และยืนยันยอดเรียกเก็บ ${amt.toLocaleString()} บาท`
+    : `${req.user.name} อัปโหลดสลิปชำระเงินส่วนที่เหลือ ${amt.toLocaleString()} บาท`;
+
+  const updatedOrder = await prisma.order.update({
     where: { id: parseInt(orderId) },
     data: {
       paidAmount: finalPaidAmount,
       balanceDue: balanceDue,
       paymentStatus: balanceDue <= 0 ? 'PAID' : finalPaidAmount > 0 ? 'PARTIALLY_PAID' : 'UNPAID',
-      paymentMethod: paymentMethod || order.paymentMethod
-    }
-  });
-
-  // Activity log
-  const actionText = paymentMethod === 'COD' ? 'เปลี่ยนเป็นเก็บเงินปลายทาง (COD)' : 'อัพโหลดสลิปชำระเงินส่วนที่เหลือ';
-  const detailText = paymentMethod === 'COD' 
-    ? `${req.user.name} เปลี่ยนรูปแบบการชำระเป็น COD และยืนยันยอดเรียกเก็บ ${amt.toLocaleString()} บาท`
-    : `${req.user.name} อัปโหลดสลิปชำระเงินส่วนที่เหลือ ${amt.toLocaleString()} บาท`;
-
-  await prisma.activityLog.create({
-    data: {
-      action: actionText,
-      details: detailText,
-      orderId: parseInt(orderId),
-      userId: req.user.id
+      paymentMethod: paymentMethod || order.paymentMethod,
+      logs: {
+        create: {
+          action: actionText,
+          details: detailText,
+          userId: req.user.id
+        }
+      }
+    },
+    include: {
+        paymentSlips: {
+          include: { uploader: { select: { name: true, role: true } } },
+          orderBy: { createdAt: 'desc' }
+        },
+        logs: {
+          include: { user: { select: { name: true, role: true } } },
+          orderBy: { timestamp: 'desc' }
+        }
     }
   });
 
   res.status(201).json({
     status: 'success',
-    data: { paymentSlip }
+    data: { order: updatedOrder, paymentSlip }
   });
 });
 

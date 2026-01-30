@@ -7,34 +7,70 @@ import { generateJobSheetPDF } from '../services/pdfService.js';
 
 
 /**
- * Generate a new Job ID ([salesNumber] / [dailySeq])
+ * Helper to get the start of the current day in Asia/Bangkok
+ * Stored as a UTC date marker (00:00:00 UTC) representing the local day.
  */
-const generateJobId = async (user) => {
-  const prefix = user.salesNumber || 'XX';
+const getBangkokStartOfDay = () => {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const parts = formatter.formatToParts(now);
+  const year = parts.find(p => p.type === 'year').value;
+  const month = parts.find(p => p.type === 'month').value;
+  const day = parts.find(p => p.type === 'day').value;
   
-  // Get start of today in local time
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
+};
 
-  // Find max dailySeq for today
-  const lastOrderToday = await prisma.order.findFirst({
+/**
+ * Standard Include for Order used across multiple controllers
+ */
+export const standardOrderInclude = {
+  items: { include: { variant: { include: { product: true } } } },
+  sales: { select: { id: true, name: true, role: true, salesNumber: true } },
+  graphic: { select: { id: true, name: true, role: true } },
+  qc: { select: { id: true, name: true, role: true } },
+  stock: { select: { id: true, name: true, role: true } },
+  production: { select: { id: true, name: true, role: true } },
+  salesChannel: true,
+  block: true,
+  paymentSlips: {
+    include: { uploader: { select: { name: true, role: true } } },
+    orderBy: { createdAt: 'desc' }
+  },
+  logs: {
+    include: { user: { select: { name: true, role: true } } },
+    orderBy: { timestamp: 'desc' }
+  }
+};
+
+/**
+ * Generate a new Job ID ([salesNumber]/[dailyRunning])
+ * Based on user requirements: reset daily PER admin.
+ */
+const generateJobId = async (tx, user) => {
+  const prefix = user.salesNumber || 'XX';
+  const orderDate = getBangkokStartOfDay();
+
+  // Count orders for THIS salesperson ON THIS day (Bangkok marker)
+  const ordersCountToday = await tx.order.count({
     where: {
-      createdAt: {
-        gte: startOfDay
-      }
-    },
-    orderBy: {
-      dailySeq: 'desc'
-    },
-    select: { dailySeq: true }
+      salesId: user.id,
+      orderDate: orderDate
+    }
   });
 
-  const nextSeq = (lastOrderToday?.dailySeq || 0) + 1;
-  const formattedSeq = nextSeq.toString().padStart(3, '0');
+  const nextRunning = ordersCountToday + 1;
+  const formattedSeq = nextRunning.toString().padStart(3, '0');
 
   return {
     jobId: `${prefix}/${formattedSeq}`,
-    dailySeq: nextSeq
+    dailyRunning: nextRunning,
+    orderDate
   };
 };
 
@@ -60,12 +96,17 @@ export const createOrder = asyncHandler(async (req, res) => {
     return res.status(400).json({ status: 'fail', message: 'Order must have at least one item' });
   }
 
-  try {
-    const { jobId, dailySeq } = await generateJobId(req.user);
+  let attempts = 0;
+  const maxAttempts = 3;
 
-    const result = await prisma.$transaction(async (tx) => {
-      // ใช้สถานะเดียว: PENDING_ARTWORK (ไม่ว่าจะมีสต็อกหรือไม่)
-      let orderStatus = 'PENDING_ARTWORK'; 
+  while (attempts < maxAttempts) {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Generate Job ID inside transaction for atomicity
+        const { jobId, dailyRunning, orderDate } = await generateJobId(tx, req.user);
+
+        // ใช้สถานะเดียว: PENDING_ARTWORK (ไม่ว่าจะมีสต็อกหรือไม่)
+        let orderStatus = 'PENDING_ARTWORK'; 
       const purchaseRequests = [];
 
       // 1. Check stock
@@ -105,13 +146,18 @@ export const createOrder = asyncHandler(async (req, res) => {
         'บล็อคเดิมแก้ข้อความ': 'EDIT',
         'บล็อคใหม่': 'NEW'
       };
-      const mappedBlockType = bTypeMap[blockType] || 'OLD';
+      // If already valid ENUM, use it. Else map from Thai. Default to OLD.
+      const validEnums = ['OLD', 'EDIT', 'NEW'];
+      const mappedBlockType = validEnums.includes(blockType) 
+        ? blockType 
+        : (bTypeMap[blockType] || 'OLD');
 
       // 4. Create the Order
       const order = await tx.order.create({
         data: {
           jobId,
-          dailySeq: parseInt(dailySeq),
+          orderDate,
+          dailyRunning,
           customerName: customerName || '-',
           customerPhone: customerPhone || '',
           customerAddress: customerAddress || '',
@@ -199,8 +245,8 @@ export const createOrder = asyncHandler(async (req, res) => {
       // 7. Activity Log
       await tx.activityLog.create({
         data: {
-          action: 'CREATED',
-          details: `สร้างออเดอร์ใหม่ ${jobId} โดย ${req.user.name} (สถานะ: ${orderStatus})`,
+          action: 'สร้างออเดอร์',
+          details: `สร้างออเดอร์ใหม่เลขที่ ${jobId} โดย ${req.userId} (สถานะ: รอวางแบบ)`,
           orderId: order.id,
           userId: req.user.id
         }
@@ -209,15 +255,37 @@ export const createOrder = asyncHandler(async (req, res) => {
       return order;
     });
 
-    res.status(200).json({ status: 'success', data: { order: result } });
-
+    return res.status(201).json({
+      status: 'success',
+      data: { order: result }
+    });
   } catch (error) {
-    console.error("CREATE ORDER ERROR:", error);
-    res.status(500).json({
-      status: 'error',
-      message: error.message || 'Internal Server Error during order creation'
+    // Handle Unique Constraint Violation for dailyRunning (Race Condition)
+    const isUniqueViolation = error.code === 'P2002' && 
+      (error.meta?.target?.includes('dailyRunning') || 
+       error.meta?.constraint?.includes('sales_daily_running'));
+
+    if (isUniqueViolation) {
+      attempts++;
+      if (attempts >= maxAttempts) {
+        console.error(`[CONCURRENCY-FAILURE] Max retries reached for salesperson ${req.user.id}`);
+        return res.status(409).json({ 
+          status: 'fail', 
+          message: 'ระบบไม่สามารถสร้างเลขลำดับออเดอร์ให้คุณได้ในขณะนี้เนื่องจากมีการใช้งานพร้อมกันจำนวนมาก กรุณาลองใหม่อีกครั้ง' 
+        });
+      }
+      console.log(`[RETRY] Order creation attempt ${attempts} failed due to race condition. Retrying for salesperson ${req.user.id}...`);
+      continue; // Try again the whole transaction
+    }
+    
+    // Other database or logic errors
+    console.error('[CREATE-ORDER-ERROR]', error);
+    return res.status(500).json({ 
+      status: 'error', 
+      message: error.message || 'Internal Server Error during order creation' 
     });
   }
+}
 });
 
 /**
@@ -258,19 +326,19 @@ export const getOrders = asyncHandler(async (req, res) => {
       where.status = { in: ['PENDING_ARTWORK', 'DESIGNING'] };
     } else if (req.user.role === 'STOCK') {
       where.stockId = null;
-      // Stock sees orders sent from Graphic
-      where.status = { in: ['PENDING_STOCK_CHECK'] };
+      // Stock sees orders sent from Graphic or reported as having issues
+      where.status = { in: ['PENDING_STOCK_CHECK', 'STOCK_ISSUE'] };
     } else if (req.user.role === 'PRODUCTION') {
       where.productionId = null;
-      // Production sees orders confirmed by Stock
-      where.status = { in: ['IN_PRODUCTION'] }; 
+      // Production sees orders confirmed by Stock (waiting for start) or already in production
+      where.status = { in: ['STOCK_RECHECKED', 'IN_PRODUCTION'] }; 
     } else if (req.user.role === 'SEWING_QC') {
       where.qcId = null;
       // QC sees orders finished by Production
       where.status = 'PRODUCTION_FINISHED';
-    } else if (req.user.role === 'DELIVERY') {
-      // Delivery sees orders passed QC
-      where.status = { in: ['QC_PASSED', 'READY_TO_SHIP'] };
+    } else if (req.user.role === 'PURCHASING') {
+      // Purchasing sees any order with pending purchase requests
+      where.purchaseRequests = { some: { status: 'PENDING' } };
     }
   } else if (view === 'history') {
     // History is ALWAYS restricted to own tasks for technical roles
@@ -344,26 +412,7 @@ export const getOrderById = asyncHandler(async (req, res) => {
 
   const order = await prisma.order.findUnique({
     where: { id: parseInt(orderId) },
-    include: {
-      items: {
-        include: {
-          variant: {
-            include: { product: true }
-          }
-        }
-      },
-      sales: { select: { id: true, name: true, role: true, salesNumber: true } },
-      graphic: { select: { id: true, name: true, role: true } },
-      qc: { select: { id: true, name: true, role: true } },
-      stock: { select: { id: true, name: true, role: true } },
-      production: { select: { id: true, name: true, role: true } },
-      salesChannel: true,
-      block: true,
-      logs: {
-        include: { user: { select: { name: true, role: true } } },
-        orderBy: { timestamp: 'desc' }
-      }
-    }
+    include: standardOrderInclude
   });
 
   if (!order) {
@@ -397,7 +446,7 @@ export const updatePurchasingInfo = asyncHandler(async (req, res) => {
   await prisma.activityLog.create({
     data: {
       action: 'PURCHASING_UPDATE',
-      details: `ฝ่ายจัดซื้อ ${req.user.name} อัปเดตข้อมูลพัสดุ/ETA (สถานะ: ${order.status})`,
+      details: `ฝ่ายจัดซื้อ ${req.user.name} อัปเดตข้อมูลพัสดุ/ETA (สถานะ: รอวางแบบ)`,
       orderId: order.id,
       userId: req.user.id
     }
@@ -417,7 +466,8 @@ export const assignGraphic = asyncHandler(async (req, res) => {
     data: {
       graphicId: req.user.id,
       status: 'DESIGNING' // เปลี่ยนจาก PENDING_ARTWORK → DESIGNING
-    }
+    },
+    include: standardOrderInclude
   });
 
   await prisma.activityLog.create({
@@ -443,9 +493,10 @@ export const uploadArtwork = asyncHandler(async (req, res) => {
     where: { id: parseInt(orderId) },
     data: {
       artworkUrl,
-      status: 'PENDING_STOCK_CHECK', // เปลี่ยนจาก ARTWORK_UPLOADED
+      // status: 'PENDING_STOCK_CHECK', // Don't auto-advance. Let Graphic click "Send to Stock"
       graphicId: req.user.id
-    }
+    },
+    include: standardOrderInclude
   });
 
   await prisma.activityLog.create({
@@ -483,16 +534,17 @@ export const updateOrderSpecs = asyncHandler(async (req, res) => {
 
   const order = await prisma.order.update({
     where: { id: parseInt(orderId) },
-    data: updateData
-  });
-
-  await prisma.activityLog.create({
     data: {
-      action: 'UPDATE_SPECS',
-      details: `Graphic ${req.user.name} อัปเดตงานปัก/ไฟล์งาน`,
-      orderId: order.id,
-      userId: req.user.id
-    }
+      ...updateData,
+      logs: {
+        create: {
+          action: 'อัปเดตสเปคทางเทคนิค',
+          details: `Graphic ${req.user.name} อัปเดตงานปัก/ไฟล์งาน`,
+          userId: req.user.id
+        }
+      }
+    },
+    include: standardOrderInclude
   });
 
   res.status(200).json({ status: 'success', data: { order } });
@@ -507,22 +559,24 @@ export const printJobSheetSignal = asyncHandler(async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: parseInt(orderId) } });
   if (!order) return res.status(404).json({ status: 'fail', message: 'Order not found' });
 
-  if (order.status !== 'PENDING_ARTWORK' && order.status !== 'DESIGNING') {
-    return res.status(400).json({ status: 'fail', message: 'ออเดอร์ไม่อยู่ในขั้นตอนที่สามารถส่งต่อสต็อกได้' });
+  const allowedStatuses = ['PENDING_ARTWORK', 'DESIGNING', 'PENDING_PAYMENT', 'PENDING_STOCK_CHECK'];
+  if (!allowedStatuses.includes(order.status)) {
+    return res.status(400).json({ status: 'fail', message: `ออเดอร์อยู่ในสถานะ ${order.status} ไม่สามารถส่งต่อสต็อกได้` });
   }
 
   const updatedOrder = await prisma.order.update({
     where: { id: parseInt(orderId) },
-    data: { status: 'PENDING_STOCK_CHECK' }
-  });
-
-  await prisma.activityLog.create({
-    data: {
-      action: 'PRINT_JOB_SHEET',
-      details: `ฝ่ายกราฟิก ${req.user.name} พิมพ์ใบงาน (Job Sheet) และส่งต่อฝ่ายสต็อกแล้ว`,
-      orderId: updatedOrder.id,
-      userId: req.user.id
-    }
+    data: { 
+      status: 'PENDING_STOCK_CHECK',
+      logs: {
+        create: {
+          action: 'ฝ่ายกราฟิกส่งใบงานเข้าสต็อก',
+          details: `ฝ่ายกราฟิก ${req.user.name} พิมพ์ใบงาน (Job Sheet) และส่งต่อฝ่ายสต็อกแล้ว`,
+          userId: req.user.id
+        }
+      }
+    },
+    include: standardOrderInclude
   });
 
   res.status(200).json({ status: 'success', data: { order: updatedOrder } });
@@ -544,18 +598,17 @@ export const confirmStockRecheck = asyncHandler(async (req, res) => {
   const updatedOrder = await prisma.order.update({
     where: { id: parseInt(orderId) },
     data: { 
-      status: 'IN_PRODUCTION', 
-      stockId: req.user.id
-    }
-  });
-
-  await prisma.activityLog.create({
-    data: {
-      action: 'STOCK_RECHECKED',
-      details: `ฝ่ายสต็อก ${req.user.name} ยืนยันสินค้าครบถ้วน → ส่งเข้าผลิต`,
-      orderId: updatedOrder.id,
-      userId: req.user.id
-    }
+      status: 'STOCK_RECHECKED', 
+      stockId: req.user.id,
+      logs: {
+        create: {
+          action: 'พนักงานฝ่ายสต็อกยืนยันสต็อกครบ',
+          details: `สต็อก ${req.user.name} ยืนยันว่าพัสดุครบถ้วน พร้อมสำหรับการผลิต (STOCK_RECHECKED)`,
+          userId: req.user.id
+        }
+      }
+    },
+    include: standardOrderInclude
   });
 
   res.status(200).json({ status: 'success', data: { order: updatedOrder } });
@@ -568,14 +621,25 @@ export const startProduction = asyncHandler(async (req, res) => {
   const { orderId } = req.params;
 
   const order = await prisma.order.findUnique({ where: { id: parseInt(orderId) } });
-  if (order.status !== 'IN_PRODUCTION') {
-    return res.status(400).json({ status: 'fail', message: 'กรุณากดรับงานเข้าฝ่ายผลิตก่อน' });
+  
+  // Allow start ONLY if Stock Rechecked OR if already In Production (idempotent)
+  if (order.status !== 'STOCK_RECHECKED' && order.status !== 'IN_PRODUCTION') {
+    return res.status(400).json({ status: 'fail', message: 'ต้องผ่านการเช็คสต็อกก่อนเริ่มผลิต (Status: ' + order.status + ')' });
   }
+
+  const updatedOrder = await prisma.order.update({
+    where: { id: parseInt(orderId) },
+    data: { 
+      status: 'IN_PRODUCTION',
+      productionId: req.user.id
+    },
+    include: standardOrderInclude
+  });
 
   await prisma.activityLog.create({
     data: {
       action: 'START_PRODUCTION',
-      details: `เริ่มกระบวนการผลิต (In Production)`,
+      details: `ฝ่ายผลิต ${req.user.name} เริ่มดำเนินการผลิต (In Production)`,
       orderId: order.id,
       userId: req.user.id
     }
@@ -602,17 +666,16 @@ export const finishProduction = asyncHandler(async (req, res) => {
     where: { id: parseInt(orderId) },
     data: { 
       status: 'PRODUCTION_FINISHED', 
-      productionId: req.user.id
-    }
-  });
-
-  await prisma.activityLog.create({
-    data: {
-      action: 'FINISH_PRODUCTION',
-      details: `ฝ่ายผลิต ${req.user.name} ผลิตเสร็จสมบูรณ์ → ส่งต่อฝ่าย QC`,
-      orderId: updatedOrder.id,
-      userId: req.user.id
-    }
+      productionId: req.user.id,
+      logs: {
+        create: {
+          action: 'ผลิตเสร็จสิ้น/ส่งตรวจ QC',
+          details: `ฝ่ายผลิต ${req.user.name} ผลิตเสร็จสมบูรณ์ → ส่งต่อฝ่าย QC`,
+          userId: req.user.id
+        }
+      }
+    },
+    include: standardOrderInclude
   });
 
   res.status(200).json({ status: 'success', data: { order: updatedOrder } });
@@ -647,21 +710,18 @@ export const passQC = asyncHandler(async (req, res) => {
     where: { id: parseInt(orderId) },
     data: { 
       status: nextStatus,
-      qcId: req.user.id
-    } 
-  });
-
-  const returnLabel = returnTo === 'GRAPHIC' ? 'ฝ่ายกราฟิก' : 'ฝ่ายผลิต';
-
-  await prisma.activityLog.create({
-    data: {
-      action: pass ? 'QC_PASS' : 'QC_FAIL',
-      details: pass 
-        ? `QC ${req.user.name} ตรวจสอบผล: ผ่าน (PASS)` 
-        : `QC ${req.user.name} ตรวจสอบผล: ไม่ผ่าน (FAIL) → ส่งกลับ${returnLabel} (เหตุผล: ${reason || 'ไม่ได้ระบุ'})`,
-      orderId: updatedOrder.id,
-      userId: req.user.id
-    }
+      qcId: req.user.id,
+      logs: {
+        create: {
+          action: pass ? 'QC_PASS' : 'QC_FAIL',
+          details: pass 
+            ? `QC ${req.user.name} ตรวจสอบผล: ผ่าน (PASS)` 
+            : `QC ${req.user.name} ตรวจสอบผล: ไม่ผ่าน (FAIL) → ส่งกลับ${returnTo === 'GRAPHIC' ? 'ฝ่ายกราฟิก' : 'ฝ่ายผลิต'} (เหตุผล: ${reason || 'ไม่ได้ระบุ'})`,
+          userId: req.user.id
+        }
+      }
+    },
+    include: standardOrderInclude
   });
 
   res.status(200).json({ status: 'success', data: { order: updatedOrder } });
@@ -682,8 +742,15 @@ export const readyToShip = asyncHandler(async (req, res) => {
     where: { id: parseInt(orderId) },
     data: { 
       status: 'READY_TO_SHIP',
-      qcId: req.user.id
-    }
+      logs: {
+        create: {
+          action: 'สินค้าพร้อมจัดส่ง',
+          details: `Order marked as ready to ship by ${req.user.name}`,
+          userId: req.user.id
+        }
+      }
+    },
+    include: standardOrderInclude
   });
 
   res.status(200).json({ status: 'success', data: { order: updatedOrder } });
@@ -727,7 +794,8 @@ export const completeOrder = asyncHandler(async (req, res) => {
     data: {
       trackingNo,
       status: 'COMPLETED'
-    }
+    },
+    include: standardOrderInclude
   });
 
   await prisma.activityLog.create({
@@ -828,7 +896,7 @@ export const bumpUrgent = asyncHandler(async (req, res) => {
 
   await prisma.activityLog.create({
     data: {
-      action: 'BUMP_URGENT',
+      action: 'เร่งด่วน',
       details: `ฝ่ายขาย ${req.user.name} แจ้งเร่งออเดอร์ด่วน (หมายเหตุ: ${note})`,
       orderId: order.id,
       userId: req.user.id
@@ -856,48 +924,41 @@ export const claimOrder = asyncHandler(async (req, res) => {
 
   const updateData = {};
   let actionLabel = '';
+  let actionDetails = '';
 
   if (role === 'GRAPHIC') {
     if (order.graphicId && order.graphicId !== userId) {
       return res.status(400).json({ status: 'fail', message: 'This order is already claimed by another graphic designer' });
     }
     updateData.graphicId = userId;
-    actionLabel = 'CLAIM_GRAPHIC';
+    updateData.status = 'DESIGNING'; // Auto-start designing upon claim
+    actionLabel = 'ฝ่ายกราฟิกรับงานออกแบบ';
+    actionDetails = `ฝ่ายกราฟิก ${req.user.name} รับงานออกแบบ → กำลังวางแบบ`;
   } else if (role === 'SEWING_QC') {
     if (order.qcId && order.qcId !== userId) {
       return res.status(400).json({ status: 'fail', message: 'This order is already claimed by another QC' });
     }
     updateData.qcId = userId;
-    actionLabel = 'CLAIM_QC';
+    actionLabel = 'ฝ่ายqcรับงาน';
+    actionDetails = `พนักงานฝ่าย QC คุณ${req.user.name} รับงานตรวจคุณภาพเรียบร้อย`;
   } else if (role === 'STOCK') {
     if (order.stockId && order.stockId !== userId) {
       return res.status(400).json({ status: 'fail', message: 'This order is already claimed by another Stock staff' });
     }
     updateData.stockId = userId;
-    actionLabel = 'CLAIM_STOCK';
+    actionLabel = 'พนักงานฝ่ายสต็อกรับงาน';
+    actionDetails = `พนักงานฝ่ายสต็อก คุณ${req.user.name} รับงานเช็คสต็อกเรียบร้อย`;
   } else if (role === 'PRODUCTION') {
     if (order.productionId && order.productionId !== userId) {
       return res.status(400).json({ status: 'fail', message: 'This order is already claimed by another Production staff' });
     }
     updateData.productionId = userId;
-    actionLabel = 'CLAIM_PRODUCTION';
+    updateData.status = 'IN_PRODUCTION'; // Auto-start production upon claim
+    actionLabel = 'ฝ่ายผลิตรับงาน';
+    actionDetails = `ฝ่ายผลิต ${req.user.name} รับงานผลิต → กำลังผลิต`;
   } else {
     return res.status(403).json({ status: 'fail', message: 'Only Technical roles can claim orders' });
   }
-
-  const updatedOrder = await prisma.order.update({
-    where: { id: parseInt(orderId) },
-    data: updateData,
-    include: {
-      graphic: { select: { name: true } },
-      qc: { select: { name: true } },
-      stock: { select: { name: true } },
-      production: { select: { name: true } },
-      items: { include: { variant: { include: { product: true } } } },
-      sales: { select: { name: true } },
-      salesChannel: true
-    }
-  });
 
   const roleMap = {
     'GRAPHIC': 'ออกแบบ',
@@ -906,13 +967,19 @@ export const claimOrder = asyncHandler(async (req, res) => {
     'PRODUCTION': 'ผลิต'
   };
 
-  await prisma.activityLog.create({
+  const updatedOrder = await prisma.order.update({
+    where: { id: parseInt(orderId) },
     data: {
-      action: actionLabel,
-      details: `พนักงานฝ่าย${roleMap[role] || role} คุณ${req.user.name} กดรับงานเข้าความรับผิดชอบเรียบร้อย`,
-      orderId: updatedOrder.id,
-      userId: req.user.id
-    }
+      ...updateData,
+      logs: {
+        create: {
+          action: actionLabel,
+          details: actionDetails || `พนักงานฝ่าย${roleMap[role] || role} คุณ${req.user.name} กดรับงานเข้าความรับผิดชอบเรียบร้อย`,
+          userId: req.user.id
+        }
+      }
+    },
+    include: standardOrderInclude
   });
 
   res.status(200).json({ status: 'success', data: { order: updatedOrder } });
@@ -930,25 +997,17 @@ export const reportStockIssue = asyncHandler(async (req, res) => {
     data: { 
       status: 'STOCK_ISSUE',
       stockIssueReason: reason,
-      stockId: req.user.id
-    }
-  });
-
-  await prisma.activityLog.create({
-    data: {
-      action: 'STOCK_ISSUE',
-      details: `แจ้งปัญหาคลังสินค้าโดยคุณ ${req.user.name}: ${reason} (แจ้งฝ่ายขาย: ช่วยตรวจสอบกับลูกค้าว่าจะสั่งเพิ่มหรือยกเลิกรายการนี้)`,
-      orderId: order.id,
-      userId: req.user.id
-    }
+      stockId: req.user.id,
+      logs: {
+        create: {
+          action: 'ฝ่ายสต็อกแจ้งปัญหาสินค้า',
+          details: `ฝ่ายสต็อก ${req.user.name} รายงานปัญหา: ${reason}`,
+          userId: req.user.id
+        }
+      }
+    },
+    include: standardOrderInclude
   });
 
   res.status(200).json({ status: 'success', data: { order } });
 });
-
-
-
-
-
-
-

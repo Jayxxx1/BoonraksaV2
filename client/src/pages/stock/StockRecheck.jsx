@@ -7,6 +7,7 @@ import {
   HiOutlineCheckCircle,
   HiOutlineViewColumns,
 } from "react-icons/hi2";
+import { getStatusLabel, statusColors } from "../../utils/statusMapper";
 
 export default function StockRecheck() {
   const { token } = useAuth();
@@ -21,13 +22,19 @@ export default function StockRecheck() {
         headers: { Authorization: `Bearer ${token}` },
         params: { view: viewTab },
       });
-      let filtered = res.data.data.orders;
+      let raw = res.data.data.orders;
       if (viewTab === "available" || viewTab === "all") {
-        filtered = filtered.filter((o) =>
+        raw = raw.filter((o) =>
           ["PENDING_STOCK_CHECK", "STOCK_ISSUE"].includes(o.status),
         );
       }
-      setOrders(filtered);
+      setOrders(
+        raw.sort((a, b) => {
+          if (a.isUrgent && !b.isUrgent) return -1;
+          if (!a.isUrgent && b.isUrgent) return 1;
+          return new Date(b.updatedAt) - new Date(a.updatedAt);
+        }),
+      );
     } catch (err) {
       console.error(err);
     } finally {
@@ -107,7 +114,11 @@ export default function StockRecheck() {
                   orders.map((order) => (
                     <tr
                       key={order.id}
-                      className="hover:bg-indigo-50/30 transition-colors group"
+                      className={`hover:bg-indigo-50/30 transition-colors group ${
+                        order.isUrgent
+                          ? "bg-rose-50/40 border-l-4 border-l-rose-500"
+                          : ""
+                      }`}
                     >
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
@@ -121,17 +132,9 @@ export default function StockRecheck() {
                       </td>
                       <td className="px-6 py-4">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${
-                            order.status === "IN_PRODUCTION"
-                              ? "bg-emerald-100 text-emerald-600"
-                              : "bg-indigo-50 text-indigo-600"
-                          }`}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${statusColors[order.status]?.bg || "bg-slate-100"} ${statusColors[order.status]?.text || "text-slate-600"}`}
                         >
-                          {{
-                            PENDING_STOCK_CHECK: "รอเช็คสต็อก",
-                            STOCK_ISSUE: "สต็อกมีปัญหา",
-                            IN_PRODUCTION: "ส่งเข้าผลิตแล้ว",
-                          }[order.status] || order.status}
+                          {getStatusLabel(order.status)}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-[10px] font-bold text-slate-500">

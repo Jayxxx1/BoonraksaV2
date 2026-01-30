@@ -12,15 +12,27 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
   // Redirect if already logged in
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/", { replace: true });
+    if (isAuthenticated && user) {
+      const role = user.role;
+      if (role === "MARKETING")
+        navigate("/monitor/marketing", { replace: true });
+      else if (role === "FINANCE")
+        navigate("/monitor/finance", { replace: true });
+      else if (role === "EXECUTIVE")
+        navigate("/monitor/finance", { replace: true });
+      else if (role === "GRAPHIC") navigate("/graphic", { replace: true });
+      else if (role === "PRODUCTION")
+        navigate("/production", { replace: true });
+      else if (role === "SEWING_QC") navigate("/qc", { replace: true });
+      else if (role === "STOCK") navigate("/stock-recheck", { replace: true });
+      else navigate("/", { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,7 +42,24 @@ export default function Login() {
     const result = await login(username, password);
 
     if (result.success) {
-      navigate("/");
+      const role = result.user?.role;
+      if (role === "MARKETING") {
+        navigate("/monitor/marketing");
+      } else if (role === "FINANCE") {
+        navigate("/monitor/finance");
+      } else if (role === "EXECUTIVE") {
+        navigate("/monitor/finance");
+      } else if (role === "GRAPHIC") {
+        navigate("/graphic");
+      } else if (role === "PRODUCTION") {
+        navigate("/production");
+      } else if (role === "SEWING_QC") {
+        navigate("/qc");
+      } else if (role === "STOCK") {
+        navigate("/stock-recheck");
+      } else {
+        navigate("/");
+      }
     } else {
       setError(result.message);
     }
@@ -74,7 +103,7 @@ export default function Login() {
               <input
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => setUsername(e.target.value.trim())}
                 required
                 className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all text-slate-800 font-medium"
                 placeholder="กรอกชื่อผู้ใช้"
@@ -89,7 +118,7 @@ export default function Login() {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value.trim())}
                 required
                 className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all text-slate-800 font-medium"
                 placeholder="กรอกรหัสผ่าน"
@@ -123,15 +152,19 @@ export default function Login() {
           {/* Demo Credentials */}
           <div className="mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-              ข้อมูลทดสอบ
+              ข้อมูลสำหรับล็อกอินทดสอบ
             </p>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <span className="text-slate-500 font-medium">Username:</span>
+                <span className="text-slate-500 font-medium">
+                  ชื่อผู้ใช้ (Username):
+                </span>
                 <p className="font-mono font-bold text-slate-700">admin</p>
               </div>
               <div>
-                <span className="text-slate-500 font-medium">Password:</span>
+                <span className="text-slate-500 font-medium">
+                  รหัสผ่าน (Password):
+                </span>
                 <p className="font-mono font-bold text-slate-700">
                   password123
                 </p>

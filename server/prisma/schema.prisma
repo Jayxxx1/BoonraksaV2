@@ -110,6 +110,7 @@ enum OrderStatus {
   PENDING_PAYMENT      // รอชำระส่วนที่เหลือ
   PENDING_STOCK_CHECK  // รอสต็อคเช็ค
   STOCK_ISSUE          // สต็อกมีปัญหา
+  STOCK_RECHECKED      // สต็อกยืนยันครบ (รอผลิต)
   IN_PRODUCTION        // กำลังผลิต
   PRODUCTION_FINISHED  // ผลิตเสร็จ (รอ QC)
   QC_PASSED            // ผ่าน QC (รอแพ็ค)
@@ -137,9 +138,12 @@ enum PaymentMethod {
 
 model Order {
   id    Int    @id @default(autoincrement())
-  jobId String @unique // JOB-6701-001
+  jobId String // adminCode/dailyRunning (e.g. 10/030) - NOT unique globally
+  
+  globalRunning Int @unique @default(autoincrement()) // True system identity
+  orderDate     DateTime // Start of day for daily reset calculations
+  dailyRunning  Int // Per-admin daily sequence
 
-  dailySeq   Int // ลำดับที่ของวัน (รีเซ็ตเป็น 1 ทุกเที่ยงคืน)
   isUrgent   Boolean   @default(false) // งานด่วน (3 วัน)
   blockType  BlockType @default(OLD)
   customerFb String? // ชื่อ Facebook ลูกค้า
@@ -216,6 +220,8 @@ model Order {
   block      EmbroideryBlock? @relation(fields: [blockId], references: [id])
   
   paymentSlips PaymentSlip[] // ประวัติการจ่ายเงินทั้งหมด
+
+  @@unique([salesId, orderDate, dailyRunning], name: "sales_daily_running")
 }
 
 // Payment Slip - สำหรับจ่ายเงินหลายครั้ง

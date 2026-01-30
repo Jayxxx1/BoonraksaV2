@@ -28,26 +28,59 @@ async function main() {
     }).catch(() => console.log(`Category ${c.name} already exists or error`));
   }
 
-  // 2. สร้างแผนกต่างๆ (Users) - ทั้ง 8 Roles
+  // 2. สร้างแผนกต่างๆ (Users) - ตำแหน่งละ 5 คน
   const hashedPassword = await bcrypt.hash('password123', 10);
   
-  const users = [
-    { username: 'admin', role: 'ADMIN', name: 'Super Admin' },
-    { username: 'executive', role: 'EXECUTIVE', name: 'ผู้บริหาร' },
-    { username: 'sales', role: 'SALES', name: 'ฝ่ายขาย คุณเอ', salesNumber: '10' },
-    { username: 'graphic', role: 'GRAPHIC', name: 'ดีไซเนอร์ คุณบี' },
-    { username: 'stock', role: 'STOCK', name: 'สต็อก คุณซี' },
-    { username: 'production', role: 'PRODUCTION', name: 'ฝ่ายผลิต คุณดี' },
-    { username: 'qc', role: 'SEWING_QC', name: 'QC คุณอี' },
-    { username: 'delivery', role: 'DELIVERY', name: 'จัดส่ง คุณเอฟ'},
+  const roles = [
+    'ADMIN',
+    'EXECUTIVE',
+    'SALES',
+    'GRAPHIC',
+    'STOCK',
+    'PRODUCTION',
+    'SEWING_QC',
+    'DELIVERY',
+    'PURCHASING',
+    'MARKETING',
+    'FINANCE'
   ];
 
-  console.log('👤 Seeding Users (All 8 Roles)...');
+  console.log('👤 Seeding Users (5 users per role)...');
   console.log('📝 Login Credentials (Dev Mode):');
   console.log('   Password for all users: password123');
   console.log('');
   
-  for (const u of users) {
+  for (const role of roles) {
+    for (let i = 1; i <= 5; i++) {
+      const username = `${role.toLowerCase()}${i}`;
+      const name = `${role} User ${i}`;
+      const salesNumber = role === 'SALES' ? `${10 + (i-1)}` : null;
+
+      await prisma.user.upsert({
+        where: { username },
+        update: {},
+        create: {
+          username,
+          role,
+          name,
+          password: hashedPassword,
+          salesNumber,
+          isActive: true,
+        },
+      });
+      console.log(`   ✓ ${username.padEnd(15)} | ${role.padEnd(12)} | ${name}`);
+    }
+    console.log('   -------------------------------------------------');
+  }
+
+  // สร้างบัญชีหลักแบบเดิมเผื่อไว้เทส
+  const legacyUsers = [
+    { username: 'admin', role: 'ADMIN', name: 'Super Admin' },
+    { username: 'executive', role: 'EXECUTIVE', name: 'ผู้บริหาร' },
+    { username: 'sales', role: 'SALES', name: 'ฝ่ายขาย คุณเอ', salesNumber: '10' },
+  ];
+
+  for (const u of legacyUsers) {
     await prisma.user.upsert({
       where: { username: u.username },
       update: {},
@@ -57,7 +90,6 @@ async function main() {
         isActive: true,
       },
     });
-    console.log(`   ✓ ${u.username.padEnd(12)} | ${u.role.padEnd(12)} | ${u.name}`);
   }
   console.log('');
 
