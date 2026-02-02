@@ -36,6 +36,12 @@ const s3Storage = multerS3({
   },
   key: function (req, file, cb) {
     const folder = req.query.folder || 'misc';
+    /**
+     * FUTURE INTEGRATION:
+     * Instead of raw folder from query, use storagePath utility here to generate 
+     * structured keys based on business entities (Product ID, Order ID).
+     * e.g., const key = storagePath.generateOrderPath(orderId, 'design', file.originalname);
+     */
     cb(null, `${folder}/${Date.now().toString()}-${file.originalname}`);
   },
   contentType: multerS3.AUTO_CONTENT_TYPE,

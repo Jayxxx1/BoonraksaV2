@@ -94,6 +94,8 @@ export const createProduct = asyncHandler(async (req, res) => {
       name,
       codePrefix,
       description,
+      // FUTURE INTEGRATION: imageUrl should store S3 keys/paths generated 
+      // via storagePath.generateProductPath(id, filename)
       imageUrl,
       categoryId: parseInt(categoryId),
       variants: {

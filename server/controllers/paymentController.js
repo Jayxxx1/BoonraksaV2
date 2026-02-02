@@ -58,6 +58,8 @@ export const uploadPaymentSlip = asyncHandler(async (req, res) => {
       data: {
         orderId: parseInt(orderId),
         amount: parseFloat(amount) || 0,
+        // FUTURE INTEGRATION: slipUrl should ideally reference the S3 Key 
+        // generated via storagePath.generatePaymentSlipPath(orderId, filename)
         slipUrl: slipUrl || '',
         note: note || (paymentMethod === 'COD' ? 'เปลี่ยนเป็นเก็บเงินปลายทาง (COD)' : null),
         uploadedBy: req.user.id

@@ -171,7 +171,10 @@ export const createOrder = asyncHandler(async (req, res) => {
           paidAmount: paid,
           balanceDue: balance,
           paymentStatus,
+          // FUTURE INTEGRATION: In Object Storage migration, ensure depositSlipUrl 
+          // stores the S3 Key/metadata instead of a potentially full URL.
           depositSlipUrl: depositSlipUrl || null,
+          // FUTURE INTEGRATION: Each mockup draft should represent a file key in S3.
           draftImages: Array.isArray(draftImages) ? draftImages : [],
           blockPrice: safeNumber(blockPrice),
           unitPrice: safeNumber(unitPrice),
@@ -492,6 +495,8 @@ export const uploadArtwork = asyncHandler(async (req, res) => {
   const order = await prisma.order.update({
     where: { id: parseInt(orderId) },
     data: {
+      // FUTURE INTEGRATION: artworkUrl should ideally point to the S3 Key 
+      // or metadata entry for the final design file.
       artworkUrl,
       // status: 'PENDING_STOCK_CHECK', // Don't auto-advance. Let Graphic click "Send to Stock"
       graphicId: req.user.id
@@ -526,6 +531,8 @@ export const updateOrderSpecs = asyncHandler(async (req, res) => {
   const updateData = {};
   if (embroideryDetails) updateData.embroideryDetails = embroideryDetails;
   if (artworkUrl) updateData.artworkUrl = artworkUrl;
+  // FUTURE INTEGRATION: productionFileUrl refers to the S3 storage path 
+  // for binary files like DST or AI.
   if (productionFileUrl) updateData.productionFileUrl = productionFileUrl;
   if (productionFileName) updateData.productionFileName = productionFileName;
 
