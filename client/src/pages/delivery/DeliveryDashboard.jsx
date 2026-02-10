@@ -17,7 +17,6 @@ export default function DeliveryDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("to_ship"); // to_ship | pending_payment | shipped
-  const [trackingInputs, setTrackingInputs] = useState({}); // Local state for inputs
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -42,7 +41,10 @@ export default function DeliveryDashboard() {
 
       // Filter for Delivery Relevance
       const relevant = res.data.data.orders.filter(
-        (o) => o.status === "READY_TO_SHIP" || o.status === "COMPLETED",
+        (o) =>
+          o.status === "READY_TO_SHIP" ||
+          o.status === "QC_PASSED" ||
+          o.status === "COMPLETED",
       );
       setOrders(relevant);
     } catch (err) {
@@ -56,46 +58,31 @@ export default function DeliveryDashboard() {
     fetchOrders();
   }, [fetchOrders]);
 
-  const handleCompleteOrder = async (orderId) => {
-    const tracking = trackingInputs[orderId];
-    if (!tracking) return alert("กรุณากรอกเลขพัสดุ");
-
-    if (
-      !window.confirm(
-        `ยืนยันการจัดส่งออเดอร์ ${orderId} ด้วยเลขพัสดุ ${tracking}?`,
-      )
-    )
-      return;
-
-    try {
-      await axios.patch(
-        `http://localhost:8000/api/orders/${orderId}/complete`,
-        { trackingNo: tracking },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      fetchOrders(); // Refresh
-      setTrackingInputs((prev) => ({ ...prev, [orderId]: "" })); // Clear input
-    } catch (err) {
-      alert(err.response?.data?.message || "Delivery completion failed");
-    }
-  };
-
   // Filter & Sort Logic
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
 
     const filtered = orders.filter((order) => {
       const isCod = order.paymentMethod === "COD";
-      const isPaid = order.paymentStatus === "PAID"; // Or balance <= 0
+      // Fix: Check balanceDue explicitly to catch partial payments or status mismatches
+      const isPaid =
+        order.paymentStatus === "PAID" ||
+        parseFloat(order.balanceDue || 0) <= 0;
       const isReadyByPayment = isCod || isPaid;
 
       if (activeTab === "to_ship") {
-        // READY_TO_SHIP AND (COD OR PAID)
-        return order.status === "READY_TO_SHIP" && isReadyByPayment;
+        // READY_TO_SHIP/QC_PASSED AND (COD OR PAID)
+        return (
+          (order.status === "READY_TO_SHIP" || order.status === "QC_PASSED") &&
+          isReadyByPayment
+        );
       }
       if (activeTab === "pending_payment") {
-        // READY_TO_SHIP BUT NOT PAID (and NOT COD)
-        return order.status === "READY_TO_SHIP" && !isReadyByPayment;
+        // READY_TO_SHIP/QC_PASSED BUT NOT PAID (and NOT COD)
+        return (
+          (order.status === "READY_TO_SHIP" || order.status === "QC_PASSED") &&
+          !isReadyByPayment
+        );
       }
       if (activeTab === "shipped") {
         return order.status === "COMPLETED";
@@ -224,7 +211,7 @@ export default function DeliveryDashboard() {
                   >
                     <td className="p-4 align-top">
                       <Link
-                        to={`/order/${order.id}`}
+                        to={`/delivery/order/${order.id}`}
                         className="font-bold text-slate-900 hover:text-indigo-600 hover:underline"
                       >
                         {order.jobId}
@@ -284,33 +271,20 @@ export default function DeliveryDashboard() {
                         </div>
                       ) : activeTab === "pending_payment" ? (
                         <Link
-                          to={`/order/${order.id}`}
+                          to={`/delivery/order/${order.id}`}
                           className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline"
                         >
                           <HiOutlineClipboardDocumentList className="w-4 h-4" />
                           ดูรายละเอียดยอด
                         </Link>
                       ) : (
-                        <div className="flex items-center gap-2 justify-end">
-                          <input
-                            type="text"
-                            placeholder="Tracking No."
-                            value={trackingInputs[order.id] || ""}
-                            onChange={(e) =>
-                              setTrackingInputs((prev) => ({
-                                ...prev,
-                                [order.id]: e.target.value,
-                              }))
-                            }
-                            className="border border-slate-300 rounded-lg px-3 py-1.5 text-xs w-32 focus:ring-2 focus:ring-indigo-100 outline-none"
-                          />
-                          <button
-                            onClick={() => handleCompleteOrder(order.id)}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all"
-                          >
-                            ส่งของ
-                          </button>
-                        </div>
+                        <Link
+                          to={`/delivery/order/${order.id}`}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:underline"
+                        >
+                          <HiOutlineClipboardDocumentList className="w-4 h-4" />
+                          ดำเนินการจัดส่ง
+                        </Link>
                       )}
                     </td>
                   </tr>

@@ -18,7 +18,11 @@ import PurchasingDashboard from "./pages/purchasing/PurchasingDashboard";
 import GraphicTaskBoard from "./pages/graphic/GraphicTaskBoard";
 import StockRecheck from "./pages/stock/StockRecheck";
 import ProductionTaskBoard from "./pages/production/ProductionTaskBoard";
+import ProductionSearch from "./pages/production/ProductionSearch";
+import ThreadColorReference from "./pages/production/ThreadColorReference";
+import ShiftReport from "./pages/production/ShiftReport";
 import QCMobileView from "./pages/production/QCMobileView";
+import DeliveryOrderDetail from "./pages/delivery/DeliveryOrderDetail";
 import DeliveryDashboard from "./pages/delivery/DeliveryDashboard";
 import FinanceMonitor from "./pages/executive/FinanceMonitor";
 import MarketingMonitor from "./pages/executive/MarketingMonitor";
@@ -87,33 +91,185 @@ function App() {
               <ProtectedRoute>
                 <AppLayout>
                   <Routes>
+                    {/* Publicly visible pages within shell - All authenticated can see */}
                     <Route path="/" element={<ProductList />} />
                     <Route path="/products" element={<ProductList />} />
-                    <Route path="/product/create" element={<CreateProduct />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
-                    <Route path="/order/create" element={<CreateOrder />} />
-                    <Route path="/order/:orderId" element={<OrderDetail />} />
-                    <Route path="/orders" element={<OrderList />} />
-                    <Route path="/stock-check" element={<StockCheck />} />
+
+                    {/* Stock & Purchasing */}
+                    <Route
+                      path="/product/create"
+                      element={
+                        <ProtectedRoute
+                          allowedRoles={["STOCK", "ADMIN", "PURCHASING"]}
+                        >
+                          <CreateProduct />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/stock-check"
+                      element={
+                        <ProtectedRoute
+                          allowedRoles={[
+                            "STOCK",
+                            "ADMIN",
+                            "SALES",
+                            "MARKETING",
+                          ]}
+                        >
+                          <StockCheck />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/stock-recheck"
+                      element={
+                        <ProtectedRoute allowedRoles={["STOCK", "ADMIN"]}>
+                          <StockRecheck />
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route
                       path="/purchasing"
-                      element={<PurchasingDashboard />}
+                      element={
+                        <ProtectedRoute allowedRoles={["PURCHASING", "ADMIN"]}>
+                          <PurchasingDashboard />
+                        </ProtectedRoute>
+                      }
                     />
-                    <Route path="/graphic" element={<GraphicTaskBoard />} />
-                    <Route path="/stock-recheck" element={<StockRecheck />} />
+
+                    {/* Sales & Orders */}
+                    <Route
+                      path="/order/create"
+                      element={
+                        <ProtectedRoute allowedRoles={["SALES", "MARKETING"]}>
+                          <CreateOrder />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/orders"
+                      element={
+                        <ProtectedRoute allowedRoles={["SALES", "MARKETING"]}>
+                          <OrderList />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/order/:orderId"
+                      element={
+                        <ProtectedRoute
+                          allowedRoles={[
+                            "SALES",
+                            "MARKETING",
+                            "ADMIN",
+                            "GRAPHIC",
+                            "STOCK",
+                            "PRODUCTION",
+                            "SEWING_QC",
+                            "DELIVERY",
+                          ]}
+                        >
+                          <OrderDetail />
+                        </ProtectedRoute>
+                      }
+                    />
+
+                    {/* Technical / Production */}
+                    <Route
+                      path="/graphic"
+                      element={
+                        <ProtectedRoute allowedRoles={["GRAPHIC", "ADMIN"]}>
+                          <GraphicTaskBoard />
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route
                       path="/production"
-                      element={<ProductionTaskBoard />}
+                      element={
+                        <ProtectedRoute allowedRoles={["PRODUCTION", "ADMIN"]}>
+                          <ProductionTaskBoard />
+                        </ProtectedRoute>
+                      }
                     />
-                    <Route path="/qc" element={<QCMobileView />} />
-                    <Route path="/delivery" element={<DeliveryDashboard />} />
+                    <Route
+                      path="/production/search"
+                      element={
+                        <ProtectedRoute
+                          allowedRoles={["PRODUCTION", "ADMIN", "FOREMAN"]}
+                        >
+                          <ProductionSearch />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/production/threads"
+                      element={
+                        <ProtectedRoute
+                          allowedRoles={["PRODUCTION", "GRAPHIC", "ADMIN"]}
+                        >
+                          <ThreadColorReference />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/production/shift-report"
+                      element={
+                        <ProtectedRoute
+                          allowedRoles={["ADMIN", "EXECUTIVE", "PRODUCTION"]}
+                        >
+                          <ShiftReport />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/qc"
+                      element={
+                        <ProtectedRoute allowedRoles={["SEWING_QC", "ADMIN"]}>
+                          <QCMobileView />
+                        </ProtectedRoute>
+                      }
+                    />
+
+                    {/* Delivery */}
+                    <Route
+                      path="/delivery/order/:orderId"
+                      element={
+                        <ProtectedRoute allowedRoles={["DELIVERY", "ADMIN"]}>
+                          <DeliveryOrderDetail />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/delivery"
+                      element={
+                        <ProtectedRoute allowedRoles={["DELIVERY", "ADMIN"]}>
+                          <DeliveryDashboard />
+                        </ProtectedRoute>
+                      }
+                    />
+
+                    {/* Executive & Monitoring */}
                     <Route
                       path="/monitor/finance"
-                      element={<FinanceMonitor />}
+                      element={
+                        <ProtectedRoute
+                          allowedRoles={["FINANCE", "EXECUTIVE", "ADMIN"]}
+                        >
+                          <FinanceMonitor />
+                        </ProtectedRoute>
+                      }
                     />
                     <Route
                       path="/monitor/marketing"
-                      element={<MarketingMonitor />}
+                      element={
+                        <ProtectedRoute
+                          allowedRoles={["MARKETING", "EXECUTIVE", "ADMIN"]}
+                        >
+                          <MarketingMonitor />
+                        </ProtectedRoute>
+                      }
                     />
                   </Routes>
                 </AppLayout>

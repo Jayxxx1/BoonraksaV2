@@ -28,8 +28,8 @@ import {
   HiOutlineNoSymbol,
   HiOutlineBellAlert,
   HiOutlineArrowRightCircle,
-  HiOutlinePrinter,
 } from "react-icons/hi2";
+import { HiOutlinePrinter } from "react-icons/hi";
 import PaymentModal from "../../components/Payment/PaymentModal";
 import PaymentHistory from "../../components/Payment/PaymentHistory";
 import { getDisplayName } from "../../utils/namePrivacy";
@@ -148,6 +148,40 @@ const OrderDetail = () => {
     }
   };
 
+  const downloadCustomerProof = async () => {
+    try {
+      const response = await axios.get(
+        `http://localhost:8000/api/orders/${orderId}/customer-proof`,
+        {
+          headers: getAuthHeader(),
+          responseType: "blob",
+        },
+      );
+
+      if (response.data.type === "application/json") {
+        const text = await response.data.text();
+        const errorData = JSON.parse(text);
+        alert(`เกิดข้อผิดพลาด: ${errorData.message}`);
+        return;
+      }
+
+      const url = window.URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `ProofSheet-${order.jobId.replace("/", "-")}.pdf`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download error:", err);
+      alert("ไม่สามารถดาวน์โหลด Proof Sheet ได้");
+    }
+  };
+
   const handleUpdateStatus = async (endpoint, payload = {}) => {
     try {
       setIsUpdating(true);
@@ -178,10 +212,10 @@ const OrderDetail = () => {
           headers: getAuthHeader(),
         },
       );
-      alert("อัปเดตรายละเอียดทางเทคนิคเรียบร้อย");
+      // alert("อัปเดตรายละเอียดทางเทคนิคเรียบร้อย"); // Auto-save silently
       await fetchOrder();
     } catch {
-      alert("Failed to update specs");
+      console.error("Failed to update specs");
     } finally {
       setIsUpdating(false);
     }
@@ -524,6 +558,13 @@ const OrderDetail = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={downloadCustomerProof}
+              className="erp-button bg-indigo-50 text-indigo-700 border-indigo-100 py-1.5 px-3 text-xs"
+            >
+              <HiOutlineDocumentText className="w-4 h-4" />
+              <span>พิมพ์ใบสรุปงาน (Customer Proof)</span>
+            </button>
             <button
               onClick={downloadJobSheet}
               className="erp-button erp-button-secondary py-1.5 px-3 text-xs"
@@ -1040,29 +1081,36 @@ const OrderDetail = () => {
                         </span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
                           {emb.type}
+                          {emb.blockName && (
+                            <span className="ml-2 px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded">
+                              Block: {emb.blockName}
+                            </span>
+                          )}
                         </span>
                       </div>
 
                       {canPerformGraphicAction ? (
                         <div className="space-y-3">
                           <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={emb.isFreeOption || false}
-                                disabled={emb.isFreeOption} // Cannot uncheck if already set
-                                onChange={(e) => {
-                                  const n = [...editSpecs];
-                                  n[idx].isFreeOption = e.target.checked;
-                                  setEditSpecs(n);
-                                }}
-                                className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                onBlur={handleUpdateSpecs}
-                              />
-                              <span className="text-[10px] font-bold text-slate-500 uppercase">
-                                ตัวเลือกเสริม (Free)
-                              </span>
-                            </label>
+                            {emb.isFreeOption && (
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={emb.isFreeOption || false}
+                                  disabled={true}
+                                  onChange={(e) => {
+                                    const n = [...editSpecs];
+                                    n[idx].isFreeOption = e.target.checked;
+                                    setEditSpecs(n);
+                                  }}
+                                  className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                  onBlur={handleUpdateSpecs}
+                                />
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">
+                                  ตัวเลือกเสริม (Free)
+                                </span>
+                              </label>
+                            )}
 
                             {emb.isFreeOption ? (
                               <select
@@ -1115,30 +1163,146 @@ const OrderDetail = () => {
                               </div>
                             )}
                           </div>
-                          <input
-                            type="text"
-                            placeholder="สีไหม / หมายเหตุเพิ่มเติม (Thread color / Notes)..."
-                            className="erp-input py-1.5 text-xs font-semibold w-full"
-                            value={emb.note || ""}
-                            onChange={(e) => {
-                              const n = [...editSpecs];
-                              n[idx].note = e.target.value;
-                              setEditSpecs(n);
-                            }}
-                          />
+
+                          {/* Text Field & Note */}
+                          <div className="space-y-2">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase">
+                                หมายเหตุ
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="(ไม่มีข้อความ)"
+                                className="erp-input py-1.5 text-xs font-bold text-slate-500 w-full bg-slate-100 border-slate-200 cursor-not-allowed"
+                                value={emb.textToEmb || ""}
+                                readOnly={true}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase">
+                                หมายเหตุ (Notes)
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="สีไหม / รายละเอียดเพิ่มเติม..."
+                                className="erp-input py-1.5 text-xs font-semibold w-full"
+                                value={emb.note || ""}
+                                onChange={(e) => {
+                                  const n = [...editSpecs];
+                                  n[idx].note = e.target.value;
+                                  setEditSpecs(n);
+                                }}
+                                onBlur={handleUpdateSpecs}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Image Preview in Edit Mode */}
+                          <div className="flex gap-2 pt-2 border-t border-slate-100">
+                            {emb.logoUrl && (
+                              <div className="w-12 h-12 rounded border bg-white overflow-hidden group relative">
+                                <img
+                                  src={emb.logoUrl}
+                                  className="w-full h-full object-contain"
+                                  alt="Logo"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <a
+                                    href={emb.logoUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[8px] text-white font-bold bg-indigo-600 px-1 rounded"
+                                  >
+                                    View
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+                            {emb.mockupUrl && (
+                              <div className="w-12 h-12 rounded border bg-white overflow-hidden group relative">
+                                <img
+                                  src={emb.mockupUrl}
+                                  className="w-full h-full object-contain"
+                                  alt="Mockup"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <a
+                                    href={emb.mockupUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[8px] text-white font-bold bg-indigo-600 px-1 rounded"
+                                  >
+                                    View
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+                            {!emb.logoUrl && !emb.mockupUrl && (
+                              <span className="text-[9px] text-slate-400 italic self-center">
+                                No images uploaded
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <div className="bg-white/50 p-2.5 rounded border border-slate-100">
                           <p className="text-xs font-bold text-slate-700 leading-snug">
                             {emb.isFreeOption
                               ? `[FREE: ${emb.freeOptionName}]`
-                              : `Size: ${emb.width}x${emb.height} cm`}
+                              : `รายละเอียด`}
                             {emb.note && (
                               <span className="block mt-1 text-indigo-600 font-semibold">
                                 {emb.note}
                               </span>
                             )}
+                            {emb.textToEmb && (
+                              <span className="block mt-1 text-slate-500 font-bold border-t border-slate-100 pt-1">
+                                หมายเหตุ: {emb.textToEmb}
+                              </span>
+                            )}
                           </p>
+
+                          {/* 🆕 Render Images if available */}
+                          <div className="flex gap-2 mt-2">
+                            {emb.logoUrl && (
+                              <div className="w-16 h-16 rounded border bg-white overflow-hidden group relative">
+                                <img
+                                  src={emb.logoUrl}
+                                  className="w-full h-full object-contain"
+                                  alt="Logo"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <a
+                                    href={emb.logoUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[8px] text-white font-bold bg-indigo-600 px-1 rounded"
+                                  >
+                                    View
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+                            {emb.mockupUrl && (
+                              <div className="w-16 h-16 rounded border bg-white overflow-hidden group relative">
+                                <img
+                                  src={emb.mockupUrl}
+                                  className="w-full h-full object-contain"
+                                  alt="Mockup"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <a
+                                    href={emb.mockupUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[8px] text-white font-bold bg-indigo-600 px-1 rounded"
+                                  >
+                                    View
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1565,10 +1729,14 @@ const OrderDetail = () => {
                           </p>
                         )}
                         <div className="flex items-center gap-1.5 mt-1 opacity-60">
-                          <span className="text-[9px] font-bold text-slate-400">
-                            {log.user?.name || "ระบบอัตโนมัติ"}
-                          </span>
-                          <span className="w-1 h-1 rounded-full bg-slate-300" />
+                          {log.action !== "AUTO_URGENT" && (
+                            <>
+                              <span className="text-[9px] font-bold text-slate-400">
+                                {log.user?.name || "ระบบอัตโนมัติ"}
+                              </span>
+                              <span className="w-1 h-1 rounded-full bg-slate-300" />
+                            </>
+                          )}
                           <span className="text-[9px] font-medium text-slate-400">
                             {formatTime(log.timestamp)}
                           </span>

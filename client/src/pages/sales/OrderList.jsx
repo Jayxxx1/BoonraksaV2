@@ -91,7 +91,7 @@ export default function OrderList() {
     };
     return (
       <span
-        className={`px-2.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all duration-300 ${config.bg} ${config.text} ${config.border}`}
+        className={`px-2.5 py-1.5 rounded-xl text-[12px] font-black uppercase tracking-wider border transition-all duration-300 ${config.bg} ${config.text} ${config.border}`}
       >
         {getStatusLabel(status)}
       </span>
@@ -135,13 +135,15 @@ export default function OrderList() {
                 className={`w-4 h-4 text-slate-500 group-hover:text-indigo-600 transition-colors ${loading ? "animate-spin text-indigo-600" : ""}`}
               />
             </button>
-            <Link
-              to="/order/create"
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[12px] transition-all shadow-sm hover:shadow-md active:scale-95"
-            >
-              <HiOutlinePlus className="w-4 h-4" />
-              เปิดออเดอร์ใหม่
-            </Link>
+            {isSalesRole && (
+              <Link
+                to="/order/create"
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[12px] transition-all shadow-sm hover:shadow-md active:scale-95"
+              >
+                <HiOutlinePlus className="w-4 h-4" />
+                เปิดออเดอร์ใหม่
+              </Link>
+            )}
           </div>
         </div>
 
@@ -248,27 +250,27 @@ export default function OrderList() {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50">
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="px-4 py-3 text-[12px] font-black text-slate-400 uppercase tracking-widest">
                         รหัสงาน
                       </th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="px-4 py-3 text-[12px] font-black text-slate-400 uppercase tracking-widest">
                         ข้อมูลลูกค้า
                       </th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="px-4 py-3 text-[12px] font-black text-slate-400 uppercase tracking-widest">
                         สถานะงาน
                       </th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="px-4 py-3 text-[12px] font-black text-slate-400 uppercase tracking-widest">
                         เลขพัสดุ
                       </th>
                       {canViewFinancial && (
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <th className="px-4 py-3 text-[12px] font-black text-slate-400 uppercase tracking-widest">
                           สรุปยอดเงิน
                         </th>
                       )}
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="px-4 py-3 text-[12px] font-black text-slate-400 uppercase tracking-widest">
                         ผู้รับผิดชอบ
                       </th>
-                      <th className="px-4 py-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="px-4 py-3 text-right text-[12px] font-black text-slate-400 uppercase tracking-widest">
                         จัดการ
                       </th>
                     </tr>
@@ -303,7 +305,7 @@ export default function OrderList() {
                             <span className="text-[12px] font-black text-slate-800">
                               {order.customerName}
                             </span>
-                            <span className="text-[10px] font-bold text-slate-400 truncate max-w-[140px]">
+                            <span className="text-[12px] font-bold text-slate-400 truncate max-w-[140px]">
                               {order.customerFb || "ไม่มีประวัติสื่อสาร"}
                             </span>
                           </div>
@@ -313,11 +315,11 @@ export default function OrderList() {
                         </td>
                         <td className="px-4 py-3">
                           {order.trackingNo ? (
-                            <div className="text-[11px] font-black font-mono tracking-tight text-slate-600">
+                            <div className="text-[12px] font-black font-mono tracking-tight text-slate-600">
                               {order.trackingNo}
                             </div>
                           ) : (
-                            <span className="text-slate-300 text-[10px] font-black italic">
+                            <span className="text-slate-300 text-[12px] font-black italic">
                               ไม่มีข้อมูล
                             </span>
                           )}
@@ -348,7 +350,7 @@ export default function OrderList() {
                           <div className="flex items-center gap-1.5">
                             {order.graphic && (
                               <div
-                                className="w-6 h-6 rounded-md bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center text-[10px] font-black shadow-sm"
+                                className="w-6 h-6 rounded-md bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center text-[12px] font-black shadow-sm"
                                 title={`G: ${getDisplayName(order.graphic, user)}`}
                               >
                                 G
@@ -356,7 +358,7 @@ export default function OrderList() {
                             )}
                             {order.qc && (
                               <div
-                                className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center text-[10px] font-black shadow-sm"
+                                className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center text-[12px] font-black shadow-sm"
                                 title={`Q: ${getDisplayName(order.qc, user)}`}
                               >
                                 Q
@@ -413,7 +415,7 @@ export default function OrderList() {
                       <span className="text-[12px] font-black text-slate-800 leading-none truncate mb-1">
                         {order.customerName}
                       </span>
-                      <span className="text-[10px] font-bold text-slate-400 truncate">
+                      <span className="text-[12px] font-bold text-slate-400 truncate">
                         {order.customerFb || "ไม่มีประวัติสื่อสาร"}
                       </span>
                     </div>

@@ -32,7 +32,7 @@ const envSchema = z.object({
   S3_SECRET_KEY: isProd ? z.string().min(1) : z.string().optional(),
   S3_BUCKET: isProd ? z.string().min(1) : z.string().optional(),
 
-  S3_PUBLIC_URL: z.string().url().optional(),
+  S3_PUBLIC_URL: z.string().optional().transform(val => val === '' ? undefined : val),
 });
 
 const result = envSchema.safeParse(process.env);

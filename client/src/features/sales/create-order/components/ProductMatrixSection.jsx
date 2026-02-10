@@ -175,9 +175,13 @@ const ProductMatrixSection = ({
                         }
                         onKeyDown={(e) => handleKeyDown(e, v.id, idx)}
                         className={`w-full mt-2 text-center text-sm font-black border-0 bg-transparent focus:ring-0 ${
-                          qty > 0 ? "text-indigo-600" : "text-slate-400"
+                          qty > 0
+                            ? "text-indigo-600"
+                            : v.stock === 0
+                              ? "text-amber-500"
+                              : "text-slate-400"
                         }`}
-                        placeholder="-"
+                        placeholder={v.stock === 0 ? "Pre" : "-"}
                       />
                     </div>
                   );

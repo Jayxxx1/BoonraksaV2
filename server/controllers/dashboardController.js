@@ -1,9 +1,13 @@
 import pkg from '@prisma/client';
 const { PrismaClient } = pkg;
 const prisma = new PrismaClient();
+import { autoUpdateUrgentOrders } from './orderController.js'; // 🆕 Import helper
 
 export const getMyStats = async (req, res) => {
   try {
+    // 🆕 Auto-update urgency for stale orders
+    await autoUpdateUrgentOrders();
+
     const { id, role } = req.user;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -11,7 +15,8 @@ export const getMyStats = async (req, res) => {
     let stats = {
       todayCount: 0,
       totalCount: 0,
-      totalSales: 0
+      totalSales: 0,
+      urgentCount: 0
     };
 
     // Determine which field to filter by based on role
@@ -66,6 +71,14 @@ export const getMyStats = async (req, res) => {
           },
         });
 
+        stats.urgentCount = await prisma.order.count({
+          where: {
+            ...whereBase,
+            isUrgent: true,
+            status: { notIn: ['COMPLETED', 'CANCELLED'] }
+          },
+        });
+
         if (role === "SALES") {
           const salesData = await prisma.order.aggregate({
             where: whereBase,
@@ -81,6 +94,13 @@ export const getMyStats = async (req, res) => {
       stats.totalCount = await prisma.order.count();
       stats.todayCount = await prisma.order.count({
         where: { createdAt: { gte: today } },
+      });
+
+      stats.urgentCount = await prisma.order.count({
+        where: {
+          isUrgent: true,
+          status: { notIn: ['COMPLETED', 'CANCELLED'] }
+        },
       });
 
       const salesData = await prisma.order.aggregate({

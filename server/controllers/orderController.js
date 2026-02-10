@@ -3,7 +3,7 @@ import { asyncHandler } from '../src/middleware/error.middleware.js';
 import QRCode from 'qrcode';
 import s3Provider from '../src/services/providers/s3.provider.js';
 import config from '../src/config/config.js';
-import { generateJobSheetPDF } from '../services/pdfService.js';
+import { generateJobSheetPDF, generateCustomerProofPDF } from '../services/pdfService.js';
 
 
 /**
@@ -31,13 +31,18 @@ const getBangkokStartOfDay = () => {
  */
 export const standardOrderInclude = {
   items: { include: { variant: { include: { product: true } } } },
-  sales: { select: { id: true, name: true, role: true, salesNumber: true } },
+  sales: { select: { id: true, name: true, role: true, username: true, salesNumber: true } },
   graphic: { select: { id: true, name: true, role: true } },
   qc: { select: { id: true, name: true, role: true } },
   stock: { select: { id: true, name: true, role: true } },
   production: { select: { id: true, name: true, role: true } },
   salesChannel: true,
   block: true,
+  positions: true, // 🆕 ตำแหน่งรายละเอียดตารางปักแยก
+  productionLogs: { // 🆕 Log การผลิตแยกชุด
+    include: { user: { select: { name: true } } },
+    orderBy: { timestamp: 'desc' }
+  },
   paymentSlips: {
     include: { uploader: { select: { name: true, role: true } } },
     orderBy: { createdAt: 'desc' }
@@ -49,6 +54,30 @@ export const standardOrderInclude = {
 };
 
 /**
+ * Helper to mask staff names for Sales role
+ */
+const maskStaffNamesForSales = (order, userRole) => {
+  if (userRole !== 'SALES') return order;
+
+  const maskedOrder = { ...order };
+  const roleNames = {
+    GRAPHIC: "ฝ่ายกราฟิก",
+    STOCK: "ฝ่ายสต็อก",
+    PRODUCTION: "ฝ่ายผลิต",
+    SEWING_QC: "ฝ่าย QC",
+    PURCHASING: "ฝ่ายจัดซื้อ",
+    DELIVERY: "ฝ่ายจัดส่ง"
+  };
+
+  if (maskedOrder.graphic) maskedOrder.graphic = { ...maskedOrder.graphic, name: roleNames.GRAPHIC };
+  if (maskedOrder.stock) maskedOrder.stock = { ...maskedOrder.stock, name: roleNames.STOCK };
+  if (maskedOrder.production) maskedOrder.production = { ...maskedOrder.production, name: roleNames.PRODUCTION };
+  if (maskedOrder.qc) maskedOrder.qc = { ...maskedOrder.qc, name: roleNames.QC };
+
+  return maskedOrder;
+};
+
+/**
  * Generate a new Job ID ([salesNumber]/[dailyRunning])
  * Based on user requirements: reset daily PER admin.
  */
@@ -56,28 +85,86 @@ const generateJobId = async (tx, user) => {
   const prefix = user.salesNumber || 'XX';
   const orderDate = getBangkokStartOfDay();
 
-  // Count orders for THIS salesperson ON THIS day (Bangkok marker)
+  // 1. Calculate Daily Running (Reset daily per salesperson) -> For Dashboard/Reports
   const ordersCountToday = await tx.order.count({
     where: {
       salesId: user.id,
       orderDate: orderDate
     }
   });
+  const nextDailyRunning = ordersCountToday + 1;
 
-  const nextRunning = ordersCountToday + 1;
-  const formattedSeq = nextRunning.toString().padStart(3, '0');
+  // 2. Calculate Continuous Running (Never reset per salesperson) -> For Job ID
+  // We can count all orders created by this salesId
+  const ordersCountTotal = await tx.order.count({
+    where: {
+      salesId: user.id
+    }
+  });
+  const nextContinuousRunning = ordersCountTotal + 1;
+  const formattedSeq = nextContinuousRunning.toString().padStart(3, '0');
 
+  // Job ID uses the continuous running number
   return {
     jobId: `${prefix}/${formattedSeq}`,
-    dailyRunning: nextRunning,
+    dailyRunning: nextDailyRunning,
     orderDate
   };
+};
+
+/**
+ * Helper to automatically mark orders older than 3 days as urgent
+ */
+export const autoUpdateUrgentOrders = async () => {
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+  try {
+    // 1. Find orders that should be marked as urgent
+    const staleOrders = await prisma.order.findMany({
+      where: {
+        isUrgent: false,
+        createdAt: { lte: threeDaysAgo },
+        status: { notIn: ['COMPLETED', 'CANCELLED'] }
+      },
+      select: { id: true, jobId: true }
+    });
+
+    if (staleOrders.length === 0) return;
+
+    // 2. Update them to urgent
+    await prisma.order.updateMany({
+      where: { id: { in: staleOrders.map(o => o.id) } },
+      data: { isUrgent: true }
+    });
+
+    // 3. Create ActivityLogs for each (System Log)
+    const logData = staleOrders.map(o => ({
+      orderId: o.id,
+      action: 'AUTO_URGENT',
+      details: `ระบบปรับออเดอร์ ${o.jobId} เป็นงานด่วนเนื่องจากค้างในระบบมากกว่า 3 วัน`,
+      userId: null // System Log - No specific user
+    }));
+
+    await prisma.activityLog.createMany({
+      data: logData
+    });
+
+    console.log(`[AUTO-URGENT] System marked ${staleOrders.length} stale orders as urgent.`);
+  } catch (error) {
+    console.error('[AUTO-URGENT-ERROR]', error);
+  }
 };
 
 /**
  * Step 1: Sales opens a bill
  */
 export const createOrder = asyncHandler(async (req, res) => {
+  // 🆕 RBAC: Only SALES and MARKETING can create orders
+  if (!['SALES', 'MARKETING'].includes(req.user.role)) {
+    return res.status(403).json({ status: 'fail', message: 'คุณไม่มีสิทธิ์ในการสร้างออเดอร์' });
+  }
+
   const { 
     customerName, customerPhone, customerAddress, customerFb,
     salesChannelId, isUrgent, blockType, dueDate, notes,
@@ -107,28 +194,30 @@ export const createOrder = asyncHandler(async (req, res) => {
 
         // ใช้สถานะเดียว: PENDING_ARTWORK (ไม่ว่าจะมีสต็อกหรือไม่)
         let orderStatus = 'PENDING_ARTWORK'; 
-      const purchaseRequests = [];
+        let subStatus = null;
+        const purchaseRequests = [];
 
-      // 1. Check stock
-      for (const item of items) {
-        if (!item.variantId) throw new Error('Missing variantId in one or more items');
-        
-        const variant = await tx.productVariant.findUnique({
-          where: { id: parseInt(item.variantId) },
-          select: { stock: true }
-        });
-
-        if (!variant) throw new Error(`Product variant ${item.variantId} not found`);
-
-        const qty = safeNumber(item.quantity);
-        if (variant.stock < qty) {
-          // สร้าง purchase request แต่ไม่เปลี่ยนสถานะ (ยังคงเป็น PENDING_ARTWORK)
-          purchaseRequests.push({
-            variantId: parseInt(item.variantId),
-            quantity: qty - variant.stock
+        // 1. Check stock
+        for (const item of items) {
+          if (!item.variantId) throw new Error('Missing variantId in one or more items');
+          
+          const variant = await tx.productVariant.findUnique({
+            where: { id: parseInt(item.variantId) },
+            select: { stock: true }
           });
+
+          if (!variant) throw new Error(`Product variant ${item.variantId} not found`);
+
+          const qty = safeNumber(item.quantity);
+          if (variant.stock < qty) {
+            // สร้าง purchase request และตั้งสถานะย่อย
+            subStatus = "กำลังสั่งซื้อ";
+            purchaseRequests.push({
+              variantId: parseInt(item.variantId),
+              quantity: qty - variant.stock
+            });
+          }
         }
-      }
 
       // 2. Financials
       const total = safeNumber(totalPrice);
@@ -167,18 +256,16 @@ export const createOrder = asyncHandler(async (req, res) => {
           blockType: mappedBlockType,
           embroideryDetails: Array.isArray(embroideryDetails) ? embroideryDetails : [],
           totalPrice: total,
-          deposit: paid, // Copy initial payment to deposit field
+          deposit: paid,
           paidAmount: paid,
           balanceDue: balance,
           paymentStatus,
-          // FUTURE INTEGRATION: In Object Storage migration, ensure depositSlipUrl 
-          // stores the S3 Key/metadata instead of a potentially full URL.
           depositSlipUrl: depositSlipUrl || null,
-          // FUTURE INTEGRATION: Each mockup draft should represent a file key in S3.
           draftImages: Array.isArray(draftImages) ? draftImages : [],
           blockPrice: safeNumber(blockPrice),
           unitPrice: safeNumber(unitPrice),
           status: orderStatus,
+          subStatus: subStatus,
           dueDate: (dueDate && !isNaN(Date.parse(dueDate))) ? new Date(dueDate) : null,
           notes: notes || '',
           salesId: req.user.id,
@@ -189,6 +276,18 @@ export const createOrder = asyncHandler(async (req, res) => {
               price: safeNumber(item.price),
               quantity: Math.max(0, parseInt(item.quantity) || 0),
               details: item.details || {}
+            }))
+          },
+          // 🆕 บันทึกรายการตำแหน่งปักแยกตาราง (Structured Positions)
+          positions: {
+            create: (Array.isArray(embroideryDetails) ? embroideryDetails : []).map(pos => ({
+              position: pos.position === "อื่นๆ" ? pos.customPosition : pos.position,
+              textToEmb: pos.textToEmb || null,
+              logoUrl: pos.logoUrl || null,
+              mockupUrl: pos.mockupUrl || null,
+              width: pos.width ? parseFloat(pos.width) : null,
+              height: pos.height ? parseFloat(pos.height) : null,
+              note: pos.note || null
             }))
           }
         }
@@ -295,9 +394,21 @@ export const createOrder = asyncHandler(async (req, res) => {
  * Get all orders (with filters for different roles)
  */
 export const getOrders = asyncHandler(async (req, res) => {
+  // 🆕 RBAC: Only SALES and MARKETING can access order list/dashboard
+  if (!['SALES', 'MARKETING', 'ADMIN', 'EXECUTIVE', 'FINANCE'].includes(req.user.role)) {
+    // Note: Allowing management roles to still see the list, but restricting technical roles
+    // if they try to access the generic order list without a specific 'view'
+    if (!req.query.view) {
+      return res.status(403).json({ status: 'fail', message: 'คุณไม่มีสิทธิ์เข้าถึงรายการสั่งซื้อ' });
+    }
+  }
+
   const { status, view, search } = req.query;
   const where = {};
   
+  // 🆕 Auto-update urgency for stale orders
+  await autoUpdateUrgentOrders();
+
   if (status) where.status = status;
 
   // Search filter - supports jobId and customerName
@@ -375,7 +486,7 @@ export const getOrders = asyncHandler(async (req, res) => {
     where,
     include: {
       items: { include: { variant: { include: { product: true } } } },
-      sales: { select: { id: true, name: true, role: true, salesNumber: true } },
+      sales: { select: { id: true, name: true, role: true, username: true, salesNumber: true } },
       graphic: { select: { id: true, name: true, role: true } },
       stock: { select: { id: true, name: true, role: true } },
       production: { select: { id: true, name: true, role: true } },
@@ -387,9 +498,11 @@ export const getOrders = asyncHandler(async (req, res) => {
     ]
   });
 
+  const processedOrders = orders.map(o => maskStaffNamesForSales(o, req.user.role));
+
   res.status(200).json({
     status: 'success',
-    data: { orders }
+    data: { orders: processedOrders }
   });
 });
 
@@ -427,7 +540,9 @@ export const getOrderById = asyncHandler(async (req, res) => {
     return res.status(403).json({ status: 'fail', message: 'Access denied' });
   }
 
-  res.status(200).json({ status: 'success', data: { order } });
+  const processedOrder = maskStaffNamesForSales(order, req.user.role);
+
+  res.status(200).json({ status: 'success', data: { order: processedOrder } });
 });
 
 /**
@@ -703,7 +818,7 @@ export const passQC = asyncHandler(async (req, res) => {
   // Determine new status if fail
   let nextStatus = order.status;
   if (pass) {
-    nextStatus = 'QC_PASSED';
+    nextStatus = 'READY_TO_SHIP';
   } else {
     // Determine where to return
     if (returnTo === 'GRAPHIC') {
@@ -713,19 +828,21 @@ export const passQC = asyncHandler(async (req, res) => {
     }
   }
 
-  const updatedOrder = await prisma.order.update({
-    where: { id: parseInt(orderId) },
-    data: { 
-      status: nextStatus,
-      qcId: req.user.id,
-      logs: {
-        create: {
-          action: pass ? 'QC_PASS' : 'QC_FAIL',
-          details: pass 
-            ? `QC ${req.user.name} ตรวจสอบผล: ผ่าน (PASS)` 
-            : `QC ${req.user.name} ตรวจสอบผล: ไม่ผ่าน (FAIL) → ส่งกลับ${returnTo === 'GRAPHIC' ? 'ฝ่ายกราฟิก' : 'ฝ่ายผลิต'} (เหตุผล: ${reason || 'ไม่ได้ระบุ'})`,
-          userId: req.user.id
-        }
+      const isUnpaid = parseFloat(order.balanceDue) > 0 && order.paymentMethod !== 'COD';
+      
+      const updatedOrder = await prisma.order.update({
+        where: { id: parseInt(orderId) },
+        data: { 
+          status: nextStatus,
+          qcId: req.user.id,
+          logs: {
+            create: {
+              action: pass ? 'QC_PASS' : 'QC_FAIL',
+              details: pass 
+                ? `QC ${req.user.name} ตรวจสอบผล: ผ่าน (PASS) → รอจัดส่ง${isUnpaid ? ' (⚠️ ยังชำระเงินไม่ครบ)' : ''}` 
+                : `QC ${req.user.name} ตรวจสอบผล: ไม่ผ่าน (FAIL) → ส่งกลับ${returnTo === 'GRAPHIC' ? 'ฝ่ายกราฟิก' : 'ฝ่ายผลิต'} (เหตุผล: ${reason || 'ไม่ได้ระบุ'})`,
+              userId: req.user.id
+            }
       }
     },
     include: standardOrderInclude
@@ -826,6 +943,7 @@ export const generateJobSheet = asyncHandler(async (req, res) => {
     where: { id: parseInt(orderId) },
     include: { 
       items: { include: { variant: { include: { product: true } } } },
+      positions: true,
       sales: { select: { name: true } },
       salesChannel: true
     }
@@ -855,6 +973,45 @@ export const generateJobSheet = asyncHandler(async (req, res) => {
     res.status(500).json({ 
       status: 'error', 
       message: `Failed to generate PDF: ${error.message}` 
+    });
+  }
+});
+
+/**
+ * Generate and Download Proof Sheet PDF for Customer
+ */
+export const downloadCustomerProofPDF = asyncHandler(async (req, res) => {
+  const { id: orderId } = req.params;
+
+  const order = await prisma.order.findUnique({
+    where: { id: parseInt(orderId) },
+    include: { 
+      items: { include: { variant: { include: { product: true } } } },
+      positions: true,
+      sales: { select: { name: true } }
+    }
+  });
+
+  if (!order) return res.status(404).json({ status: 'fail', message: 'Order not found' });
+
+  try {
+    const pdfBuffer = await generateCustomerProofPDF(order);
+    const buffer = Buffer.from(pdfBuffer);
+    
+    const filename = `ProofSheet-${order.jobId.replace(/\//g, '-')}.pdf`;
+
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": buffer.length,
+    });
+    
+    res.end(buffer);
+  } catch (error) {
+    console.error("CUSTOMER PROOF PDF GENERATION ERROR:", error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Cloud build error or PDF generation failed'
     });
   }
 });
@@ -1017,4 +1174,96 @@ export const reportStockIssue = asyncHandler(async (req, res) => {
   });
 
   res.status(200).json({ status: 'success', data: { order } });
+});
+
+/**
+ * 🆕 Search Order by Job ID String (Production/Foreman)
+ */
+export const searchOrderByJobId = asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+
+  const order = await prisma.order.findFirst({
+    where: { 
+      jobId: {
+        equals: jobId.trim(),
+        mode: 'insensitive'
+      }
+    },
+    include: standardOrderInclude
+  });
+
+  if (!order) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'ไม่พบเลขออเดอร์ (JOB ID) นี้ในระบบ'
+    });
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: { order }
+  });
+});
+
+/**
+ * 🆕 Log Production Start/Finish (Separate from Workflow status)
+ */
+export const logProductionAction = asyncHandler(async (req, res) => {
+  const { orderId } = req.params;
+  const { action, details } = req.body; // Action: 'START' or 'FINISH'
+
+  const id = parseInt(orderId);
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) {
+    return res.status(404).json({ status: 'fail', message: 'Order not found' });
+  }
+
+  // Create Log Entry
+  const logAction = action === 'START' ? 'START_TASK' : (action === 'COMPLETE' ? 'COMPLETE_ORDER' : 'FINISH_TASK');
+  
+  await prisma.productionLog.create({
+    data: {
+      orderId: order.id,
+      userId: req.user.id,
+      action: logAction,
+      details: details || `Production Worker ${req.user.name} marked ${action}`
+    }
+  });
+
+  // If START, also update Order status to IN_PRODUCTION if it's currently at READY_TO_PRODUCE
+  if (action === 'START' && order.status === 'READY_TO_PRODUCE') {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { 
+        status: 'IN_PRODUCTION',
+        productionId: req.user.id,
+        logs: {
+          create: {
+            action: 'เริ่มการผลิต',
+            details: `พนักงานฝ่ายผลิต ${req.user.name} กดเริ่มงานผ่านระบบค้นหา`,
+            userId: req.user.id
+          }
+        }
+      }
+    });
+  }
+
+  // If COMPLETE (Foreman only check usually at route level, but extra safety here)
+  if (action === 'COMPLETE') {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        status: 'PRODUCT_FINISHED',
+        logs: {
+          create: {
+            action: 'จบการผลิตทั้งหมด',
+            details: `หัวหน้ากะ ${req.user.name} สั่งจบงานผลิตทั้งหมดผ่านระบบค้นหา`,
+            userId: req.user.id
+          }
+        }
+      }
+    });
+  }
+
+  res.status(200).json({ status: 'success', message: 'บันทึกสำเร็จ' });
 });

@@ -2,7 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import { useAuth } from "../../context/auth-store";
 import { useNavigate } from "react-router-dom";
-import { HiOutlineCheckCircle, HiOutlinePrinter } from "react-icons/hi2";
+import { HiOutlineCheckCircle } from "react-icons/hi2";
+import { HiOutlinePrinter } from "react-icons/hi";
+import { HiOutlineExclamationTriangle } from "react-icons/hi2";
 
 // Components
 import HeaderSection from "../../features/sales/create-order/components/HeaderSection";
@@ -108,6 +110,8 @@ const CreateOrder = () => {
 
   const [draftImages, setDraftImages] = useState([]);
   const [uploadingDraft, setUploadingDraft] = useState(false);
+  const [showPreOrderConfirm, setShowPreOrderConfirm] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState(null);
 
   // --- Fetch Initial Data ---
   useEffect(() => {
@@ -321,6 +325,9 @@ const CreateOrder = () => {
         width: "",
         height: "",
         note: "",
+        textToEmb: "", // สำหรับปักข้อความ (Text Lock)
+        logoUrl: "", // รูปไฟล์โลโก้เฉพาะจุด
+        mockupUrl: "", // รูปจำลองเฉพาะจุด
         isFreeOption: false,
         freeOptionName: "เซฟตี้",
         isChangePosition: false,
@@ -380,6 +387,41 @@ const CreateOrder = () => {
       alert("อัปโหลดสลิปไม่สำเร็จ");
     } finally {
       setIsUploadingSlip(false);
+    }
+  };
+
+  const [isUploadingPositionImage, setIsUploadingPositionImage] =
+    useState(null); // Track which index/type is uploading
+
+  const handleEmbroideryImageUpload = async (index, type, file) => {
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+
+    const key = `${index}-${type}`;
+    setIsUploadingPositionImage(key);
+
+    try {
+      const res = await axios.post(
+        `http://localhost:8000/api/upload?folder=embroidery`,
+        fd,
+        {
+          headers: {
+            ...getAuthHeader(),
+            "Content-Type": "multipart/form-data",
+          },
+        },
+      );
+
+      const newEmb = [...embroidery];
+      if (type === "logo") newEmb[index].logoUrl = res.data.data.url;
+      if (type === "mockup") newEmb[index].mockupUrl = res.data.data.url;
+      setEmbroidery(newEmb);
+    } catch (err) {
+      console.error(err);
+      alert("อัปโหลดรูปภาพตำแหน่งปักไม่สำเร็จ");
+    } finally {
+      setIsUploadingPositionImage(null);
     }
   };
   const [paymentMethod, setPaymentMethod] = useState("TRANSFER"); // TRANSFER | COD
@@ -478,6 +520,19 @@ const CreateOrder = () => {
       codSurcharge: totals.codSurcharge,
     };
 
+    // Check for out-of-stock items for pre-order confirmation
+    const hasPreOrder = items.some((item) => {
+      const v = selectedProduct.variants.find((v) => v.id === item.variantId);
+      return v.stock < item.quantity;
+    });
+
+    if (hasPreOrder && !showPreOrderConfirm) {
+      setPendingPayload(payload);
+      setShowPreOrderConfirm(true);
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await axios.post(
         "http://localhost:8000/api/orders",
@@ -491,6 +546,33 @@ const CreateOrder = () => {
       );
     } finally {
       setLoading(false);
+      setShowPreOrderConfirm(false);
+      setPendingPayload(null);
+    }
+  };
+
+  const confirmSubmit = () => {
+    if (pendingPayload) {
+      setLoading(true);
+      const executeSubmit = async () => {
+        try {
+          const res = await axios.post(
+            "http://localhost:8000/api/orders",
+            pendingPayload,
+            { headers: getAuthHeader() },
+          );
+          setSuccessOrderId(res.data.data.order.id);
+        } catch (err) {
+          setError(
+            err.response?.data?.message || "เกิดข้อผิดพลาดในการสร้างออเดอร์",
+          );
+        } finally {
+          setLoading(false);
+          setShowPreOrderConfirm(false);
+          setPendingPayload(null);
+        }
+      };
+      executeSubmit();
     }
   };
 
@@ -571,6 +653,47 @@ const CreateOrder = () => {
         confirmSpec={confirmSpec}
       />
 
+      {/* Pre-order Confirmation Modal */}
+      {showPreOrderConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <HiOutlineExclamationTriangle className="w-10 h-10 text-amber-600" />
+            </div>
+            <h3 className="text-xl font-black text-slate-800 text-center mb-2">
+              ยืนยันการสั่งผลิต (Pre-order)
+            </h3>
+            <p className="text-sm text-slate-500 text-center mb-6">
+              พบรายการสินค้าบางรายการมีจำนวนสต็อกไม่เพียงพอ
+              ออเดอร์นี้จะถูกส่งไปที่ฝ่ายจัดซื้อเพื่อดำเนินการสั่งของเพิ่ม
+              <br />
+              <b>สถานะจะเป็น: กำลังสั่งซื้อ</b>
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPreOrderConfirm(false);
+                  setPendingPayload(null);
+                }}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                disabled={loading}
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={confirmSubmit}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2"
+                disabled={loading}
+              >
+                {loading ? "กำลังบันทึก..." : "ยืนยันการสั่งซื้อ"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 py-6">
         <form
           onSubmit={handleSubmit}
@@ -614,6 +737,8 @@ const CreateOrder = () => {
               orderInfo={orderInfo}
               setOrderInfo={setOrderInfo}
               user={user}
+              onUploadPositionImage={handleEmbroideryImageUpload}
+              isUploadingImage={isUploadingPositionImage}
             />
             <PaymentSection
               draftImages={draftImages}

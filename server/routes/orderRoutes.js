@@ -19,7 +19,10 @@ import {
   bumpUrgent,
   claimOrder,
   reportStockIssue,
-  finishProduction
+  finishProduction,
+  searchOrderByJobId,
+  logProductionAction,
+  downloadCustomerProofPDF
 } from '../controllers/orderController.js';
 import { protect, restrictTo } from '../src/middleware/auth.middleware.js';
 
@@ -68,6 +71,15 @@ router.get('/channels', protect, getSalesChannels);
 
 // Get single order
 router.get('/:orderId', protect, getOrderById);
+
+// 🆕 Search order by JOB ID string
+router.get('/search/:jobId', protect, searchOrderByJobId);
+
+// 🆕 Log production actions
+router.post('/:orderId/production-action', protect, restrictTo('ADMIN', 'PRODUCTION'), logProductionAction);
+
+// 🆕 Customer Proof PDF
+router.get('/:id/customer-proof', protect, downloadCustomerProofPDF);
 
 // Update technical specs (Graphic)
 router.patch('/:orderId/specs', protect, restrictTo('GRAPHIC'), updateOrderSpecs);

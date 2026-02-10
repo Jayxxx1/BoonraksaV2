@@ -13,6 +13,9 @@ import {
   HiOutlineChartBarSquare,
   HiOutlineChevronLeft,
   HiOutlineChevronRight,
+  HiOutlineMagnifyingGlass,
+  HiOutlineSwatch,
+  HiOutlineDocumentText,
 } from "react-icons/hi2";
 import { useState } from "react";
 
@@ -74,15 +77,26 @@ export default function Sidebar({
   const menuGroups = [
     {
       label: "งานขายและลูกค้า",
-      roles: ["SALES", "ADMIN"],
+      roles: ["SALES", "MARKETING", "ADMIN"],
       links: [
-        { to: "/orders", label: "รายการสั่งซื้อ", icon: HiOutlineQueueList },
+        {
+          to: "/orders",
+          label: "รายการสั่งซื้อ",
+          icon: HiOutlineQueueList,
+          roles: ["SALES", "MARKETING"],
+        },
         {
           to: "/order/create",
           label: "เปิดออเดอร์ใหม่",
           icon: HiOutlineRectangleGroup,
+          roles: ["SALES", "MARKETING"],
         },
-        { to: "/stock-check", label: "เช็คสต็อกสินค้า", icon: HiOutlineCube },
+        {
+          to: "/stock-check",
+          label: "เช็คสต็อกสินค้า",
+          icon: HiOutlineCube,
+          roles: ["SALES", "MARKETING", "STOCK", "ADMIN"],
+        },
       ],
     },
     {
@@ -100,6 +114,24 @@ export default function Sidebar({
           label: "งานผลิต",
           icon: HiOutlineCube,
           roles: ["PRODUCTION", "ADMIN"],
+        },
+        {
+          to: "/production/search",
+          label: "ค้นหาออเดอร์ (ผลิต)",
+          icon: HiOutlineMagnifyingGlass,
+          roles: ["PRODUCTION", "ADMIN", "FOREMAN"],
+        },
+        {
+          to: "/production/threads",
+          label: "ค้นหาสีด้าย",
+          icon: HiOutlineSwatch,
+          roles: ["PRODUCTION", "ADMIN", "GRAPHIC"],
+        },
+        {
+          to: "/production/shift-report",
+          label: "สรุปยอดการผลิต (Shift)",
+          icon: HiOutlineDocumentText,
+          roles: ["ADMIN", "EXECUTIVE", "PRODUCTION"],
         },
         {
           to: "/qc",
@@ -231,23 +263,11 @@ export default function Sidebar({
               <p className="text-[11px] font-black text-slate-800 truncate leading-none mb-1">
                 {user?.name}
               </p>
-              <select
-                className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border bg-white cursor-pointer focus:ring-0 w-fit ${getRoleBadgeColor(user?.role)}`}
-                value={user?.role}
-                onChange={(e) => updateRole(e.target.value)}
+              <div
+                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border bg-white ${getRoleBadgeColor(user?.role)}`}
               >
-                <option value="ADMIN">ADMIN</option>
-                <option value="SALES">SALES</option>
-                <option value="PURCHASING">PURCHASING</option>
-                <option value="GRAPHIC">GRAPHIC</option>
-                <option value="STOCK">STOCK</option>
-                <option value="PRODUCTION">PRODUCTION</option>
-                <option value="SEWING_QC">QC</option>
-                <option value="DELIVERY">DELIVERY</option>
-                <option value="EXECUTIVE">EXECUTIVE</option>
-                <option value="MARKETING">MARKETING</option>
-                <option value="FINANCE">FINANCE</option>
-              </select>
+                {user?.role}
+              </div>
             </div>
             {isCollapsed && (
               <div className="hidden lg:block w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-emerald-100 animate-pulse" />
@@ -260,6 +280,9 @@ export default function Sidebar({
           className={`flex-1 overflow-y-auto scrollbar-hide transition-all duration-300 ${isCollapsed ? "lg:p-2 lg:space-y-6 p-3 space-y-4" : "p-3 space-y-4"}`}
         >
           {menuGroups.map((group, idx) => {
+            // 🆕 Strict RBAC: Check if group itself is allowed for the role
+            if (group.roles && !group.roles.includes(user?.role)) return null;
+
             const groupVisibleLinks = group.links.filter(
               (l) => !l.roles || l.roles.includes(user?.role),
             );

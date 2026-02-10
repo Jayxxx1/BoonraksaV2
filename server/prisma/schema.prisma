@@ -44,6 +44,8 @@ model User {
   activityLogs ActivityLog[]
   pushSubs     PushSubscription[]
   uploadedPaymentSlips PaymentSlip[]
+  productionLogs ProductionLog[]
+  foremanReports DailyProductionReport[]
 }
 
 // --------------------------------------------------------
@@ -181,6 +183,7 @@ model Order {
   draftImages    String[]   // รูปจำลอง/ร่างแบบจากแชท (Mockups)
 
   status     OrderStatus @default(PENDING_ARTWORK)
+  subStatus  String?     // 🆕 สถานะย่อย (เช่น "กำลังสั่งซื้อ")
   dueDate    DateTime?
 
   // ผู้รับผิดชอบงาน
@@ -220,6 +223,8 @@ model Order {
   block      EmbroideryBlock? @relation(fields: [blockId], references: [id])
   
   paymentSlips PaymentSlip[] // ประวัติการจ่ายเงินทั้งหมด
+  positions    OrderEmbroideryPosition[] // รายละเอียดตำแหน่งปักแต่ละจุด
+  productionLogs ProductionLog[] // ประวัติการทำงานรายคน
 
   @@unique([salesId, orderDate, dailyRunning], name: "sales_daily_running")
 }
@@ -319,4 +324,67 @@ model SalesChannel {
   name   String // ชื่อเพจ Facebook
   url    String? // Link page
   orders Order[]
+}
+
+// --------------------------------------------------------
+// 🪡 ส่วนต่อยอด: ระบบตำแหน่งปักและการคุมการผลิต
+// --------------------------------------------------------
+
+model OrderEmbroideryPosition {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  order     Order   @relation(fields: [orderId], references: [id])
+  
+  position  String  // อกซ้าย, อกขวา, แขน, ฯลฯ
+  textToEmb String? // ข้อความที่ต้องการปัก (สำหรับ Text Lock)
+  logoUrl   String? // รูปโลโก้ (จาก S3)
+  mockupUrl String? // รูป Mockup เฉพาะจุด (จาก S3)
+  
+  width     Float?  // เซนติเมตร
+  height    Float?  // เซนติเมตร
+  note      String? // หมายเหตุอื่นๆ เช่น สีตรงนี้ขอเน้นๆ
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProductionLog {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id])
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  
+  action    String   // START_TASK, FINISH_TASK
+  details   String?  // รายละเอียดเพิ่มเติม
+  timestamp DateTime @default(now())
+}
+
+model ThreadColor {
+  id        Int     @id @default(autoincrement())
+  code      String  @unique // เช่น P101
+  name      String  // เช่น สีส้มมานะ
+  imageUrl  String? // รูปถ่ายสีจริง
+  colorCode String? // Hex code สำหรับแสดงผลเบื้องต้น
+  
+  createdAt DateTime @default(now())
+}
+
+model DailyProductionReport {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @default(now())
+  shift         String   // เช้า / ค่ำ
+  foremanId     Int
+  foreman       User     @relation(fields: [foremanId], references: [id])
+  
+  staffCount    Int
+  machineCount  Int
+  targetOutput  Int      // เป้าที่ตั้ง
+  actualOutput  Int      // ที่ทำได้จริง
+  
+  missingReason String?  // สาเหตุ (ถ้าไม่ถึงเป้า)
+  solution      String?  // แนวทางแก้ไข
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

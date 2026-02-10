@@ -31,6 +31,7 @@ const isS3Configured = config.S3_ACCESS_KEY && config.S3_SECRET_KEY && config.S3
 const s3Storage = multerS3({
   s3: s3,
   bucket: config.S3_BUCKET,
+  acl: 'public-read', // Allow public access to uploaded files
   metadata: function (req, file, cb) {
     cb(null, { fieldName: file.fieldname });
   },
