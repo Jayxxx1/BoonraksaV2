@@ -10,7 +10,7 @@ import { errorHandler } from './src/middleware/error.middleware.js';
 import productRoutes from './routes/productRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import authRoutes from './routes/authRoutes.js';
-import orderRoutes from './routes/orderRoutes.js';
+import orderRoutes from './modules/orders/order.routes.js';
 import stockRoutes from './routes/stockRoutes.js';
 import blockRoutes from './routes/blockRoutes.js';
 import threadRoutes from './routes/threadRoutes.js';

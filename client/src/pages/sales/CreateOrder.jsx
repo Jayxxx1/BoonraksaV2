@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
 import { useNavigate } from "react-router-dom";
 import { HiOutlineCheckCircle } from "react-icons/hi2";
@@ -19,8 +19,6 @@ import SmartPasteModal from "../../features/sales/create-order/components/SmartP
 const CreateOrder = () => {
   const { user, token } = useAuth();
   const navigate = useNavigate();
-
-  const getAuthHeader = () => ({ Authorization: `Bearer ${token}` });
 
   // --- Form State ---
   const [customer, setCustomer] = useState({
@@ -72,12 +70,7 @@ const CreateOrder = () => {
     }
     try {
       const q = customer.phone || customer.name;
-      const res = await axios.get(
-        `http://localhost:8000/api/blocks/customer-search?q=${q}`,
-        {
-          headers: getAuthHeader(),
-        },
-      );
+      const res = await api.get(`/blocks/customer-search?q=${q}`);
       setBlocks(res.data.data.blocks);
       if (res.data.data.blocks.length === 0) {
         alert("ไม่พบประวัติบล็อกของลูกค้ารายนี้");
@@ -118,12 +111,8 @@ const CreateOrder = () => {
     const fetchData = async () => {
       try {
         const [prodRes, channelRes] = await Promise.all([
-          axios.get("http://localhost:8000/api/products", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get("http://localhost:8000/api/orders/channels", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+          api.get("/products"),
+          api.get("/orders/channels"),
         ]);
 
         const enrichedProducts = (prodRes.data.data || []).map((p) => ({
@@ -157,10 +146,7 @@ const CreateOrder = () => {
     if (selectedProductId && (!selectedProduct || !selectedProduct.variants)) {
       const fetchFullProduct = async () => {
         try {
-          const res = await axios.get(
-            `http://localhost:8000/api/products/${selectedProductId}`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
+          const res = await api.get(`/products/${selectedProductId}`);
 
           if (res.data.success) {
             setProducts((prev) =>
@@ -346,16 +332,9 @@ const CreateOrder = () => {
     uploadFormData.append("file", file);
     setUploadingDraft(true);
     try {
-      const res = await axios.post(
-        "http://localhost:8000/api/upload?folder=drafts",
-        uploadFormData,
-        {
-          headers: {
-            ...getAuthHeader(),
-            "Content-Type": "multipart/form-data",
-          },
-        },
-      );
+      const res = await api.post("/upload?folder=drafts", uploadFormData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       setDraftImages([...draftImages, res.data.data.url]);
     } catch (err) {
       console.error(err);
@@ -372,16 +351,9 @@ const CreateOrder = () => {
     fd.append("file", file);
     setIsUploadingSlip(true);
     try {
-      const res = await axios.post(
-        "http://localhost:8000/api/upload?folder=slips",
-        fd,
-        {
-          headers: {
-            ...getAuthHeader(),
-            "Content-Type": "multipart/form-data",
-          },
-        },
-      );
+      const res = await api.post("/upload?folder=slips", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       setDepositSlipUrl(res.data.data.url);
     } catch {
       alert("อัปโหลดสลิปไม่สำเร็จ");
@@ -402,16 +374,9 @@ const CreateOrder = () => {
     setIsUploadingPositionImage(key);
 
     try {
-      const res = await axios.post(
-        `http://localhost:8000/api/upload?folder=embroidery`,
-        fd,
-        {
-          headers: {
-            ...getAuthHeader(),
-            "Content-Type": "multipart/form-data",
-          },
-        },
-      );
+      const res = await api.post(`/upload?folder=embroidery`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       const newEmb = [...embroidery];
       if (type === "logo") newEmb[index].logoUrl = res.data.data.url;
@@ -534,12 +499,10 @@ const CreateOrder = () => {
     }
 
     try {
-      const res = await axios.post(
-        "http://localhost:8000/api/orders",
-        payload,
-        { headers: getAuthHeader() },
-      );
-      setSuccessOrderId(res.data.data.order.id);
+      const res = await api.post("/orders", payload);
+      if (res.data.success) {
+        setSuccessOrderId(res.data.data.order.id);
+      }
     } catch (err) {
       setError(
         err.response?.data?.message || "เกิดข้อผิดพลาดในการสร้างออเดอร์",
@@ -556,12 +519,10 @@ const CreateOrder = () => {
       setLoading(true);
       const executeSubmit = async () => {
         try {
-          const res = await axios.post(
-            "http://localhost:8000/api/orders",
-            pendingPayload,
-            { headers: getAuthHeader() },
-          );
-          setSuccessOrderId(res.data.data.order.id);
+          const res = await api.post("/orders", pendingPayload);
+          if (res.data.success) {
+            setSuccessOrderId(res.data.data.order.id);
+          }
         } catch (err) {
           setError(
             err.response?.data?.message || "เกิดข้อผิดพลาดในการสร้างออเดอร์",
@@ -578,13 +539,9 @@ const CreateOrder = () => {
 
   const downloadJobSheet = async (orderId) => {
     try {
-      const response = await axios.get(
-        `http://localhost:8000/api/orders/${orderId}/jobsheet`,
-        {
-          headers: getAuthHeader(),
-          responseType: "blob",
-        },
-      );
+      const response = await api.get(`/orders/${orderId}/download/jobsheet`, {
+        responseType: "blob",
+      });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;

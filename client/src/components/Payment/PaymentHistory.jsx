@@ -1,23 +1,18 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
-import { useAuth } from "../../context/auth-store";
+import api from "../../api/config";
 import { HiOutlineReceiptRefund, HiOutlineCalendar } from "react-icons/hi2";
 import { formatDateTime } from "../../utils/dateFormat";
 
-export default function PaymentHistory({ orderId, refreshTrigger }) {
-  const { token } = useAuth();
+export default function PaymentHistory({ order, refreshTrigger }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchHistory = async () => {
+      if (!order?._id && !order?.id) return;
       try {
-        const res = await axios.get(
-          `http://localhost:8000/api/orders/${orderId}/payments`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
+        const id = order._id || order.id;
+        const res = await api.get(`/orders/${id}/payments`);
         setPayments(res.data.data.payments);
       } catch (err) {
         console.error("Failed to fetch payment history", err);
@@ -27,7 +22,7 @@ export default function PaymentHistory({ orderId, refreshTrigger }) {
     };
 
     fetchHistory();
-  }, [orderId, token, refreshTrigger]);
+  }, [order, refreshTrigger]);
 
   if (loading)
     return (
@@ -48,10 +43,16 @@ export default function PaymentHistory({ orderId, refreshTrigger }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <HiOutlineReceiptRefund className="w-4 h-4 text-slate-400" />
+        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          ประวัติการชำระเงิน
+        </h4>
+      </div>
       {payments.map((payment) => (
         <div
-          key={payment.id}
-          className="bg-white border border-slate-100 rounded-2xl p-4 flex gap-4"
+          key={payment.id || payment._id}
+          className="bg-white border border-slate-100 rounded-2xl p-4 flex gap-4 shadow-sm"
         >
           {/* Slip Thumbnail or COD Icon */}
           {payment.slipUrl ? (
@@ -59,7 +60,7 @@ export default function PaymentHistory({ orderId, refreshTrigger }) {
               href={payment.slipUrl}
               target="_blank"
               rel="noreferrer"
-              className="w-16 h-16 bg-slate-50 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0"
+              className="w-14 h-14 bg-slate-50 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0"
             >
               <img
                 src={payment.slipUrl}
@@ -68,8 +69,8 @@ export default function PaymentHistory({ orderId, refreshTrigger }) {
               />
             </a>
           ) : (
-            <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center flex-shrink-0 border border-orange-200">
-              <HiOutlineReceiptRefund className="w-8 h-8" />
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0 border border-emerald-100">
+              <HiOutlineReceiptRefund className="w-6 h-6" />
             </div>
           )}
 
@@ -77,20 +78,20 @@ export default function PaymentHistory({ orderId, refreshTrigger }) {
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-start mb-1">
               <p className="font-black text-emerald-600 text-sm">
-                +{payment.amount.toLocaleString()} ฿
+                +{parseFloat(payment.amount || 0).toLocaleString()} ฿
               </p>
-              <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-md text-slate-500 font-bold">
-                {payment.uploader?.name || "Unknown"}
+              <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-bold max-w-[80px] truncate">
+                {payment.uploader?.name || "ระบบ"}
               </span>
             </div>
 
-            <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-1">
+            <div className="flex items-center gap-1 text-[9px] text-slate-400 mb-1">
               <HiOutlineCalendar className="w-3 h-3" />
               {formatDateTime(payment.createdAt)}
             </div>
 
             {payment.note && (
-              <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg mt-1 truncate">
+              <p className="text-[10px] text-slate-500 bg-slate-50 px-2 py-1 rounded-lg mt-1 truncate italic">
                 {payment.note}
               </p>
             )}

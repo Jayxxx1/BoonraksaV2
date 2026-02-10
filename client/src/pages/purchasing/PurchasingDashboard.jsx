@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useAuth } from "../../context/auth-store";
 import {
@@ -6,6 +6,7 @@ import {
   HiOutlineCheckCircle,
   HiOutlineExclamationCircle,
   HiOutlineClipboardDocumentList,
+  HiOutlineMagnifyingGlass,
 } from "react-icons/hi2";
 import { Link } from "react-router-dom";
 import DateInput from "../../components/Common/DateInput";
@@ -14,28 +15,29 @@ export default function PurchasingDashboard() {
   const { token } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
-  const fetchWaitingOrders = async () => {
+  const fetchWaitingOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get(
-        "http://localhost:8000/api/orders?view=available",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const res = await axios.get("http://localhost:8000/api/orders", {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { view: "available", search },
+      });
       setOrders(res.data.data.orders);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, search]);
 
   useEffect(() => {
-    fetchWaitingOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timer = setTimeout(() => {
+      fetchWaitingOrders();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [fetchWaitingOrders, search]);
 
   const handleUpdateETA = async (orderId, eta, reason) => {
     try {
@@ -72,22 +74,33 @@ export default function PurchasingDashboard() {
     }
   };
 
-  if (loading)
-    return (
-      <div className="p-8 text-center text-slate-400 font-bold">
-        กำลังโหลด...
-      </div>
-    );
-
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-3xl font-black mb-8 text-slate-800">
-        ฝ่ายจัดซื้อ (Purchasing)
-      </h1>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+        <h1 className="text-3xl font-black text-slate-800">
+          ฝ่ายจัดซื้อ (Purchasing)
+        </h1>
+
+        <div className="relative group">
+          <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+          <input
+            type="text"
+            placeholder="ค้นหา Job ID หรือชื่อลูกค้า..."
+            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all w-64 text-xs font-bold shadow-sm"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
       <div className="grid gap-6">
-        {orders.length === 0 ? (
+        {loading && orders.length === 0 ? (
           <div className="bg-white p-12 rounded-[2rem] text-center text-slate-400 font-bold border-2 border-dashed">
-            ไม่มีออเดอร์ที่รอสต็อก
+            กำลังโหลดข้อมูลจัดซื้อ...
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="bg-white p-12 rounded-[2rem] text-center text-slate-400 font-bold border-2 border-dashed">
+            {search ? "ไม่พบออเดอร์ที่ค้นหา" : "ไม่มีออเดอร์ที่รอสต็อก"}
           </div>
         ) : (
           orders.map((order) => (

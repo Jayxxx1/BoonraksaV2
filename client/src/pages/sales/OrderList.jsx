@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/auth-store";
-import axios from "axios";
+import api from "../../api/config";
 import RoleStatsHeader from "../../components/dashboard/RoleStatsHeader";
 import {
   HiOutlineMagnifyingGlass,
@@ -57,11 +57,7 @@ export default function OrderList() {
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
 
-      const res = await axios.get("http://localhost:8000/api/orders", {
-        headers: { Authorization: `Bearer ${token}` },
-        params,
-      });
-
+      const res = await api.get("/orders", { params });
       const rawOrders = res.data.data.orders || [];
       const filteredByTab = rawOrders.filter((order) =>
         statusGroups[activeTab].includes(order.status),
@@ -74,7 +70,7 @@ export default function OrderList() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, viewMode, token, activeTab]);
+  }, [search, statusFilter, viewMode, activeTab]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

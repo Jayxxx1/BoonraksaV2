@@ -160,8 +160,8 @@ export const autoUpdateUrgentOrders = async () => {
  * Step 1: Sales opens a bill
  */
 export const createOrder = asyncHandler(async (req, res) => {
-  // 🆕 RBAC: Only SALES and MARKETING can create orders
-  if (!['SALES', 'MARKETING'].includes(req.user.role)) {
+  // 🆕 RBAC: Only SALES, MARKETING, and SUPER_ADMIN can create orders
+  if (!['SALES', 'MARKETING', 'SUPER_ADMIN'].includes(req.user.role)) {
     return res.status(403).json({ status: 'fail', message: 'คุณไม่มีสิทธิ์ในการสร้างออเดอร์' });
   }
 
@@ -394,8 +394,10 @@ export const createOrder = asyncHandler(async (req, res) => {
  * Get all orders (with filters for different roles)
  */
 export const getOrders = asyncHandler(async (req, res) => {
-  // 🆕 RBAC: Only SALES and MARKETING can access order list/dashboard
-  if (!['SALES', 'MARKETING', 'ADMIN', 'EXECUTIVE', 'FINANCE'].includes(req.user.role)) {
+  // 🆕 RBAC: SUPER_ADMIN bypasses all restrictions
+  if (req.user.role === 'SUPER_ADMIN') {
+    // No restrictions – SUPER_ADMIN sees everything
+  } else if (!['SALES', 'MARKETING', 'ADMIN', 'EXECUTIVE', 'FINANCE'].includes(req.user.role)) {
     // Note: Allowing management roles to still see the list, but restricting technical roles
     // if they try to access the generic order list without a specific 'view'
     if (!req.query.view) {
@@ -411,6 +413,10 @@ export const getOrders = asyncHandler(async (req, res) => {
 
   if (status) where.status = status;
 
+  // Debug Logging
+  console.log(`[DEBUG_ORDER] User: ${req.user.username} (${req.user.role}) ID: ${req.user.id}`);
+  console.log(`[DEBUG_ORDER] View: ${view}, Search: ${search}`);
+
   // Search filter - supports jobId and customerName
   if (search) {
     where.OR = [
@@ -419,8 +425,10 @@ export const getOrders = asyncHandler(async (req, res) => {
     ];
   }
 
-  // Role-based filtering
-  if (req.user.role === 'SALES') {
+  // Role-based filtering (SUPER_ADMIN skips all filtering)
+  if (req.user.role === 'SUPER_ADMIN') {
+    // SUPER_ADMIN sees all orders, no filtering
+  } else if (req.user.role === 'SALES') {
     // Sales are strictly restricted to their own orders
     where.salesId = req.user.id;
   } else if (view === 'me') {
@@ -456,12 +464,13 @@ export const getOrders = asyncHandler(async (req, res) => {
     }
   } else if (view === 'history') {
     // History is ALWAYS restricted to own tasks for technical roles
-    switch (req.user.role) {
+    switch (req.user.role.trim()) {
       case 'GRAPHIC': 
         where.graphicId = req.user.id; 
         where.status = { notIn: ['PENDING_ARTWORK', 'DESIGNING'] };
         break;
       case 'STOCK': 
+        // Strict filtering for Stock History
         where.stockId = req.user.id; 
         where.status = { notIn: ['PENDING_STOCK_CHECK'] };
         break;
@@ -497,6 +506,7 @@ export const getOrders = asyncHandler(async (req, res) => {
       { createdAt: 'desc' }
     ]
   });
+  console.log(`[DEBUG_ORDER] Final Where:`, JSON.stringify(where, null, 2));
 
   const processedOrders = orders.map(o => maskStaffNamesForSales(o, req.user.role));
 

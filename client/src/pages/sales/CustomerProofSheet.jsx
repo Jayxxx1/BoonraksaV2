@@ -1,26 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import axios from "axios";
+import api from "../../api/config";
 import { HiOutlineCheckBadge } from "react-icons/hi2";
 import { HiOutlinePrinter } from "react-icons/hi";
 import { useAuth } from "../../context/auth-store";
 
 const CustomerProofSheet = () => {
   const { orderId } = useParams();
-  const { token } = useAuth();
-  const getAuthHeader = () => ({ Authorization: `Bearer ${token}` });
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchOrder = async () => {
       try {
-        const res = await axios.get(
-          `http://localhost:8000/api/orders/${orderId}`,
-          {
-            headers: getAuthHeader(),
-          },
-        );
+        const res = await api.get(`/orders/${orderId}`);
         setOrder(res.data.data.order);
       } catch (err) {
         console.error(err);

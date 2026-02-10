@@ -17,6 +17,7 @@ export default function DeliveryDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("to_ship"); // to_ship | pending_payment | shipped
+  const [search, setSearch] = useState("");
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -63,6 +64,14 @@ export default function DeliveryDashboard() {
     if (!orders) return [];
 
     const filtered = orders.filter((order) => {
+      // Search filter
+      if (search) {
+        const s = search.toLowerCase();
+        const matchesJob = order.jobId?.toLowerCase().includes(s);
+        const matchesName = order.customerName?.toLowerCase().includes(s);
+        if (!matchesJob && !matchesName) return false;
+      }
+
       const isCod = order.paymentMethod === "COD";
       // Fix: Check balanceDue explicitly to catch partial payments or status mismatches
       const isPaid =
@@ -96,7 +105,7 @@ export default function DeliveryDashboard() {
       if (!a.isUrgent && b.isUrgent) return 1;
       return new Date(b.updatedAt) - new Date(a.updatedAt);
     });
-  }, [orders, activeTab]);
+  }, [orders, activeTab, search]);
 
   if (loading && orders.length === 0)
     return (
@@ -117,6 +126,17 @@ export default function DeliveryDashboard() {
             จัดการการจัดส่ง ตรวจสอบยอดเงิน และบันทึกเลขพัสดุ
           </p>
         </div>
+
+        <div className="relative group">
+          <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+          <input
+            type="text"
+            placeholder="ค้นหา Job ID หรือชื่อลูกค้า..."
+            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all w-64 text-xs font-bold shadow-sm"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* Tabs */}
@@ -136,8 +156,11 @@ export default function DeliveryDashboard() {
               {
                 orders.filter(
                   (o) =>
-                    o.status === "READY_TO_SHIP" &&
-                    (o.paymentMethod === "COD" || o.paymentStatus === "PAID"),
+                    (o.status === "READY_TO_SHIP" ||
+                      o.status === "QC_PASSED") &&
+                    (o.paymentMethod === "COD" ||
+                      o.paymentStatus === "PAID" ||
+                      parseFloat(o.balanceDue || 0) <= 0),
                 ).length
               }
             </span>
@@ -157,8 +180,13 @@ export default function DeliveryDashboard() {
               {
                 orders.filter(
                   (o) =>
-                    o.status === "READY_TO_SHIP" &&
-                    !(o.paymentMethod === "COD" || o.paymentStatus === "PAID"),
+                    (o.status === "READY_TO_SHIP" ||
+                      o.status === "QC_PASSED") &&
+                    !(
+                      o.paymentMethod === "COD" ||
+                      o.paymentStatus === "PAID" ||
+                      parseFloat(o.balanceDue || 0) <= 0
+                    ),
                 ).length
               }
             </span>

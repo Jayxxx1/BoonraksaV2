@@ -20,7 +20,12 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   }
 
   // If allowedRoles is provided, check if user.role is in the list
-  if (allowedRoles && !allowedRoles.includes(user?.role)) {
+  // SUPER_ADMIN bypasses all role checks
+  if (
+    allowedRoles &&
+    user?.role !== "SUPER_ADMIN" &&
+    !allowedRoles.includes(user?.role)
+  ) {
     console.warn(
       `[RBAC] Access denied for role: ${user?.role}. Allowed: ${allowedRoles}`,
     );

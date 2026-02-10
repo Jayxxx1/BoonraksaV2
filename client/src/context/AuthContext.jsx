@@ -1,5 +1,5 @@
-import { useState } from "react";
-import axios from "axios";
+import { useState, useEffect } from "react";
+import api from "../api/config";
 import { AuthContext } from "./auth-store";
 
 export const AuthProvider = ({ children }) => {
@@ -12,13 +12,10 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
-      const response = await axios.post(
-        "http://localhost:8000/api/auth/login",
-        {
-          username,
-          password,
-        },
-      );
+      const response = await api.post("/auth/login", {
+        username,
+        password,
+      });
 
       const { token: newToken, data } = response.data;
 
@@ -44,7 +41,53 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("lastActivity");
   };
+
+  // 2h Session Timeout Logic
+  useEffect(() => {
+    if (!token) return;
+
+    const TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 Hours
+
+    const checkTimeout = () => {
+      const lastActivity = localStorage.getItem("lastActivity");
+      if (lastActivity) {
+        const inactiveTime = Date.now() - parseInt(lastActivity);
+        if (inactiveTime > TIMEOUT_MS) {
+          logout();
+          alert("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
+        }
+      }
+    };
+
+    const updateActivity = () => {
+      localStorage.setItem("lastActivity", Date.now().toString());
+    };
+
+    // Initial set
+    updateActivity();
+
+    // Listeners
+    const events = [
+      "mousedown",
+      "mousemove",
+      "keydown",
+      "scroll",
+      "touchstart",
+    ];
+    events.forEach((event) => window.addEventListener(event, updateActivity));
+
+    // Check every minute
+    const interval = setInterval(checkTimeout, 60000);
+
+    return () => {
+      events.forEach((event) =>
+        window.removeEventListener(event, updateActivity),
+      );
+      clearInterval(interval);
+    };
+  }, [token]);
 
   const updateRole = (newRole) => {
     const updatedUser = { ...user, role: newRole };

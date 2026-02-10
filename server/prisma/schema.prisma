@@ -140,11 +140,14 @@ enum PaymentMethod {
 
 model Order {
   id    Int    @id @default(autoincrement())
-  jobId String // adminCode/dailyRunning (e.g. 10/030) - NOT unique globally
+
   
-  globalRunning Int @unique @default(autoincrement()) // True system identity
-  orderDate     DateTime // Start of day for daily reset calculations
-  dailyRunning  Int // Per-admin daily sequence
+  // --- 1. System Job ID (Source of Truth) ---
+  systemJobNo Int @unique @default(autoincrement()) // Global, sequential, unique
+  
+  // --- 2. Human Readable Job Code (UI/Print) ---
+  displayJobCode String @unique // Format: "{salesId}/{systemJobNo}" or Legacy String
+  legacyJobCode  String?        // For imported data reference, strictly optional
 
   isUrgent   Boolean   @default(false) // งานด่วน (3 วัน)
   blockType  BlockType @default(OLD)
@@ -226,7 +229,6 @@ model Order {
   positions    OrderEmbroideryPosition[] // รายละเอียดตำแหน่งปักแต่ละจุด
   productionLogs ProductionLog[] // ประวัติการทำงานรายคน
 
-  @@unique([salesId, orderDate, dailyRunning], name: "sales_daily_running")
 }
 
 // Payment Slip - สำหรับจ่ายเงินหลายครั้ง
@@ -285,8 +287,8 @@ model ActivityLog {
   details   String?
   orderId   Int?
   order     Order?   @relation(fields: [orderId], references: [id])
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id])
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
   timestamp DateTime @default(now())
 }
 

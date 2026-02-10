@@ -21,6 +21,7 @@ import { useState } from "react";
 
 const getRoleBadgeColor = (role) => {
   const styles = {
+    SUPER_ADMIN: "bg-red-50 text-red-700 border-red-100",
     ADMIN: "bg-indigo-50 text-indigo-700 border-indigo-100",
     EXECUTIVE: "bg-blue-50 text-blue-700 border-blue-100",
     SALES: "bg-emerald-50 text-emerald-700 border-emerald-100",
@@ -281,10 +282,19 @@ export default function Sidebar({
         >
           {menuGroups.map((group, idx) => {
             // 🆕 Strict RBAC: Check if group itself is allowed for the role
-            if (group.roles && !group.roles.includes(user?.role)) return null;
+            // SUPER_ADMIN sees everything
+            if (
+              group.roles &&
+              user?.role !== "SUPER_ADMIN" &&
+              !group.roles.includes(user?.role)
+            )
+              return null;
 
             const groupVisibleLinks = group.links.filter(
-              (l) => !l.roles || l.roles.includes(user?.role),
+              (l) =>
+                !l.roles ||
+                user?.role === "SUPER_ADMIN" ||
+                l.roles.includes(user?.role),
             );
             if (groupVisibleLinks.length === 0) return null;
 
