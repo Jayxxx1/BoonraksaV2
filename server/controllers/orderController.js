@@ -5,27 +5,6 @@ import s3Provider from '../src/services/providers/s3.provider.js';
 import config from '../src/config/config.js';
 import { generateJobSheetPDF, generateCustomerProofPDF } from '../services/pdfService.js';
 
-
-/**
- * Helper to get the start of the current day in Asia/Bangkok
- * Stored as a UTC date marker (00:00:00 UTC) representing the local day.
- */
-const getBangkokStartOfDay = () => {
-  const now = new Date();
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Bangkok',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-  const parts = formatter.formatToParts(now);
-  const year = parts.find(p => p.type === 'year').value;
-  const month = parts.find(p => p.type === 'month').value;
-  const day = parts.find(p => p.type === 'day').value;
-  
-  return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
-};
-
 /**
  * Standard Include for Order used across multiple controllers
  */
@@ -77,40 +56,8 @@ const maskStaffNamesForSales = (order, userRole) => {
   return maskedOrder;
 };
 
-/**
- * Generate a new Job ID ([salesNumber]/[dailyRunning])
- * Based on user requirements: reset daily PER admin.
- */
-const generateJobId = async (tx, user) => {
-  const prefix = user.salesNumber || 'XX';
-  const orderDate = getBangkokStartOfDay();
 
-  // 1. Calculate Daily Running (Reset daily per salesperson) -> For Dashboard/Reports
-  const ordersCountToday = await tx.order.count({
-    where: {
-      salesId: user.id,
-      orderDate: orderDate
-    }
-  });
-  const nextDailyRunning = ordersCountToday + 1;
 
-  // 2. Calculate Continuous Running (Never reset per salesperson) -> For Job ID
-  // We can count all orders created by this salesId
-  const ordersCountTotal = await tx.order.count({
-    where: {
-      salesId: user.id
-    }
-  });
-  const nextContinuousRunning = ordersCountTotal + 1;
-  const formattedSeq = nextContinuousRunning.toString().padStart(3, '0');
-
-  // Job ID uses the continuous running number
-  return {
-    jobId: `${prefix}/${formattedSeq}`,
-    dailyRunning: nextDailyRunning,
-    orderDate
-  };
-};
 
 /**
  * Helper to automatically mark orders older than 3 days as urgent
@@ -127,7 +74,7 @@ export const autoUpdateUrgentOrders = async () => {
         createdAt: { lte: threeDaysAgo },
         status: { notIn: ['COMPLETED', 'CANCELLED'] }
       },
-      select: { id: true, jobId: true }
+      select: { id: true, displayJobCode: true }
     });
 
     if (staleOrders.length === 0) return;
@@ -142,7 +89,7 @@ export const autoUpdateUrgentOrders = async () => {
     const logData = staleOrders.map(o => ({
       orderId: o.id,
       action: 'AUTO_URGENT',
-      details: `ระบบปรับออเดอร์ ${o.jobId} เป็นงานด่วนเนื่องจากค้างในระบบมากกว่า 3 วัน`,
+      details: `ระบบปรับออเดอร์ ${o.displayJobCode} เป็นงานด่วนเนื่องจากค้างในระบบมากกว่า 3 วัน`,
       userId: null // System Log - No specific user
     }));
 
@@ -189,15 +136,25 @@ export const createOrder = asyncHandler(async (req, res) => {
   while (attempts < maxAttempts) {
     try {
       const result = await prisma.$transaction(async (tx) => {
-        // Generate Job ID inside transaction for atomicity
-        const { jobId, dailyRunning, orderDate } = await generateJobId(tx, req.user);
+        // --- 1. PREPARE DATA & VALIDATION ---
+        
+        // Logic for legacy import
+        const { legacyJobCode } = req.body;
+        
+        let initialDisplayCode;
+        if (legacyJobCode) {
+           // If importing, use provided code. DB unique constraint will handle duplicates.
+           initialDisplayCode = legacyJobCode;
+        } else {
+           // Use temporary unique placeholder (Transaction will update this immediately)
+           initialDisplayCode = `TEMP-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        }
 
-        // ใช้สถานะเดียว: PENDING_ARTWORK (ไม่ว่าจะมีสต็อกหรือไม่)
+        // Logic for status
         let orderStatus = 'PENDING_ARTWORK'; 
         let subStatus = null;
         const purchaseRequests = [];
 
-        // 1. Check stock
         for (const item of items) {
           if (!item.variantId) throw new Error('Missing variantId in one or more items');
           
@@ -219,79 +176,93 @@ export const createOrder = asyncHandler(async (req, res) => {
           }
         }
 
-      // 2. Financials
-      const total = safeNumber(totalPrice);
-      const paid = safeNumber(paidAmount);
-      const balance = total - paid;
-      let paymentStatus = 'UNPAID';
-      if (paid > 0) {
-        paymentStatus = paid >= total ? 'PAID' : 'PARTIALLY_PAID';
-      }
-
-      // 3. Block Type Mapping
-      const bTypeMap = {
-        'บล็อคเดิม': 'OLD',
-        'บล็อคเดิมเปลี่ยนข้อความ': 'EDIT',
-        'บล็อคเดิมแก้ข้อความ': 'EDIT',
-        'บล็อคใหม่': 'NEW'
-      };
-      // If already valid ENUM, use it. Else map from Thai. Default to OLD.
-      const validEnums = ['OLD', 'EDIT', 'NEW'];
-      const mappedBlockType = validEnums.includes(blockType) 
-        ? blockType 
-        : (bTypeMap[blockType] || 'OLD');
-
-      // 4. Create the Order
-      const order = await tx.order.create({
-        data: {
-          jobId,
-          orderDate,
-          dailyRunning,
-          customerName: customerName || '-',
-          customerPhone: customerPhone || '',
-          customerAddress: customerAddress || '',
-          customerFb: customerFb || '',
-          salesChannelId: salesChannelId ? parseInt(salesChannelId) : null,
-          isUrgent: !!isUrgent,
-          blockType: mappedBlockType,
-          embroideryDetails: Array.isArray(embroideryDetails) ? embroideryDetails : [],
-          totalPrice: total,
-          deposit: paid,
-          paidAmount: paid,
-          balanceDue: balance,
-          paymentStatus,
-          depositSlipUrl: depositSlipUrl || null,
-          draftImages: Array.isArray(draftImages) ? draftImages : [],
-          blockPrice: safeNumber(blockPrice),
-          unitPrice: safeNumber(unitPrice),
-          status: orderStatus,
-          subStatus: subStatus,
-          dueDate: (dueDate && !isNaN(Date.parse(dueDate))) ? new Date(dueDate) : null,
-          notes: notes || '',
-          salesId: req.user.id,
-          items: {
-            create: items.map(item => ({
-              variantId: parseInt(item.variantId),
-              productName: item.productName || 'Unknown Product',
-              price: safeNumber(item.price),
-              quantity: Math.max(0, parseInt(item.quantity) || 0),
-              details: item.details || {}
-            }))
-          },
-          // 🆕 บันทึกรายการตำแหน่งปักแยกตาราง (Structured Positions)
-          positions: {
-            create: (Array.isArray(embroideryDetails) ? embroideryDetails : []).map(pos => ({
-              position: pos.position === "อื่นๆ" ? pos.customPosition : pos.position,
-              textToEmb: pos.textToEmb || null,
-              logoUrl: pos.logoUrl || null,
-              mockupUrl: pos.mockupUrl || null,
-              width: pos.width ? parseFloat(pos.width) : null,
-              height: pos.height ? parseFloat(pos.height) : null,
-              note: pos.note || null
-            }))
-          }
+        // 2. Financials
+        const total = safeNumber(totalPrice);
+        const paid = safeNumber(paidAmount);
+        const balance = total - paid;
+        let paymentStatus = 'UNPAID';
+        if (paid > 0) {
+          paymentStatus = paid >= total ? 'PAID' : 'PARTIALLY_PAID';
         }
-      });
+
+        // 3. Block Type Mapping
+        const bTypeMap = {
+          'บล็อคเดิม': 'OLD',
+          'บล็อคเดิมเปลี่ยนข้อความ': 'EDIT',
+          'บล็อคเดิมแก้ข้อความ': 'EDIT',
+          'บล็อคใหม่': 'NEW'
+        };
+        const validEnums = ['OLD', 'EDIT', 'NEW'];
+        const mappedBlockType = validEnums.includes(blockType) 
+          ? blockType 
+          : (bTypeMap[blockType] || 'OLD');
+
+        // 4. Create the Order (Step 1: Create with Temp/Legacy Code)
+        let order = await tx.order.create({
+          data: {
+            displayJobCode: initialDisplayCode,
+            legacyJobCode: legacyJobCode || null,
+            // (systemJobNo is auto-incremented by DB)
+            
+            customerName: customerName || '-',
+            customerPhone: customerPhone || '',
+            customerAddress: customerAddress || '',
+            customerFb: customerFb || '',
+            salesChannelId: salesChannelId ? parseInt(salesChannelId) : null,
+            isUrgent: !!isUrgent,
+            blockType: mappedBlockType,
+            embroideryDetails: Array.isArray(embroideryDetails) ? embroideryDetails : [],
+            totalPrice: total,
+            deposit: paid,
+            paidAmount: paid,
+            balanceDue: balance,
+            paymentStatus,
+            depositSlipUrl: depositSlipUrl || null,
+            draftImages: Array.isArray(draftImages) ? draftImages : [],
+            blockPrice: safeNumber(blockPrice),
+            unitPrice: safeNumber(unitPrice),
+            status: orderStatus,
+            subStatus: subStatus,
+            dueDate: (dueDate && !isNaN(Date.parse(dueDate))) ? new Date(dueDate) : null,
+            notes: notes || '',
+            salesId: req.user.id,
+            items: {
+              create: items.map(item => ({
+                variantId: parseInt(item.variantId),
+                productName: item.productName || 'Unknown Product',
+                price: safeNumber(item.price),
+                quantity: Math.max(0, parseInt(item.quantity) || 0),
+                details: item.details || {}
+              }))
+            },
+            // 🆕 บันทึกรายการตำแหน่งปักแยกตาราง (Structured Positions)
+            positions: {
+              create: (Array.isArray(embroideryDetails) ? embroideryDetails : []).map(pos => ({
+                position: pos.position === "อื่นๆ" ? pos.customPosition : pos.position,
+                textToEmb: pos.textToEmb || null,
+                logoUrl: pos.logoUrl || null,
+                mockupUrl: pos.mockupUrl || null,
+                width: pos.width ? parseFloat(pos.width) : null,
+                height: pos.height ? parseFloat(pos.height) : null,
+                note: pos.note || null
+              }))
+            }
+          }
+        });
+
+        // 4.1 UPDATE Job ID (Step 2: If not legacy, generate formatted code using systemJobNo)
+        if (!legacyJobCode) {
+           const salesPrefix = req.user.salesNumber || String(req.user.id);
+           const finalCode = `${salesPrefix}/${order.systemJobNo}`;
+           
+           order = await tx.order.update({
+               where: { id: order.id },
+               data: { displayJobCode: finalCode }
+           });
+        }
+        
+        // Map for response compatibility
+        order.jobId = order.displayJobCode;
 
       // 4.5 Create Initial Payment Slip if exists
       console.log('DEBUG: Checking Initial Slip', { paid, depositSlipUrl });
@@ -303,7 +274,7 @@ export const createOrder = asyncHandler(async (req, res) => {
               orderId: order.id,
               amount: paid,
               slipUrl: depositSlipUrl,
-              note: 'เงินมัดจำ (Initial Deposit)',
+              note: 'เงินมัดจำ',
               uploadedBy: req.user.id
             }
           });
@@ -348,7 +319,7 @@ export const createOrder = asyncHandler(async (req, res) => {
       await tx.activityLog.create({
         data: {
           action: 'สร้างออเดอร์',
-          details: `สร้างออเดอร์ใหม่เลขที่ ${jobId} โดย ${req.userId} (สถานะ: รอวางแบบ)`,
+          details: `สร้างออเดอร์ใหม่เลขที่ ${order.displayJobCode} โดย ${req.user.id} (สถานะ: รอวางแบบ)`,
           orderId: order.id,
           userId: req.user.id
         }

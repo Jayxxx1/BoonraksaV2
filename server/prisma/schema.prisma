@@ -138,6 +138,16 @@ enum PaymentMethod {
   COD
 }
 
+enum PreorderStatus {
+  NONE
+  WAITING_PURCHASE_INPUT
+  WAITING_ARRIVAL
+  PURCHASE_CONFIRMED
+  DELAYED_ROUND_1
+  DELAYED_ROUND_2
+  ARRIVED
+}
+
 model Order {
   id    Int    @id @default(autoincrement())
 
@@ -171,6 +181,7 @@ model Order {
   expectedDate DateTime? // (Old field, keeping for compat if needed, but using purchasingEta)
   purchasingEta    DateTime? // วันที่ของจะเข้า (ฝ่ายจัดซื้อระบุ)
   purchasingReason String?   // เหตุผลถ้าของล่าช้า
+  purchasingEtaCount Int     @default(0) // จำนวนครั้งที่ระบุวันเข้า (สูงสุด 2 ครั้ง)
 
   // --- 4. Cost & Payment Info ---
   blockPrice Decimal @default(0) @db.Decimal(10, 2)
@@ -186,8 +197,19 @@ model Order {
   draftImages    String[]   // รูปจำลอง/ร่างแบบจากแชท (Mockups)
 
   status     OrderStatus @default(PENDING_ARTWORK)
-  subStatus  String?     // 🆕 สถานะย่อย (เช่น "กำลังสั่งซื้อ")
+  subStatus  String?     // 🆕 สถานะย่อย (เช่น "กำลังสั่งซื้อ") - Legacy String
+  preorderSubStatus PreorderStatus @default(NONE) // 🆕 Pre-order Status Tracker
   dueDate    DateTime?
+
+  // --- Production Readiness Flags ---
+  stockRechecked           Boolean   @default(false)
+  physicalItemsReady       Boolean   @default(false)
+  graphicJobSheetAttached  Boolean   @default(false)
+
+  // --- Production Timestamps ---
+  readyForProductionAt    DateTime?
+  productionStartedAt     DateTime?
+  productionCompletedAt   DateTime?
 
   // ผู้รับผิดชอบงาน
   salesId Int
@@ -228,7 +250,6 @@ model Order {
   paymentSlips PaymentSlip[] // ประวัติการจ่ายเงินทั้งหมด
   positions    OrderEmbroideryPosition[] // รายละเอียดตำแหน่งปักแต่ละจุด
   productionLogs ProductionLog[] // ประวัติการทำงานรายคน
-
 }
 
 // Payment Slip - สำหรับจ่ายเงินหลายครั้ง
@@ -375,7 +396,7 @@ model ThreadColor {
 model DailyProductionReport {
   id            Int      @id @default(autoincrement())
   date          DateTime @default(now())
-  shift         String   // เช้า / ค่ำ
+  shift         String   // เช้า / ค่ำ หรือ 08:00-20:00
   foremanId     Int
   foreman       User     @relation(fields: [foremanId], references: [id])
   

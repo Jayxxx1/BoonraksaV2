@@ -1,6 +1,6 @@
 import express from 'express';
 import * as orderController from './order.controller.js';
-import { protect } from '../../src/middleware/auth.middleware.js';
+import { protect, restrictTo } from '../../src/middleware/auth.middleware.js';
 import { validate, updateStatusSchema } from './order.validation.js';
 
 const router = express.Router();
@@ -37,11 +37,16 @@ router.route('/:id/cancel').patch(orderController.cancelOrder);
 router.route('/:id/urgent').patch(orderController.bumpUrgent);
 router.route('/:id/purchasing').patch(orderController.updatePurchasingInfo);
 router.route('/:id/production-action').post(orderController.logProductionAction);
-router.route('/:id/payment').post(orderController.uploadPaymentSlip);
+router.route('/:id/payment').post(restrictTo('ADMIN', 'SUPER_ADMIN', 'SALES', 'DELIVERY'), orderController.uploadPaymentSlip);
 router.route('/:id/payments').get(orderController.getPaymentHistory);
 
 router.route('/:id/download/:type')
   .get(orderController.downloadPDF);
+
+// Daily Production reports
+router.route('/reports/daily')
+  .get(restrictTo('ADMIN', 'SUPER_ADMIN', 'PRODUCTION'), orderController.getDailyReports)
+  .post(restrictTo('ADMIN', 'SUPER_ADMIN', 'PRODUCTION'), orderController.createDailyReport);
 
 // Generic ID route must be LAST to prevent shadowing
 router.route('/:id')

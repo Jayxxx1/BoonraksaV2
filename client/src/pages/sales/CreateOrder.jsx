@@ -539,7 +539,7 @@ const CreateOrder = () => {
 
   const downloadJobSheet = async (orderId) => {
     try {
-      const response = await api.get(`/orders/${orderId}/download/jobsheet`, {
+      const response = await api.get(`/orders/${orderId}/download/proof`, {
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -563,29 +563,30 @@ const CreateOrder = () => {
             <HiOutlineCheckCircle className="w-12 h-12 text-emerald-600" />
           </div>
           <h2 className="text-2xl font-black text-slate-800 mb-2">
-            Order Created Successfully!
+            สร้างออเดอร์สำเร็จ!
           </h2>
           <p className="text-slate-500 mb-8 font-medium">
-            Your order has been recorded into the system.
+            คุณได้สร้างออเดอร์สำเร็จแล้ว
           </p>
           <div className="space-y-3">
             <button
               onClick={() => downloadJobSheet(successOrderId)}
               className="erp-button erp-button-primary w-full py-3.5 flex items-center justify-center gap-2"
             >
-              <HiOutlinePrinter className="w-5 h-5" /> Download Job Sheet (PDF)
+              <HiOutlinePrinter className="w-5 h-5" />{" "}
+              ดาวน์โหลดใบงานสำหรับลูกค้า
             </button>
             <button
               onClick={() => navigate("/orders")}
               className="erp-button erp-button-secondary w-full py-3.5"
             >
-              View All Orders
+              ดูรายการออเดอร์ทั้งหมด
             </button>
             <button
               onClick={() => window.location.reload()}
               className="text-indigo-600 font-bold text-sm hover:underline mt-4"
             >
-              Create Another Order
+              สร้างออเดอร์อีกครั้ง
             </button>
           </div>
         </div>

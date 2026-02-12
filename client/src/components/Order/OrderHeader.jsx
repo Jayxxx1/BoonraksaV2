@@ -5,6 +5,7 @@ import {
   HiOutlineDocumentText,
   HiOutlinePrinter,
   HiOutlineCheckBadge,
+  HiOutlineClock,
 } from "react-icons/hi2";
 
 const OrderHeader = ({
@@ -24,7 +25,7 @@ const OrderHeader = ({
 }) => {
   return (
     <>
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-50 h-14">
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-50 h-16 pt-1">
         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
@@ -37,7 +38,7 @@ const OrderHeader = ({
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-bold text-slate-900 leading-none">
-                  Job ID: {order.jobId}
+                  เลขใบงาน: {order.jobId}
                 </h1>
                 {order.isUrgent && (
                   <span className="erp-badge bg-rose-50 text-rose-700 animate-pulse border-rose-100 flex items-center gap-1">
@@ -45,29 +46,42 @@ const OrderHeader = ({
                     งานด่วน
                   </span>
                 )}
+                {order.hasPreorder && order.actionMap?.canViewPreorder && (
+                  <span className="erp-badge bg-amber-50 text-amber-700 border-amber-100 flex items-center gap-1">
+                    <HiOutlineClock className="w-3 h-3" />
+                    PRE-ORDER
+                  </span>
+                )}
               </div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                Ref:{" "}
-                {order.globalRunning?.toString()?.padStart(6, "0") || "N/A"} |{" "}
+                {user?.role !== "SALES" && user?.role !== "PURCHASING" && (
+                  <>Ref: {order.systemJobNo?.toString()?.padStart(6, "0")} | </>
+                )}
                 {formatDate(order.createdAt)}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={downloadCustomerProof}
-              className="erp-button bg-indigo-50 text-indigo-700 border-indigo-100 py-1.5 px-3 text-xs"
-            >
-              <HiOutlineDocumentText className="w-4 h-4" />
-              <span>พิมพ์ใบสรุปงาน (Customer Proof)</span>
-            </button>
-            <button
-              onClick={downloadJobSheet}
-              className="erp-button erp-button-secondary py-1.5 px-3 text-xs"
-            >
-              <HiOutlinePrinter className="w-4 h-4" />
-              <span>พิมพ์ใบงาน (Print Sheet)</span>
-            </button>
+            {user?.role !== "PURCHASING" && (
+              <>
+                <button
+                  onClick={downloadCustomerProof}
+                  className="erp-button bg-indigo-50 text-indigo-700 border-indigo-100 py-1.5 px-3 text-xs"
+                >
+                  <HiOutlineDocumentText className="w-4 h-4" />
+                  <span>พิมพ์ใบงานสำหรับลูกค้า</span>
+                </button>
+                {user?.role !== "SALES" && (
+                  <button
+                    onClick={downloadJobSheet}
+                    className="erp-button erp-button-secondary py-1.5 px-3 text-xs"
+                  >
+                    <HiOutlinePrinter className="w-4 h-4" />
+                    <span>พิมพ์ใบงานสำหรับองค์กร</span>
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>

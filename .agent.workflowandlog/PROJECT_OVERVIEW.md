@@ -6,7 +6,8 @@
 
 - ติดตามสถานะออเดอร์ตั้งแต่การรับงาน (Sales) จนถึงการจัดส่ง (Delivery)
 - จัดการสต็อกสินค้าและวัตถุดิบ (Stock Management)
-- ควบคุมการผลิตและรายงานประสิทธิภาพรายวัน (Production & Reporting)
+- จัดการสต็อกสินค้าและวัตถุดิบ (Stock Management)
+- ควบคุมการผลิตและรายงานประสิทธิภาพรายวัน (Production & Shift Reporting)
 - เชื่อมต่อข้อมูลทุกฝ่ายให้เป็นหนึ่งเดียว ลดความผิดพลาดจากกระดาษหรือแชท
 
 ## 🏗️ โครงสร้างสถาปัตยกรรม (Architecture)
@@ -62,4 +63,8 @@
 >
 > - [Frontend Guideline](file:///d:/BoonraksaSystem/FRONTEND_GUIDE.md)
 > - [Backend Guideline](file:///d:/BoonraksaSystem/BACKEND_GUIDE.md)
-> - [Workflow Logic](file:///d:/BoonraksaSystem/WORKFLOW_LOGIC.md)
+> - [Workflow Logic](file:///d:/BoonraksaSystem/.agent.workflowandlog/WORKFLOW_LOGIC.md)
+
+- [RBAC Guidelines](file:///d:/BoonraksaSystem/.agent.workflowandlog/RBAC_GUIDELINES.md)
+- [Order Module Changelog](file:///d:/BoonraksaSystem/.agent.workflowandlog/ORDER_MODULE_CHANGELOG.md)
+- [Task History Archive](file:///d:/BoonraksaSystem/.agent.workflowandlog/TASK_ARCHIVE.md)

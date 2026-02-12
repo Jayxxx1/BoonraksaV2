@@ -46,7 +46,8 @@ const OrderStatusBar = ({
           </p>
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold text-slate-900 leading-tight">
-              {getStatusBadge(order.status).props.children}
+              {order.displayStatusLabel ||
+                getStatusBadge(order.status).props.children}
             </h2>
             {order.status !== "CANCELLED" && (
               <span className="flex h-2 w-2 relative">
@@ -55,6 +56,11 @@ const OrderStatusBar = ({
               </span>
             )}
           </div>
+          {order.subStatusLabel && (
+            <p className="text-[10px] font-black text-rose-500 uppercase mt-1 animate-pulse">
+              ⚠️ {order.subStatusLabel}
+            </p>
+          )}
         </div>
       </div>
 
@@ -105,15 +111,6 @@ const OrderStatusBar = ({
                 disabled={isUpdating}
               >
                 ยืนยันสต็อกครบ (Confirm Stock)
-              </button>
-            )}
-            {order.actionMap?.canReportStockIssue && (
-              <button
-                onClick={() => setShowStockIssueModal(true)}
-                className="erp-button bg-rose-50 text-rose-600 border-rose-100 py-2 px-4 shadow-sm"
-                disabled={isUpdating}
-              >
-                แจ้งปัญหาสินค้า
               </button>
             )}
           </div>

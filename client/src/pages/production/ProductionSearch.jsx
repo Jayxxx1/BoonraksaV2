@@ -26,7 +26,6 @@ const ProductionSearch = () => {
     setOrder(null);
 
     try {
-      // We'll search by jobId (string)
       const res = await axios.get(
         `http://localhost:8000/api/orders/search/${encodeURIComponent(jobId)}`,
         {
@@ -50,7 +49,6 @@ const ProductionSearch = () => {
           headers: getAuthHeader(),
         },
       );
-      // Refresh order data
       handleSearch();
       alert("บันทึกสำเร็จ");
     } catch (err) {
@@ -69,410 +67,270 @@ const ProductionSearch = () => {
       STOCK_RECHECKED: "รอผลิต (สต็อกพร้อม)",
       IN_PRODUCTION: "กำลังผลิต",
       PRODUCTION_FINISHED: "ผลิตเสร็จ/รอ QC",
-      QC_PASSED: "QC ผ่านแล้ว",
-      READY_TO_SHIP: "รอจัดส่ง",
+      QC_PASSED: "รอจัดส่ง",
+      READY_TO_SHIP: "พร้อมจัดส่ง",
       COMPLETED: "สำเร็จ",
       CANCELLED: "ยกเลิก",
     };
     return map[status] || status;
   };
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "IN_PRODUCTION":
+        return "bg-amber-100 text-amber-900 border-amber-500 ring-amber-500/20";
+      case "PRODUCTION_FINISHED":
+        return "bg-emerald-100 text-emerald-900 border-emerald-500 ring-emerald-500/20";
+      case "STOCK_RECHECKED":
+        return "bg-sky-100 text-sky-900 border-sky-500 ring-sky-500/20";
+      case "CANCELLED":
+        return "bg-rose-100 text-rose-900 border-rose-500 ring-rose-500/20";
+      default:
+        return "bg-slate-100 text-slate-900 border-slate-300 ring-slate-500/20";
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-4 pb-20">
-      <div className="max-w-[1800px] mx-auto space-y-6">
+      <div className="max-w-[1920px] mx-auto space-y-8">
         {/* Search Header - Centered for Focus */}
-        <div className="max-w-2xl mx-auto bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-          <h1 className="text-2xl font-black mb-4 text-center text-indigo-600">
-            🔍 ค้นหางานผลิต
+        <div className="max-w-3xl mx-auto bg-white rounded-3xl p-8 shadow-lg border-2 border-slate-200">
+          <h1 className="text-3xl font-black mb-6 text-center text-indigo-700 uppercase tracking-wide">
+            🏭 ค้นหางานผลิต (Production Dashboard)
           </h1>
-          <form onSubmit={handleSearch} className="flex gap-3">
+          <form onSubmit={handleSearch} className="flex gap-4">
             <input
               type="text"
               value={jobId}
               onChange={(e) => setJobId(e.target.value.toUpperCase())}
-              placeholder="กรอกเลข JOB ID (เช่น 11/00...)"
-              className="flex-1 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-lg font-bold focus:border-indigo-500 outline-none transition-all text-slate-700"
+              placeholder="SCAN JOB ID HERE..."
+              className="flex-1 bg-slate-50 border-4 border-slate-300 rounded-2xl px-6 py-4 text-3xl font-black focus:border-indigo-600 focus:bg-indigo-50/30 outline-none transition-all text-slate-800 placeholder:text-slate-300 tracking-widest text-center"
+              autoFocus
             />
             <button
               type="submit"
               disabled={loading}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 rounded-xl font-black transition-all shadow-md shadow-indigo-200"
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 rounded-2xl font-black transition-all shadow-xl shadow-indigo-200 active:scale-95 text-xl"
             >
-              <HiOutlineMagnifyingGlass className="w-6 h-6" />
+              <HiOutlineMagnifyingGlass className="w-8 h-8" />
             </button>
           </form>
         </div>
 
         {loading && (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
+          <div className="flex justify-center py-32">
+            <div className="animate-spin rounded-full h-24 w-24 border-8 border-indigo-600 border-t-transparent"></div>
           </div>
         )}
 
         {error && (
-          <div className="max-w-2xl mx-auto bg-rose-50 border border-rose-100 rounded-xl p-4 flex items-center gap-3 text-rose-600">
-            <HiOutlineExclamationCircle className="w-6 h-6" />
-            <p className="font-bold">{error}</p>
+          <div className="max-w-3xl mx-auto bg-rose-100 border-l-8 border-rose-600 rounded-2xl p-8 flex items-center justify-center gap-6 text-rose-800 shadow-xl">
+            <HiOutlineExclamationCircle className="w-16 h-16 shrink-0" />
+            <p className="font-black text-3xl">{error}</p>
           </div>
         )}
 
         {order && (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* LEFT COLUMN: Controls & Info (4 Cols) */}
-            <div className="lg:col-span-4 space-y-6 sticky top-4">
-              {/* Quick Summary Card */}
-              <div
-                className={`rounded-3xl p-6 border-l-8 shadow-sm ${
-                  order.isUrgent
-                    ? "bg-rose-50 border-rose-500 text-rose-900"
-                    : "bg-white border-indigo-500 text-slate-900"
-                }`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-4xl font-black tracking-tight mb-1">
-                      {order.jobId}
-                    </h2>
-                    <p className="font-bold text-slate-500 uppercase text-lg">
-                      {order.customerName}
-                    </p>
-                  </div>
-                  {order.isUrgent && (
-                    <span className="bg-rose-500 text-white text-xs font-black px-3 py-1 rounded-full animate-pulse uppercase">
-                      งานด่วน
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 mt-6">
-                  <div className="bg-slate-100 rounded-2xl p-4 border border-slate-200">
-                    <p className="text-[10px] text-slate-500 uppercase font-black mb-1">
-                      สถานะปัจจุบัน
-                    </p>
-                    <p className="text-lg font-black text-indigo-600">
-                      {getThaiStatus(order.status)}
-                    </p>
-                  </div>
-                  <div className="bg-slate-100 rounded-2xl p-4 border border-slate-200">
-                    <p className="text-[10px] text-slate-500 uppercase font-black mb-1">
-                      กำหนดส่ง
-                    </p>
-                    <p className="text-lg font-black text-amber-600">
-                      {order.dueDate
-                        ? new Date(order.dueDate).toLocaleDateString("th-TH")
-                        : "-"}
-                    </p>
-                  </div>
-                </div>
+          <div className="animate-in fade-in slide-in-from-bottom-8 duration-500 space-y-8">
+            {/* 1. Header Board - Balanced High Contrast */}
+            <div
+              className={`rounded-[2rem] p-8 border-4 shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 ${getStatusColor(
+                order.status,
+              )}`}
+            >
+              <div className="text-center md:text-left">
+                <p className="text-lg font-bold opacity-70 uppercase tracking-[0.2em] mb-1">
+                  JOB ID
+                </p>
+                <h1 className="text-6xl font-black tracking-tighter leading-none">
+                  {order.jobId}
+                </h1>
+                <p className="text-2xl font-bold mt-2 opacity-90">
+                  {order.customerName}
+                </p>
               </div>
 
-              {/* General Order Notes */}
-              {order.notes && (
-                <div className="bg-rose-50 border-2 border-rose-100 p-6 rounded-3xl">
-                  <p className="text-xs text-rose-500 font-black uppercase mb-2 flex items-center gap-2">
-                    <HiOutlineExclamationCircle className="w-5 h-5" />{" "}
-                    หมายเหตุสำคัญ
-                  </p>
-                  <p className="text-lg font-bold text-rose-800 leading-relaxed">
-                    {order.notes}
-                  </p>
+              <div className="text-center">
+                <div className="inline-block px-8 py-3 rounded-full bg-white/60 backdrop-blur-md border border-black/5 shadow-sm mb-3">
+                  <span className="text-3xl font-black uppercase tracking-wider">
+                    {order.displayStatusLabel || getThaiStatus(order.status)}
+                  </span>
                 </div>
-              )}
-
-              {/* Files Section */}
-              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-black text-slate-700 flex items-center gap-2">
-                  <HiOutlineClipboardDocumentList className="text-indigo-600" />{" "}
-                  ไฟล์งาน
-                </h3>
-                {/* Production File (DST) */}
-                <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl">
-                  <div className="flex items-center gap-4 mb-3">
-                    <div className="w-12 h-12 bg-white text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
-                      <span className="font-black text-xs">DST</span>
-                    </div>
-                    <div className="overflow-hidden">
-                      <p className="text-xs font-bold text-indigo-400 uppercase">
-                        สำหรับเครื่องจักร
-                      </p>
-                      <p className="font-bold text-indigo-900 truncate">
-                        {order.productionFileName || "ไฟล์ผลิต (.DST)"}
-                      </p>
-                    </div>
+                {order.isUrgent && (
+                  <div className="animate-pulse bg-rose-600 text-white px-6 py-2 rounded-full font-black text-lg shadow-md border-2 border-white mx-auto w-fit">
+                    🔥 งานด่วนพิเศษ 🔥
                   </div>
-                  {order.productionFileUrl ? (
-                    <a
-                      href={order.productionFileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block w-full text-center bg-indigo-600 text-white py-3 rounded-xl text-sm font-bold shadow-md hover:bg-indigo-700 hover:shadow-lg transition-all active:scale-95"
-                    >
-                      ดาวน์โหลดไฟล์ .DST
-                    </a>
-                  ) : (
-                    <div className="w-full text-center py-3 bg-slate-200 rounded-xl text-sm font-bold text-slate-400 cursor-not-allowed">
-                      ไม่พบไฟล์
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-4 pt-4">
-                {(order.status === "STOCK_RECHECKED" ||
-                  order.status === "IN_PRODUCTION") && (
-                  <button
-                    onClick={() => handleAction("START")}
-                    disabled={order.status === "IN_PRODUCTION"}
-                    className={`w-full p-6 rounded-3xl flex items-center justify-center gap-4 shadow-xl active:scale-95 transition-all text-white
-                        ${
-                          order.status === "IN_PRODUCTION"
-                            ? "bg-slate-100 text-slate-400 cursor-not-allowed hidden"
-                            : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-200"
-                        }`}
-                  >
-                    <HiOutlineClock className="w-8 h-8" />
-                    <div className="text-left">
-                      <p className="text-xs font-medium opacity-80 uppercase">
-                        กดเพื่อเริ่มงาน
-                      </p>
-                      <p className="font-black text-2xl">
-                        เริ่มงานผลิต (Start)
-                      </p>
-                    </div>
-                  </button>
-                )}
-
-                {order.status === "IN_PRODUCTION" && (
-                  <button
-                    onClick={() => handleAction("FINISH")}
-                    className="w-full bg-sky-600 hover:bg-sky-500 p-6 rounded-3xl flex items-center justify-center gap-4 shadow-xl shadow-sky-200 active:scale-95 transition-all text-white animate-bounce-subtle"
-                  >
-                    <HiOutlineCheckCircle className="w-10 h-10" />
-                    <div className="text-left">
-                      <p className="text-xs font-medium opacity-80 uppercase">
-                        ผลิตเสร็จแล้ว
-                      </p>
-                      <p className="font-black text-2xl">ส่งต่อ QC (Finish)</p>
-                    </div>
-                  </button>
-                )}
+              <div className="text-center md:text-right">
+                <p className="text-lg font-bold opacity-70 uppercase tracking-[0.2em] mb-1">
+                  กำหนดส่ง (Due Date)
+                </p>
+                <p className="text-5xl font-black">
+                  {order.dueDate
+                    ? new Date(order.dueDate).toLocaleDateString("th-TH")
+                    : "-"}
+                </p>
               </div>
             </div>
 
-            {/* RIGHT COLUMN: Visuals & Specs (8 Cols) */}
-            <div className="lg:col-span-8 space-y-8">
-              {/* 1. Layout Drafts / Mockups (BIG) */}
-              {order.draftImages && order.draftImages.length > 0 && (
-                <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
-                  <h3 className="text-xl font-black flex items-center gap-3 text-slate-800 mb-6">
-                    <span className="bg-indigo-100 text-indigo-600 p-2 rounded-lg">
-                      🖼️
-                    </span>
-                    ภาพร่างวางแบบ (Overall Layout)
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {order.draftImages.map((img, i) => (
-                      <div
-                        key={i}
-                        className="group relative rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50"
-                      >
-                        <img
-                          src={img}
-                          className="w-full h-full object-contain max-h-[500px]"
-                          alt={`Draft ${i + 1}`}
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                          <a
-                            href={img}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="bg-white text-slate-900 px-6 py-2 rounded-full font-bold shadow-lg transform scale-90 group-hover:scale-100 transition-all"
-                          >
-                            เปิดดูรูปใหญ่ 🔍
-                          </a>
-                        </div>
-                        <div className="absolute top-3 left-3 bg-black/60 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm">
-                          แบบที่ {i + 1}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 2. Detailed Embroidery Specs */}
-              <div>
-                <h3 className="text-2xl font-black flex items-center gap-3 text-slate-800 mb-6">
+            {/* 2. Main Visual - HUGE Artwork Display */}
+            <div className="bg-white rounded-[2.5rem] border-2 border-slate-200 shadow-lg overflow-hidden relative min-h-[500px] flex flex-col">
+              <div className="bg-slate-100 px-8 py-4 border-b border-slate-200 flex items-center justify-between">
+                <h3 className="text-2xl font-black text-slate-700 flex items-center gap-3 uppercase tracking-wide">
                   <span className="bg-indigo-600 text-white p-2 rounded-lg">
                     <HiOutlineClipboardDocumentList className="w-6 h-6" />
                   </span>
-                  รายละเอียดตำแหน่งปัก (
-                  {
-                    (order.embroideryDetails &&
-                    order.embroideryDetails.length > 0
-                      ? order.embroideryDetails
-                      : order.positions || []
-                    ).length
-                  }{" "}
-                  จุด)
+                  ภาพใบงาน (Job Sheet)
                 </h3>
+                {order.productionStatus === "IN_PRODUCTION" && (
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => handleAction("FINISH")}
+                      className="bg-sky-500 hover:bg-sky-600 text-white px-8 py-3 rounded-xl font-black text-xl shadow-lg shadow-sky-200 hover:-translate-y-1 transition-all flex items-center gap-2 animate-pulse-slow"
+                    >
+                      <HiOutlineCheckCircle className="w-6 h-6" />
+                      ผลิตเสร็จสิ้น
+                    </button>
+                  </div>
+                )}
+              </div>
 
-                <div className="space-y-6">
-                  {(() => {
-                    const tablePositions = order.positions || [];
-                    const jsonPositions = (order.embroideryDetails || []).map(
-                      (p) => ({
-                        position: p.position,
-                        note: p.note,
-                        width: p.width,
-                        height: p.height,
-                        isFreeOption: p.isFreeOption,
-                        freeOptionName: p.freeOptionName,
-                        mockupUrl: p.mockupUrl,
-                        logoUrl: p.logoUrl,
-                        textToEmb: p.textToEmb,
-                      }),
-                    );
-                    const specs =
-                      jsonPositions.length > 0 ? jsonPositions : tablePositions;
+              <div className="flex-1 bg-slate-50 relative p-8 flex items-center justify-center">
+                {/* Scan Trigger: Logic handled by backend on view */}
+                {order.artworkUrl ? (
+                  <img
+                    src={order.artworkUrl}
+                    className="max-h-[70vh] w-auto object-contain drop-shadow-2xl"
+                    alt="Job Sheet"
+                  />
+                ) : (
+                  <div className="text-center py-20">
+                    <HiOutlineClipboardDocumentList className="w-32 h-32 text-slate-300 mx-auto mb-6" />
+                    <p className="text-3xl font-black text-slate-400">
+                      รอใบงานจากกราฟิก
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* Position List */}
+            {/* 3. Specs Grid - Clean & Balanced */}
+            <div>
+              <h3 className="text-3xl font-black text-slate-800 mb-8 flex items-center gap-3">
+                <span className="w-12 h-12 bg-slate-800 text-white rounded-xl flex items-center justify-center text-xl">
+                  {order.positions?.length || 0}
+                </span>
+                ตำแหน่งปัก
+              </h3>
 
-                    return specs.map((pos, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-white rounded-[2rem] overflow-hidden border border-slate-200 shadow-sm flex flex-col md:flex-row"
-                      >
-                        {/* Position Header (Mobile only) */}
-                        <div className="md:hidden bg-slate-100 p-4 border-b border-slate-200 flex items-center">
-                          <span className="bg-indigo-600 text-white text-xs font-black px-3 py-1 rounded-full mr-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+                {(() => {
+                  const tablePositions = order.positions || [];
+                  const jsonPositions = (order.embroideryDetails || []).map(
+                    (p) => ({
+                      position: p.position,
+                      note: p.note,
+                      details: p.details,
+                      width: p.width,
+                      height: p.height,
+                      isFreeOption: p.isFreeOption,
+                      freeOptionName: p.freeOptionName,
+                      mockupUrl: p.mockupUrl,
+                      logoUrl: p.logoUrl,
+                      textToEmb: p.textToEmb,
+                      threadColor: p.threadColor,
+                    }),
+                  );
+                  const specs =
+                    jsonPositions.length > 0 ? jsonPositions : tablePositions;
+
+                  return specs.map((pos, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white rounded-[2rem] border-2 border-slate-100 shadow-xl overflow-hidden flex flex-col h-full"
+                    >
+                      {/* Position Header */}
+                      <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-indigo-600 text-white rounded-lg flex items-center justify-center font-black text-xl shadow-lg shadow-indigo-200">
                             {idx + 1}
-                          </span>
-                          <span className="text-lg font-black text-slate-800">
+                          </div>
+                          <h4 className="text-2xl font-black text-slate-800">
                             {pos.position}
-                          </span>
+                          </h4>
                         </div>
-
-                        {/* Image Column (Left on Desktop) */}
-                        <div className="w-full md:w-5/12 bg-slate-50 p-6 flex flex-col gap-4 border-r border-slate-100">
-                          <div className="hidden md:flex items-center gap-3 mb-2">
-                            <span className="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-black text-sm shadow-md shadow-indigo-200">
-                              {idx + 1}
+                        {!pos.isFreeOption && (
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-slate-400 uppercase block">
+                              Size (cm)
                             </span>
-                            <span className="text-xl font-black text-slate-800">
-                              {pos.position}
+                            <span className="text-xl font-black text-slate-700">
+                              {pos.width || 0} x {pos.height || 0}
                             </span>
                           </div>
+                        )}
+                      </div>
 
+                      <div className="p-6 flex-1 flex flex-col gap-6">
+                        {/* Logo / Option Display */}
+                        <div className="flex-1 min-h-[200px] bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center relative overflow-hidden group">
                           {pos.isFreeOption ? (
-                            <div className="flex-1 min-h-[200px] bg-sky-50 border-4 border-sky-100 border-dashed rounded-3xl flex flex-col items-center justify-center text-center p-6">
-                              <p className="text-sm font-bold text-sky-400 uppercase mb-3">
-                                รูปแบบ (Option)
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-sky-400 uppercase mb-2">
+                                OPTION
                               </p>
-                              <p className="text-5xl font-black text-sky-600 tracking-tight">
+                              <p className="text-3xl font-black text-sky-600">
                                 {pos.freeOptionName || "เซฟตี้"}
                               </p>
                             </div>
+                          ) : pos.logoUrl ? (
+                            <img
+                              src={pos.logoUrl}
+                              className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500"
+                              alt="Logo"
+                            />
                           ) : (
-                            <div className="space-y-4">
-                              <div className="relative group rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
-                                <p className="absolute top-2 left-2 bg-slate-900/10 text-slate-600 text-[10px] font-black uppercase px-2 py-1 rounded backdrop-blur-md">
-                                  Mockup
-                                </p>
-                                {pos.mockupUrl ? (
-                                  <img
-                                    src={pos.mockupUrl}
-                                    className="w-full h-auto object-contain"
-                                    alt="Mockup"
-                                  />
-                                ) : (
-                                  <div className="h-40 flex items-center justify-center text-slate-300 font-bold italic">
-                                    No Mockup
-                                  </div>
-                                )}
-                                {pos.mockupUrl && (
-                                  <a
-                                    href={pos.mockupUrl}
-                                    target="_blank"
-                                    className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  >
-                                    <span className="bg-white px-3 py-1 rounded-full text-xs font-bold">
-                                      Zoom
-                                    </span>
-                                  </a>
-                                )}
-                              </div>
-                              <div className="relative group rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
-                                <p className="absolute top-2 left-2 bg-slate-900/10 text-slate-600 text-[10px] font-black uppercase px-2 py-1 rounded backdrop-blur-md">
-                                  Logo
-                                </p>
-                                {pos.logoUrl ? (
-                                  <img
-                                    src={pos.logoUrl}
-                                    className="w-full h-auto object-contain"
-                                    alt="Logo"
-                                  />
-                                ) : (
-                                  <div className="h-20 flex items-center justify-center text-slate-300 font-bold italic">
-                                    No Logo
-                                  </div>
-                                )}
-                              </div>
+                            <div className="text-center opacity-30">
+                              <p className="font-black text-lg text-slate-400">
+                                NO LOGO
+                              </p>
                             </div>
                           )}
                         </div>
 
-                        {/* Details Column (Right on Desktop) */}
-                        <div className="w-full md:w-7/12 p-6 flex flex-col justify-center space-y-4">
-                          {/* Thread Color / Note */}
-                          <div className="bg-amber-50 p-5 rounded-2xl border-l-4 border-amber-400">
-                            <p className="text-xs text-amber-800 uppercase font-bold mb-1 flex items-center gap-2">
+                        {/* Thread Color */}
+                        {pos.threadColor && (
+                          <div className="bg-indigo-50 border-l-4 border-indigo-500 px-5 py-4 rounded-r-xl">
+                            <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1 flex items-center gap-2">
                               🎨 สีด้าย (Thread Color)
                             </p>
-                            <p className="text-2xl font-black text-amber-950">
-                              {pos.note || "-"}
+                            <p className="text-2xl font-black text-indigo-900 leading-none">
+                              {pos.threadColor}
                             </p>
                           </div>
+                        )}
 
-                          {/* Text To Emb */}
-                          {pos.textToEmb && (
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                              <p className="text-xs text-slate-400 uppercase font-bold mb-2">
-                                📝 หมายเหตุ (Note)
-                              </p>
-                              <p className="text-lg font-bold text-slate-700 leading-relaxed">
-                                {pos.textToEmb}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Dimensions */}
-                          {!pos.isFreeOption && (
-                            <div className="flex gap-4">
-                              <div className="flex-1 bg-slate-100 p-4 rounded-2xl text-center">
-                                <p className="text-[10px] font-black text-slate-400 uppercase">
-                                  กว้าง (W)
-                                </p>
-                                <p className="text-3xl font-black text-slate-800">
-                                  {pos.width || "0"}
-                                </p>
-                                <p className="text-[10px] text-slate-400">cm</p>
-                              </div>
-                              <div className="flex-1 bg-slate-100 p-4 rounded-2xl text-center">
-                                <p className="text-[10px] font-black text-slate-400 uppercase">
-                                  สูง (H)
-                                </p>
-                                <p className="text-3xl font-black text-slate-800">
-                                  {pos.height || "0"}
-                                </p>
-                                <p className="text-[10px] text-slate-400">cm</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        {/* Note / Text */}
+                        {(pos.note || pos.details || pos.textToEmb) && (
+                          <div className="bg-amber-50 rounded-xl p-5 border border-amber-100">
+                            <p className="text-[10px] font-bold text-amber-600 uppercase mb-2">
+                              Note / Text
+                            </p>
+                            <p className="text-lg font-bold text-amber-900 leading-snug">
+                              {pos.textToEmb && `"${pos.textToEmb}"`}{" "}
+                              {pos.textToEmb &&
+                                (pos.note || pos.details) &&
+                                "-"}{" "}
+                              {pos.note || pos.details}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    ));
-                  })()}
-                </div>
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
           </div>

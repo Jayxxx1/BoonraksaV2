@@ -14,7 +14,6 @@ import orderRoutes from './modules/orders/order.routes.js';
 import stockRoutes from './routes/stockRoutes.js';
 import blockRoutes from './routes/blockRoutes.js';
 import threadRoutes from './routes/threadRoutes.js';
-import productionReportRoutes from './routes/productionReportRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import { getCategories } from './controllers/productController.js';
 
@@ -57,7 +56,6 @@ app.use('/api/stock', stockRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/blocks', blockRoutes);
 app.use('/api/threads', threadRoutes);
-app.use('/api/production-reports', productionReportRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 app.use('/api/upload', uploadRoutes);

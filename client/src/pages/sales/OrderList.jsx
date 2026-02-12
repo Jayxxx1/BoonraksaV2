@@ -220,11 +220,30 @@ export default function OrderList() {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="">กรองสถานะละเอียด...</option>
-                {statusGroups[activeTab].map((st) => (
-                  <option key={st} value={st}>
-                    {statusLabels[st] || st}
+                <optgroup label="สถานะ Pre-order (จัดซื้อ)">
+                  <option value="WAITING_PURCHASE_INPUT">
+                    รอระบุวันเข้า (WAITING_PURCHASE_INPUT)
                   </option>
-                ))}
+                  <option value="PURCHASE_CONFIRMED">
+                    จัดซื้อคอนเฟิร์มแล้ว (CONFIRMED)
+                  </option>
+                  <option value="WAITING_ARRIVAL">
+                    รอสินค้าเข้าคลัง (WAITING_ARRIVAL)
+                  </option>
+                  <option value="DELAYED_ROUND_1">
+                    ล่าช้า: รอบที่ 1 (DELAYED_R1)
+                  </option>
+                  <option value="DELAYED_ROUND_2">
+                    ล่าช้า: รอบที่ 2 (CRITICAL)
+                  </option>
+                </optgroup>
+                <optgroup label="สถานะออเดอร์">
+                  {statusGroups[activeTab].map((st) => (
+                    <option key={st} value={st}>
+                      {statusLabels[st] || st}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
           </div>
@@ -288,12 +307,19 @@ export default function OrderList() {
                             >
                               {order.jobId}
                             </span>
-                            {order.isUrgent && (
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8.5px] font-black uppercase rounded w-fit">
-                                <HiOutlineFire className="w-2.5 h-2.5" />
-                                ด่วน
-                              </div>
-                            )}
+                            <div className="flex flex-wrap gap-1">
+                              {order.isUrgent && (
+                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8.5px] font-black uppercase rounded w-fit">
+                                  <HiOutlineFire className="w-2.5 h-2.5" />
+                                  ด่วน
+                                </div>
+                              )}
+                              {order.hasPreorder && (
+                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8.5px] font-black uppercase rounded w-fit border border-amber-200">
+                                  PRE
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -307,7 +333,22 @@ export default function OrderList() {
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          {getStatusBadge(order.status)}
+                          <div className="flex flex-col gap-1">
+                            {order.displayStatusLabel ? (
+                              <span
+                                className={`px-2.5 py-1.5 rounded-xl text-[12px] font-black uppercase tracking-wider border transition-all duration-300 w-fit ${statusColors[order.status]?.bg || "bg-slate-100"} ${statusColors[order.status]?.text || "text-slate-700"} ${statusColors[order.status]?.border || "border-slate-200"}`}
+                              >
+                                {order.displayStatusLabel}
+                              </span>
+                            ) : (
+                              getStatusBadge(order.status)
+                            )}
+                            {order.subStatusLabel && (
+                              <span className="text-[10px] font-black text-orange-600 animate-pulse">
+                                {order.subStatusLabel}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           {order.trackingNo ? (
@@ -400,6 +441,11 @@ export default function OrderList() {
                         <div className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8px] font-black uppercase rounded w-fit">
                           <HiOutlineFire className="w-2.5 h-2.5" />
                           ด่วน
+                        </div>
+                      )}
+                      {order.hasPreorder && (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase rounded w-fit border border-amber-200">
+                          PRE-ORDER
                         </div>
                       )}
                     </div>

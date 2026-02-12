@@ -34,7 +34,7 @@ const ShiftReport = () => {
   const fetchReports = useCallback(async () => {
     try {
       const res = await axios.get(
-        "http://localhost:8000/api/production-reports",
+        "http://localhost:8000/api/orders/reports/daily",
         {
           headers: getAuthHeader(),
         },
@@ -53,7 +53,7 @@ const ShiftReport = () => {
     e.preventDefault();
     try {
       await axios.post(
-        "http://localhost:8000/api/production-reports",
+        "http://localhost:8000/api/orders/reports/daily",
         formData,
         {
           headers: getAuthHeader(),

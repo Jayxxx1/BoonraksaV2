@@ -20,12 +20,16 @@ export const getOrderActionMap = (order, user) => {
     order.qcId === user.id
   );
 
+  // Pre-order restrictions for Sales (HARD RULE)
+  const isPreorderPending = order.hasPreorder && order.preorderSubStatus !== PreorderStatus.ARRIVED;
+  const isRestrictiveSales = role === UserRole.SALES && isPreorderPending;
+
   return {
     // General Actions
     canView: true,
     canEditSpecs: (isAdmin || role === UserRole.GRAPHIC) && [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status),
-    canCancel: (isAdmin || (isCreator && [OrderStatus.PENDING_ARTWORK, OrderStatus.STOCK_ISSUE].includes(status))) && status !== OrderStatus.CANCELLED,
-    canMarkUrgent: isAdmin || (isCreator && status !== OrderStatus.COMPLETED && status !== OrderStatus.CANCELLED),
+    canCancel: (isAdmin || (isCreator && [OrderStatus.PENDING_ARTWORK, OrderStatus.STOCK_ISSUE].includes(status) && !isRestrictiveSales)) && status !== OrderStatus.CANCELLED,
+    canMarkUrgent: isAdmin || (isCreator && status !== OrderStatus.COMPLETED && status !== OrderStatus.CANCELLED && !isRestrictiveSales),
     
     // Workflow Actions
     canClaim: !isClaimedByMe && !isAdmin && (
@@ -68,8 +72,12 @@ export const getOrderActionMap = (order, user) => {
     canShip: (isAdmin || role === UserRole.DELIVERY) && status === OrderStatus.READY_TO_SHIP && order.paymentStatus === PaymentStatus.PAID,
     
     // Financial Actions
-    canUploadSlip: true, // Anyone can upload a slip usually, or restricted to Sales/Admin
+    canUploadSlip: isAdmin || role === UserRole.SALES || role === UserRole.DELIVERY,
     canVerifyPayment: isAdmin || role === UserRole.FINANCE,
+
+    // UI Visibility
+    canViewPreorder: isAdmin || [UserRole.SALES, UserRole.PURCHASING, UserRole.STOCK, UserRole.PRODUCTION].includes(role),
+    canEditPreorder: isAdmin || role === UserRole.PURCHASING,
   };
 };
 

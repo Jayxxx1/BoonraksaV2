@@ -45,7 +45,7 @@ export const generateJobSheetPDF = async (order) => {
           .page-container {
             width: 210mm;
             min-height: 297mm;
-            padding: 8mm 12mm;
+            padding: 5mm 8mm; /* Reduced padding */
             margin: auto;
             position: relative;
           }
@@ -55,9 +55,9 @@ export const generateJobSheetPDF = async (order) => {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 15px;
+            margin-bottom: 8px; /* Reduced */
             border-bottom: 2px solid #0f172a;
-            padding-bottom: 13px;
+            padding-bottom: 8px; /* Reduced */
           }
 
           .header-left h1 {
@@ -131,17 +131,17 @@ export const generateJobSheetPDF = async (order) => {
 
           /* Info Styles */
           .label {
-            font-size: 13px;
+            font-size: 11px; /* Reduced */
             text-transform: uppercase;
             color: #64748b;
             font-weight: bold;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
           }
 
           .value {
-            font-size: 14px;
+            font-size: 12px; /* Reduced */
             font-weight: bold;
-            margin-bottom: 15px;
+            margin-bottom: 8px; /* Reduced */
           }
 
           /* Table Styles */
@@ -155,15 +155,15 @@ export const generateJobSheetPDF = async (order) => {
             background-color: #0f172a;
             color: white;
             text-align: left;
-            padding: 8px 12px;
-            font-size: 13px;
+            padding: 4px 8px; /* Compact */
+            font-size: 11px;
             text-transform: uppercase;
           }
 
           td {
-            padding: 8px 12px;
+            padding: 4px 8px; /* Compact */
             border-bottom: 1px solid #f1f5f9;
-            font-size: 12px;
+            font-size: 11px;
           }
 
           .text-center { text-align: center; }
@@ -201,21 +201,21 @@ export const generateJobSheetPDF = async (order) => {
 
           /* Artwork Area */
           .artwork-container {
-            border: 2px solid #f1f5f9;
-            border-radius: 15px;
+            border: 1px solid #f1f5f9;
+            border-radius: 8px;
             background: #f8fafc;
-            min-height: 200px;
+            min-height: 120px; /* Reduced */
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 15px;
+            padding: 8px;
           }
 
           .artwork-img {
             max-width: 100%;
-            max-height: 260px;
-            border-radius: 8px;
-            box-shadow: 0 4px 13px rgba(0,0,0,0.1);
+            max-height: 150px; /* Reduced to fit */
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
           }
 
           /* Signatures */
@@ -247,16 +247,16 @@ export const generateJobSheetPDF = async (order) => {
         <div class="page-container">
           <div class="header">
             <div class="header-left">
-              <h1>JOB SHEET</h1>
-              <div class="job-id">${order.jobId}</div>
+              <h1>ใบสั่งงาน (JOB SHEET)</h1>
+              <div class="job-id">เลขใบงาน: ${order.displayJobCode || order.jobId || '-'}</div>
               <div style="font-size: 11px; font-weight: bold; margin-bottom: 5px;">
                 ช่องทาง: ${order.salesChannel?.name || '-'} (${order.salesChannel?.code || '-'}) | 
                 บล็อก: ${order.blockType === 'NEW' ? '3 (ใหม่)' : order.blockType === 'EDIT' ? '2 (แก้)' : '1 (เดิม)'} |
-                <b style="color: #4f46e5;">Admin: ${order.sales?.username || '-'}</b>
+                <b style="color: #4f46e5;">ฝ่ายขาย: ${order.sales?.name || order.sales?.username || '-'}</b>
               </div>
               <div>
-                <span class="badge">${order.status}</span>
-                ${order.isUrgent ? '<span class="badge badge-urgent">งานด่วน</span>' : ''}
+                ${/* NO SYSTEM STATUS AS REQUESTED */ ''}
+                ${order.isUrgent ? '<span class="badge badge-urgent">งานด่วนพิเศษ</span>' : ''}
               </div>
             </div>
             <div class="qr-container">
@@ -310,39 +310,71 @@ export const generateJobSheetPDF = async (order) => {
               </thead>
               <tbody>
                 ${(() => {
-                  // Consolidate items by Product + Color
-                  const groups = {};
+                  // 1. Split Items
+                  const standardItems = [];
+                  const preorderItems = [];
                   order.items.forEach(item => {
-                    const key = `${item.productName}-${item.variant.color}`;
-                    if (!groups[key]) {
-                      groups[key] = {
-                        name: item.productName,
-                        color: item.variant.color,
-                        sku: item.variant.sku.split('-')[0], // Base SKU
-                        sizes: {},
-                        total: 0,
-                        price: item.price
-                      };
-                    }
-                    groups[key].sizes[item.variant.size] = (groups[key].sizes[item.variant.size] || 0) + item.quantity;
-                    groups[key].total += item.quantity;
+                    const isPreorder = order.purchaseRequests?.some(pr => pr.variantId === item.variantId);
+                    if (isPreorder) preorderItems.push(item);
+                    else standardItems.push(item);
                   });
 
-                  return Object.values(groups).map(g => `
-                    <tr>
-                      <td>
-                        <div style="font-weight: bold;">${g.name} (${g.color})</div>
-                        <div style="font-size: 11px; color: #4f46e5; font-weight: bold; margin-top: 2px;">
-                          ${Object.entries(g.sizes).map(([size, qty]) => `${size}=${qty}`).join(', ')}
-                        </div>
-                      </td>
-                      <td class="text-right" style="font-size: 16px; font-weight: 900;">${g.total}</td>
-                      <td class="text-right">${parseFloat(g.price).toLocaleString()} ฿</td>
-                    </tr>
-                  `).join('');
+                  // Helper to grouping items
+                  const renderGroupedRows = (items, isPre) => {
+                    const groups = {};
+                    items.forEach(item => {
+                      const key = `${item.productName}-${item.variant.color}`;
+                      if (!groups[key]) {
+                        groups[key] = {
+                          name: item.productName,
+                          color: item.variant.color,
+                          sku: item.variant.sku.split('-')[0],
+                          sizes: {},
+                          total: 0,
+                          price: item.price
+                        };
+                      }
+                      groups[key].sizes[item.variant.size] = (groups[key].sizes[item.variant.size] || 0) + item.quantity;
+                      groups[key].total += item.quantity;
+                    });
+                    
+                    return Object.values(groups).map(g => `
+                      <tr>
+                        <td>
+                          <div style="font-weight: bold;">${g.name} (${g.color})</div>
+                          <div style="font-size: 11px; color: ${isPre ? '#d97706' : '#4f46e5'}; font-weight: bold; margin-top: 2px;">
+                            ${Object.entries(g.sizes).map(([size, qty]) => `${size}=${qty}`).join(', ')}
+                          </div>
+                        </td>
+                        <td class="text-right" style="font-size: 16px; font-weight: 900;">${g.total}</td>
+                        <td class="text-right">${parseFloat(g.price).toLocaleString()} ฿</td>
+                      </tr>
+                    `).join('');
+                  };
+
+                  let html = '';
+                  
+                  // 2. Render Standard Items
+                  if (standardItems.length > 0) {
+                     html += renderGroupedRows(standardItems, false);
+                  }
+
+                  // 3. Render Pre-order Items Section (if exists)
+                  if (preorderItems.length > 0) {
+                    html += `
+                      <tr style="background: #fffbeb; border-top: 1px dashed #cbd5e1;">
+                        <td colspan="3" style="font-weight: 900; color: #64748b; padding: 6px 12px; font-size: 11px;">
+                          รายการสั่งผลิตเพิ่มเติม (ADDITIONAL ITEMS)
+                        </td>
+                      </tr>
+                    `;
+                    html += renderGroupedRows(preorderItems, true);
+                  }
+
+                  return html;
                 })()}
                 ${parseFloat(order.blockPrice || 0) > 0 ? `
-                  <tr style="background: #f8fafc; font-weight: bold;">
+                  <tr style="background: #f8fafc; font-weight: bold; border-top: 1px solid #e2e8f0;">
                     <td colspan="2" class="text-right" style="padding: 6px 15px; font-size: 13px;">ค่าบล็อก (EMBROIDERY BLOCK)</td>
                     <td class="text-right" style="padding: 6px 15px; color: #059669;">${parseFloat(order.blockPrice).toLocaleString()} ฿</td>
                   </tr>
@@ -389,7 +421,7 @@ export const generateJobSheetPDF = async (order) => {
           <div class="grid section">
             <div class="col">
               <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
-                <span>ขนาดงานปัก (EMBROIDERY SPECS)</span>
+                <span>ข้อมูลงานปัก</span>
                 <span style="font-size: 10px; background: #4f46e5; color: white; padding: 2px 8px; border-radius: 4px;">รวม ${((order.embroideryDetails || []).length > 0 ? order.embroideryDetails : (order.positions || [])).length} จุด</span>
               </div>
               ${(() => {
@@ -433,7 +465,7 @@ export const generateJobSheetPDF = async (order) => {
               })()}
             </div>
             <div class="col">
-              <div class="section-title">ภาพร่างจำลองจากแชท (DRAFT MOCKUPS)</div>
+              <div class="section-title">รูปภาพวางแบบให้ลูกค้า</div>
               <div class="artwork-container">
                 ${(order.draftImages || []).length > 0 ? 
                   order.draftImages.map(img => `<img src="${img}" class="artwork-img" style="margin-bottom: 13px;" />`).join('') : 
@@ -572,9 +604,12 @@ export const generateCustomerProofPDF = async (order) => {
       <body>
         <div class="page-container">
           <div class="header">
-            <div class="logo">ใบงาน <span>ตรวจสอบรายละเอียด</span></div>
+            <div class="header-left">
+              <div class="logo">ใบแจ้งรายละเอียดงาน <span>(Proof Sheet)</span></div>
+              <div style="font-size: 16px; font-weight: 800; color: #4f46e5; margin-top: 5px;">เลขใบงาน: ${order.displayJobCode || order.jobId || '-'}</div>
+            </div>
             <div class="doc-type">
-              Admin: ${order.sales?.username || '-'} | ใบแจ้งรายละเอียดงาน
+              ฝ่ายขาย: ${order.sales?.name || order.sales?.username || '-'}
             </div>
           </div>
 
@@ -601,15 +636,44 @@ export const generateCustomerProofPDF = async (order) => {
                   </tr>
                 </thead>
                 <tbody>
-                  ${(order.items || []).map(item => `
-                    <tr>
-                      <td style="font-weight: bold;">
-                        ${item.productName} <span style="font-size: 9px; color: #64748b;">(${item.variant?.color || "-"} / ${item.variant?.size || "-"})</span>
-                      </td>
-                      <td style="text-align: center; font-weight: 800;">${item.quantity}</td>
-                      <td style="text-align: right;">${parseFloat(item.price || 0).toLocaleString()} ฿</td>
-                    </tr>
-                  `).join("")}
+                <tbody>
+                  ${(() => {
+                      // SPLIT ITEMS FOR PROOF SHEET AS WELL
+                      const standardItems = [];
+                      const preorderItems = [];
+                      (order.items || []).forEach(item => {
+                        const isPreorder = order.purchaseRequests?.some(pr => pr.variantId === item.variantId);
+                        if (isPreorder) preorderItems.push(item);
+                        else standardItems.push(item);
+                      });
+
+                      const renderRows = (items, isPre) => items.map(item => `
+                        <tr>
+                          <td style="font-weight: bold;">
+                            ${item.productName} 
+                            <span style="font-size: 9px; color: #64748b;">(${item.variant?.color || "-"} / ${item.variant?.size || "-"})</span>
+                          </td>
+                          <td style="text-align: center; font-weight: 800;">${item.quantity}</td>
+                          <td style="text-align: right;">${parseFloat(item.price || 0).toLocaleString()} ฿</td>
+                        </tr>
+                      `).join("");
+
+                      let html = '';
+                      if (standardItems.length > 0) html += renderRows(standardItems, false);
+                      
+                      if (preorderItems.length > 0) {
+                        html += `
+                          <tr style="background: #f8fafc; border-top: 1px dashed #cbd5e1;">
+                            <td colspan="3" style="font-weight: 900; color: #64748b; font-size: 10px; padding: 6px;">
+                              รายการสั่งผลิตเพิ่มเติม
+                            </td>
+                          </tr>
+                        `;
+                        html += renderRows(preorderItems, true);
+                      }
+                      return html;
+                  })()}
+                </tbody>
                 </tbody>
               </table>
             </div>
@@ -667,7 +731,7 @@ export const generateCustomerProofPDF = async (order) => {
             })()}
           </div>
 
-          <div class="section-title">🖼️ ภาพร่างวางแบบ (LAYOUT DRAFTS)</div>
+          <div class="section-title">รูปภาพวางแบบให้ลูกค้า</div>
           <div class="pos-grid">
             ${(() => {
               const draftImages = order.draftImages || [];

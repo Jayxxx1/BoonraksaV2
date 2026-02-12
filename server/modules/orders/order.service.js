@@ -1,7 +1,7 @@
 import prisma from '../../src/prisma/client.js';
-import { OrderStatus, PaymentStatus, BlockType, UserRole, SubStatus, StatusLabels, RoleLabels } from './order.constants.js';
+import { OrderStatus, PaymentStatus, BlockType, UserRole, SubStatus, StatusLabels, RoleLabels, PreorderStatus } from './order.constants.js';
 import { getOrderActionMap } from './order.permissions.js';
-import { generateJobId, safeNumber } from '../../utils/orderHelpers.js';
+import { safeNumber } from '../../utils/orderHelpers.js';
 import { generateJobSheetPDF, generateCustomerProofPDF } from '../../services/pdfService.js';
 
 class OrderService {
@@ -15,6 +15,16 @@ class OrderService {
     const paid = parseFloat(order.paidAmount || 0);
     const balance = total - paid;
 
+    // --- 🏭 Factory-Grade Production Derived State ---
+    const isReadyForProduction = !!(order.stockRechecked && order.physicalItemsReady && order.graphicJobSheetAttached);
+    
+    // Partial Production Clarification: 
+    // true if at least one item is producible (not purely for stock/pre-order blockers).
+    const isPartialProductionAllowed = order.items.some(item => {
+      const pr = order.purchaseRequests?.find(p => p.variantId === item.variantId);
+      return !pr || pr.quantity === 0; // Item is fully available in local stock
+    });
+
     let normalized = {
       ...order,
       totalPrice: total,
@@ -22,33 +32,54 @@ class OrderService {
       balanceDue: balance,
       isUrgent: !!order.isUrgent,
       actionMap: user ? getOrderActionMap(order, user) : {},
+      jobId: order.displayJobCode || order.jobId, // Map for frontend compatibility
+      // Pre-order Computation
+      items: order.items.map(item => {
+        const pr = order.purchaseRequests?.find(p => p.variantId === item.variantId);
+        const isPreorder = !!pr;
+        const preorderQty = pr ? pr.quantity : 0;
+        const prStatus = pr ? pr.status : null; // Expose status for frontend badges
+        return { ...item, isPreorder, preorderQty, prStatus };
+      }),
+      hasPreorder: (order.preorderSubStatus && order.preorderSubStatus !== PreorderStatus.NONE) || 
+                   order.items.some(item => order.purchaseRequests?.some(pr => pr.variantId === item.variantId)),
+      
+      // Pre-order Context for actionMap/Frontend
+      hasPreorderItems: order.items.some(item => order.purchaseRequests?.some(pr => pr.variantId === item.variantId)),
+      preorderSummary: {
+        totalShortageUnits: order.purchaseRequests?.reduce((acc, pr) => acc + (pr.quantity || 0), 0) || 0
+      },
+
+      isDelayed: order.purchasingEta && order.dueDate && 
+                 new Date(order.purchasingEta).getTime() > new Date(order.dueDate).getTime(),
+      
+      isReadyForProduction,
+      isPartialProductionAllowed,
+      productionStatus: order.productionCompletedAt ? 'PRODUCTION_DONE' : (order.productionStartedAt ? 'IN_PRODUCTION' : 'READY_FOR_PRODUCTION')
     };
 
-    // Role-based privacy: Sales cannot see names of other staff
-    if (user && user.role === UserRole.SALES) {
-      if (normalized.graphic) normalized.graphic = { name: "ฝ่ายกราฟิก" };
-      if (normalized.stock) normalized.stock = { name: "ฝ่ายสต็อก" };
-      if (normalized.production) normalized.production = { name: "ฝ่ายผลิต" };
-      if (normalized.qc) normalized.qc = { name: "ฝ่าย QC" };
-      
-      if (normalized.logs) {
-        // 1. Filter out "minor" logs as requested (Old technical spec logs or noisy updates)
-        const minorActions = ['อัปเดตสเปคทางเทคนิค', '📝 อัปเดตสเปกงาน', 'อัปเดตข้อมูลจัดซื้อ', '📦 อัปเดตสถานะจัดซื้อ (วัสดุ)'];
-        
-        normalized.logs = normalized.logs
-          .filter(log => !minorActions.includes(log.action))
-          .map(log => {
-            const displayName = log.user ? (log.user.name || log.user.username) : "ระบบ";
-            
-            if (!log.user) return { ...log, user: { name: "ระบบ" } };
-            if (log.user.id === user.id) return { ...log, user: { ...log.user, name: displayName } };
-            
-            // Masking for Sales
-            const roleLabel = RoleLabels[log.user.role] || log.user.role;
-            return { ...log, user: { ...log.user, name: roleLabel } };
-          });
+    // Dynamic Status Label & Sub-status for QC_PASSED & READY_TO_SHIP
+    if (normalized.status === OrderStatus.QC_PASSED) {
+      if (balance > 0) {
+        normalized.displayStatusLabel = "รอจัดส่ง";
+        normalized.subStatusLabel = "ยังไม่ชำระคงเหลือ";
+      } else {
+        normalized.displayStatusLabel = "พร้อมจัดส่ง";
       }
-    } else if (normalized.logs) {
+    } else if (normalized.status === OrderStatus.READY_TO_SHIP) {
+      normalized.displayStatusLabel = "พร้อมจัดส่ง";
+    }
+
+    // Role-based privacy & Sanitization
+    if (user) {
+      if (user.role === UserRole.SALES) {
+        normalized = this.sanitizeOrderForSalesRole(normalized, user);
+      } else if (user.role === UserRole.PRODUCTION || user.role === UserRole.PURCHASING) {
+        normalized = this.sanitizeOrderForProductionRole(normalized, user);
+      }
+    }
+
+    if (normalized.logs) {
       normalized.logs = normalized.logs.map(log => {
         const displayName = log.user ? (log.user.name || log.user.username) : "ระบบ";
         return { ...log, user: log.user ? { ...log.user, name: displayName } : { name: "ระบบ" } };
@@ -59,11 +90,71 @@ class OrderService {
   }
 
   /**
+   * Centralized Sanitization for Production/Purchasing Role
+   * Strips financials and internal technical logs.
+   */
+  sanitizeOrderForProductionRole(order, user) {
+    const sanitized = { ...order };
+    
+    // 1. HARD RULE: STRIP TECHNICAL & INTERNAL DATA
+    delete sanitized.systemJobNo;       // Hide global running number
+    delete sanitized.graphicSpec;       // Hide graphic spec (Internal)
+    delete sanitized.productionFileUrl; // Hide DST File
+    delete sanitized.productionFileName;// Hide DST Filename
+    delete sanitized.productionLogs;    // Hide internal production logs
+
+    // 2. FINANCIAL PRIVACY: Production/Purchasing don't need to see sales pricing
+    if (user.role === UserRole.PRODUCTION) {
+      delete sanitized.totalPrice;
+      delete sanitized.paidAmount;
+      delete sanitized.balanceDue;
+      delete sanitized.notes; // Hide Sales Notes to reduce distractions
+    }
+
+    return sanitized;
+  }
+
+  /**
+   * Centralized Sanitization for Sales Role
+   * Masks internal staff names to department labels.
+   */
+  sanitizeOrderForSalesRole(order, user) {
+    const sanitized = { ...order };
+    
+    // Mask Staff Names (Replace with Department Names)
+    if (sanitized.graphic) sanitized.graphic = { ...sanitized.graphic, name: "ฝ่ายกราฟิก", username: "GRAPHIC", id: 0 };
+    if (sanitized.stock) sanitized.stock = { ...sanitized.stock, name: "ฝ่ายสต็อก", username: "STOCK", id: 0 };
+    if (sanitized.production) sanitized.production = { ...sanitized.production, name: "ฝ่ายผลิต", username: "PRODUCTION", id: 0 };
+    if (sanitized.qc) sanitized.qc = { ...sanitized.qc, name: "ฝ่าย QC", username: "QC", id: 0 };
+
+    // Filter Logs (Remove internal technical logs)
+    if (sanitized.logs) {
+      const minorActions = [
+        'อัปเดตสเปคทางเทคนิค', '📝 อัปเดตสเปกงาน', 'อัปเดตข้อมูลจัดซื้อ', 
+        '📦 อัปเดตสถานะจัดซื้อ (วัสดุ)', 'INTERNAL_NOTE', 'สถานะ 👉'
+      ];
+      
+      sanitized.logs = sanitized.logs
+        .filter(log => !minorActions.includes(log.action))
+        .map(log => {
+          if (!log.user) return log;
+          if (log.user.id === user.id) return log; // Own logs visible
+          
+          const roleLabel = RoleLabels[log.user.role] || log.user.role;
+          return { ...log, user: { ...log.user, name: roleLabel, id: 0 } };
+        });
+    }
+
+    return sanitized;
+  }
+
+  /**
    * Standard Include
    */
   getStandardInclude() {
     return {
       items: { include: { variant: { include: { product: true } } } },
+      purchaseRequests: true, // 🆕 Include PR for Pre-order checks
       positions: true,
       sales: { select: { id: true, name: true, role: true, salesNumber: true } },
       graphic: { select: { id: true, name: true, role: true } },
@@ -96,10 +187,11 @@ class OrderService {
     if (!items || items.length === 0) throw new Error('Order must have at least one item');
 
     return await prisma.$transaction(async (tx) => {
-      const { jobId, dailyRunning, orderDate } = await generateJobId(tx, user);
+      // Logic for legacy import
+      // Pre-order Detection Logic (HARD RULE)
+      let needsPurchasing = false;
+      const purchaseRequestsData = [];
 
-      let subStatus = null;
-      const purchaseRequests = [];
       for (const item of items) {
         const variant = await tx.productVariant.findUnique({
           where: { id: parseInt(item.variantId) },
@@ -107,10 +199,13 @@ class OrderService {
         });
         if (!variant) throw new Error(`Product variant ${item.variantId} not found`);
 
-        const qty = safeNumber(item.quantity);
-        if (variant.stock < qty) {
-          subStatus = SubStatus.PURCHASING;
-          purchaseRequests.push({ variantId: variant.id, quantity: qty - variant.stock });
+        const requestedQty = Math.max(0, parseInt(item.quantity) || 0);
+        if (variant.stock < requestedQty) {
+          needsPurchasing = true;
+          purchaseRequestsData.push({
+            variantId: variant.id,
+            quantity: requestedQty - variant.stock
+          });
         }
       }
 
@@ -122,9 +217,12 @@ class OrderService {
       const bTypeMap = { 'บล็อคเดิม': 'OLD', 'บล็อคเดิมเปลี่ยนข้อความ': 'EDIT', 'บล็อคใหม่': 'NEW' };
       const mappedBlockType = BlockType[blockType] || bTypeMap[blockType] || BlockType.OLD;
 
-      const order = await tx.order.create({
+      // Use temporary unique placeholder (Transaction will update this immediately)
+      const initialDisplayCode = `TEMP-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+      let order = await tx.order.create({
         data: {
-          jobId, orderDate, dailyRunning,
+          displayJobCode: initialDisplayCode, // Temporary, will update atomically below
           customerName: customerName || '-',
           customerPhone: customerPhone || '',
           customerAddress: customerAddress || '',
@@ -136,8 +234,8 @@ class OrderService {
           paidAmount: paid,
           balanceDue: balance,
           paymentStatus,
-          status: OrderStatus.PENDING_ARTWORK, // Default status
-          subStatus,
+          status: OrderStatus.PENDING_ARTWORK,
+          preorderSubStatus: needsPurchasing ? PreorderStatus.WAITING_PURCHASE_INPUT : PreorderStatus.NONE,
           dueDate: (dueDate && !isNaN(Date.parse(dueDate))) ? new Date(dueDate) : null,
           notes: notes || '',
           salesId: user.id,
@@ -145,7 +243,7 @@ class OrderService {
           logs: {
             create: {
               action: '🆕 เปิดออเดอร์ใหม่',
-              details: `สร้างออเดอร์ ${jobId} สำเร็จ โดย ${user.name}`,
+              details: `สร้างออเดอร์สำเร็จ โดย ${user.name}${needsPurchasing ? ' (พบสินค้าต้องสั่งซื้อเพิ่ม)' : ''}`,
               userId: user.id
             }
           },
@@ -169,16 +267,26 @@ class OrderService {
               note: pos.note || null
             }))
           }
-        },
+        }
+      });
+
+      // ATOMIC JOB ID GENERATION (HARD RULE)
+      const salesPrefix = user.salesNumber || String(user.id);
+      const finalCode = `${salesPrefix}/${order.systemJobNo}`;
+      
+      order = await tx.order.update({
+        where: { id: order.id },
+        data: { displayJobCode: finalCode },
         include: this.getStandardInclude()
       });
 
       if (paid > 0 && depositSlipUrl) {
         await tx.paymentSlip.create({
-          data: { orderId: order.id, amount: paid, slipUrl: depositSlipUrl, uploadedBy: user.id, note: 'เงินมัดจำ (Initial Deposit)' }
+          data: { orderId: order.id, amount: paid, slipUrl: depositSlipUrl, uploadedBy: user.id, note: 'เงินมัดจำ' }
         });
       }
 
+      // Deduct stock for available items
       for (const item of items) {
         const variant = await tx.productVariant.findUnique({ where: { id: parseInt(item.variantId) }, select: { stock: true } });
         if (variant) {
@@ -189,8 +297,15 @@ class OrderService {
         }
       }
 
-      if (purchaseRequests.length > 0) {
-        await tx.purchaseRequest.createMany({ data: purchaseRequests.map(pr => ({ orderId: order.id, variantId: pr.variantId, quantity: pr.quantity })) });
+      // Create Purchase Requests if needed
+      if (purchaseRequestsData.length > 0) {
+        await tx.purchaseRequest.createMany({
+          data: purchaseRequestsData.map(pr => ({
+            orderId: order.id,
+            variantId: pr.variantId,
+            quantity: pr.quantity
+          }))
+        });
       }
 
       return this.normalize(order, user);
@@ -201,10 +316,45 @@ class OrderService {
    * Get Single Order
    */
   async getOrder(id, user) {
+    const orderIdInt = parseInt(id);
     const order = await prisma.order.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: orderIdInt },
       include: this.getStandardInclude()
     });
+
+    if (!order) return null;
+
+    // --- 🏭 Factory-Grade Scan Trigger (Auto-Start) ---
+    // If production worker views an order that is READY but NOT STARTED, auto-start it.
+    // Idempotency: Run ONLY IF productionStartedAt is null to prevent double-triggering or overwriting timestamps.
+    // IN_PRODUCTION applies to the order lifecycle and does not imply total SKU completion.
+    if (user && user.role === UserRole.PRODUCTION) {
+      const isReady = order.stockRechecked && order.physicalItemsReady && order.graphicJobSheetAttached;
+      if (isReady && !order.productionStartedAt) {
+        console.log(`[Auto-Start] Order ${order.id} transitioning to IN_PRODUCTION (Idempotent Trigger)`);
+        await prisma.order.update({
+          where: { id: orderIdInt },
+          data: {
+            productionStartedAt: new Date(),
+            status: OrderStatus.IN_PRODUCTION,
+            logs: {
+              create: {
+                action: '🏭 เริ่มผลิตอัตโนมัติ (Scan Job Sheet)',
+                details: `เริ่มงานโดยทีมผลิต (กะงานปัจจุบัน)`,
+                userId: user.id
+              }
+            }
+          }
+        });
+        // Fetch fresh state after update to ensure normalized data reflect changes
+        const updatedOrder = await prisma.order.findUnique({
+          where: { id: orderIdInt },
+          include: this.getStandardInclude()
+        });
+        return this.normalize(updatedOrder, user);
+      }
+    }
+
     return this.normalize(order, user);
   }
 
@@ -217,7 +367,7 @@ class OrderService {
 
     if (search) {
       where.OR = [
-        { jobId: { contains: search, mode: 'insensitive' } },
+        { displayJobCode: { contains: search, mode: 'insensitive' } },
         { customerName: { contains: search, mode: 'insensitive' } }
       ];
     }
@@ -238,7 +388,13 @@ class OrderService {
     } else if (view === 'available') {
         if (user.role === UserRole.GRAPHIC) { where.graphicId = null; where.status = { in: [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING] }; }
         else if (user.role === UserRole.STOCK) { where.stockId = null; where.status = { in: [OrderStatus.PENDING_STOCK_CHECK, OrderStatus.STOCK_ISSUE] }; }
-        else if (user.role === UserRole.PRODUCTION) { where.productionId = null; where.status = OrderStatus.STOCK_RECHECKED; }
+        else if (user.role === UserRole.PRODUCTION) { 
+          // Factory-Grade: No individual claim, only show eligible orders
+          where.stockRechecked = true;
+          where.physicalItemsReady = true;
+          where.graphicJobSheetAttached = true;
+          where.productionCompletedAt = null; // Still in progress or ready
+        }
         else if (user.role === UserRole.SEWING_QC) { where.qcId = null; where.status = OrderStatus.PRODUCTION_FINISHED; }
     }
 
@@ -268,7 +424,7 @@ class OrderService {
   async searchOrderByJobId(jobId, user) {
     const order = await prisma.order.findFirst({
       where: {
-        jobId: {
+        displayJobCode: {
           equals: jobId.trim(),
           mode: 'insensitive'
         }
@@ -282,15 +438,67 @@ class OrderService {
    * Update Purchasing Info
    */
   async updatePurchasingInfo(orderId, data, user) {
-    const { purchasingEta, purchasingReason, status } = data;
+    const { purchasingEta, purchasingReason, status, preorderSubStatus } = data;
+    const id = parseInt(orderId);
+
+    // 1. Fetch current order state
+    const currentOrder = await prisma.order.findUnique({
+      where: { id },
+      select: { preorderSubStatus: true, purchasingEta: true }
+    });
+
+    if (!currentOrder) throw new Error('Order not found');
+    
+    const updateData = {
+      purchasingReason,
+      status: status || undefined
+    };
+
+    // 2. Handle ETA Updates
+    if (purchasingEta !== undefined) {
+      if (purchasingEta) {
+        // SETTING DATE
+        updateData.purchasingEta = new Date(purchasingEta);
+        
+        // Auto-transition: If currently waiting for input, move to Waiting Arrival
+        const currentSub = currentOrder.preorderSubStatus;
+        if (!currentSub || currentSub === PreorderStatus.WAITING_PURCHASE_INPUT) {
+          updateData.preorderSubStatus = PreorderStatus.WAITING_ARRIVAL;
+        } 
+        // If updating date while already DELAYED -> Reset to Round 2 Confirmation (or just Waiting Arrival)
+        else if (currentSub === PreorderStatus.DELAYED || currentSub === PreorderStatus.DELAYED_ROUND_2) {
+          updateData.preorderSubStatus = PreorderStatus.WAITING_ARRIVAL_2;
+        }
+      } else {
+        // CLEARING DATE (set to null or empty)
+        updateData.purchasingEta = null;
+        
+        // Revert Status: If currently Waiting Arrival, go back to Input
+        if (currentOrder.preorderSubStatus === PreorderStatus.WAITING_ARRIVAL || 
+            currentOrder.preorderSubStatus === PreorderStatus.WAITING_ARRIVAL_2) {
+          updateData.preorderSubStatus = PreorderStatus.WAITING_PURCHASE_INPUT;
+        }
+      }
+    }
+
+    // 3. Manual Status Override (if provided)
+    if (preorderSubStatus) {
+       updateData.preorderSubStatus = preorderSubStatus;
+    }
+
+    // 4. Final Validation Sanity Check
+    // If resulting status is WAITING_ARRIVAL (any round), MUST have a date
+    const finalStatus = updateData.preorderSubStatus || currentOrder.preorderSubStatus;
+    const finalDate = updateData.purchasingEta !== undefined ? updateData.purchasingEta : currentOrder.purchasingEta;
+
+    if ((finalStatus === PreorderStatus.WAITING_ARRIVAL || finalStatus === PreorderStatus.WAITING_ARRIVAL_2) && !finalDate) {
+      // Fallback: If no date, force to Input
+      updateData.preorderSubStatus = PreorderStatus.WAITING_PURCHASE_INPUT;
+    }
+
     const order = await prisma.order.update({
-      where: { id: parseInt(orderId) },
-      data: {
-        purchasingEta: purchasingEta ? new Date(purchasingEta) : undefined,
-        purchasingReason,
-        status: status || undefined
-        // Removed log creation for purchasing info updates as requested
-      },
+      where: { id },
+      data: updateData, 
       include: this.getStandardInclude()
     });
     return this.normalize(order, user);
@@ -329,22 +537,29 @@ class OrderService {
       // Workflow state changes
       if (action === 'START') {
         const order = await tx.order.findUnique({ where: { id } });
-        if (order && (order.status === OrderStatus.STOCK_RECHECKED || order.status === 'READY_TO_PRODUCE')) {
+        // Only update if not already in production or finished
+        if (order && !order.productionStartedAt) {
            await tx.order.update({
              where: { id },
              data: { 
                status: OrderStatus.IN_PRODUCTION,
-               productionId: user.id
+               productionId: user.id,
+               productionStartedAt: new Date()
              }
            });
         }
       } else if (action === 'COMPLETE') {
-        await tx.order.update({
-          where: { id },
-          data: {
-            status: OrderStatus.PRODUCTION_FINISHED
-          }
-        });
+        const order = await tx.order.findUnique({ where: { id } });
+        // Only update if not already completed
+        if (order && !order.productionCompletedAt) {
+          await tx.order.update({
+            where: { id },
+            data: {
+              status: OrderStatus.PRODUCTION_FINISHED,
+              productionCompletedAt: new Date()
+            }
+          });
+        }
       }
     });
     return true;
@@ -486,6 +701,8 @@ class OrderService {
       where: { id: parseInt(orderId) },
       data: {
         status: OrderStatus.PENDING_STOCK_CHECK,
+        graphicJobSheetAttached: true,
+        readyForProductionAt: new Date(), // Potential ready point if other flags are also true
         logs: { create: { action: '📄 พิมพ์ใบงาน/ส่งต่อสต็อก', details: `ฝ่ายกราฟิก ${user.name} พิมพ์ใบงาน (Job Sheet) และส่งต่อฝ่ายสต็อกแล้ว`, userId: user.id } }
       },
       include: this.getStandardInclude()
@@ -498,6 +715,8 @@ class OrderService {
       where: { id: parseInt(orderId) },
       data: {
         status: OrderStatus.STOCK_RECHECKED,
+        stockRechecked: true,
+        physicalItemsReady: true,
         stockId: user.id,
         logs: { create: { action: '✅ ยืนยันสต็อกครบถ้วน', details: `สต็อก ${user.name} ยืนยันว่าพัสดุครบถ้วน พร้อมสำหรับการผลิต`, userId: user.id } }
       },
@@ -507,11 +726,18 @@ class OrderService {
   }
 
   async startProduction(orderId, user) {
+    const id = parseInt(orderId);
+    const order = await prisma.order.findUnique({ where: { id } });
+    
+    // Idempotency: NEVER overwrite an existing timestamp
+    if (order && order.productionStartedAt) return this.normalize(order, user);
+
     const result = await prisma.order.update({
-      where: { id: parseInt(orderId) },
+      where: { id },
       data: {
         status: OrderStatus.IN_PRODUCTION,
         productionId: user.id,
+        productionStartedAt: new Date(),
         logs: { create: { action: '🏭 เริ่มกระบวนการผลิต', details: `พนักงานฝ่ายผลิต ${user.name} กดเริ่มงาน`, userId: user.id } }
       },
       include: this.getStandardInclude()
@@ -533,7 +759,7 @@ class OrderService {
         isUrgent: false,
         updatedAt: { lte: threeDaysAgo }
       },
-      select: { id: true, jobId: true }
+      select: { id: true, displayJobCode: true }
     });
 
     if (staleOrders.length === 0) return;
@@ -550,13 +776,81 @@ class OrderService {
         data: staleOrders.map(o => ({
           orderId: o.id,
           action: '⚠️ แจ้งเตือน: ออเดอร์ค้างเข้านานกว่า 3 วัน',
-          details: `ระบบปรับออเดอร์ ${o.jobId} เป็นงานด่วนอัตโนมัติเนื่องจากไม่มีการเคลื่อนไหวเกิน 3 วัน`,
+          details: `ระบบปรับออเดอร์ ${o.displayJobCode} เป็นงานด่วนอัตโนมัติเนื่องจากไม่มีการเคลื่อนไหวเกิน 3 วัน`,
           userId: null // System
         }))
       });
     });
 
     return staleOrders.length;
+  }
+
+  /**
+   * Check for Delayed Pre-orders (ETA Missed)
+   */
+  async checkDelayedPreorders() {
+    const today = new Date();
+    
+    // 1. Check Standard Delays (WAITING_ARRIVAL -> DELAYED_ROUND_1)
+    const delayedOrders = await prisma.order.findMany({
+      where: {
+        preorderSubStatus: PreorderStatus.WAITING_ARRIVAL,
+        purchasingEta: { lt: today },
+        status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] }
+      },
+      select: { id: true, displayJobCode: true, purchasingEta: true }
+    });
+
+    // 2. Check Round 2 Delays (WAITING_ARRIVAL_2 (renamed to PURCHASE_CONFIRMED contextually) -> DELAYED_ROUND_2)
+    // Note: User requested WAITING_ARRIVAL -> DELAYED_ROUND_1 -> WAITING_ARRIVAL (re-enter) -> DELAYED_ROUND_2
+    const delayedOrdersRound2 = await prisma.order.findMany({
+      where: {
+        preorderSubStatus: PreorderStatus.PURCHASE_CONFIRMED, // used as "Waiting Arrival Round 2"
+        purchasingEta: { lt: today },
+        status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] }
+      },
+      select: { id: true, displayJobCode: true, purchasingEta: true }
+    });
+
+    if (delayedOrders.length === 0 && delayedOrdersRound2.length === 0) return 0;
+
+    await prisma.$transaction(async (tx) => {
+      // Process Round 1 Delays
+      if (delayedOrders.length > 0) {
+        await tx.order.updateMany({
+          where: { id: { in: delayedOrders.map(o => o.id) } },
+          data: { preorderSubStatus: PreorderStatus.DELAYED_ROUND_1 }
+        });
+
+        await tx.activityLog.createMany({
+          data: delayedOrders.map(o => ({
+            orderId: o.id,
+            action: '⚠️ แจ้งเตือน: ของเข้าล่าช้า (รอบที่ 1)',
+            details: `ระบบเปลี่ยนสถานะเป็น "ล่าช้าครั้งที่ 1" เนื่องจากเกินกำหนดวันที่ ${o.purchasingEta.toLocaleDateString('th-TH')}`,
+            userId: null // System
+          }))
+        });
+      }
+
+      // Process Round 2 Delays (Executive Alert - HARD RULE)
+      if (delayedOrdersRound2.length > 0) {
+        await tx.order.updateMany({
+          where: { id: { in: delayedOrdersRound2.map(o => o.id) } },
+          data: { preorderSubStatus: PreorderStatus.DELAYED_ROUND_2 }
+        });
+
+        await tx.activityLog.createMany({
+          data: delayedOrdersRound2.map(o => ({
+            orderId: o.id,
+            action: '🚨 แจ้งเตือนผู้บริหาร: สินค้าล่าช้าซ้ำซ้อน (รอบที่ 2)',
+            details: `CRITICAL: ออเดอร์ ${o.displayJobCode} ล่าช้าครั้งที่ 2 เกินกำหนด ${o.purchasingEta.toLocaleDateString('th-TH')} โปรดตรวจสอบเพื่อรักษาระดับการบริการ`,
+            userId: null // System
+          }))
+        });
+      }
+    });
+
+    return delayedOrders.length + delayedOrdersRound2.length;
   }
 
   /**
@@ -584,6 +878,24 @@ class OrderService {
       updateData.status = data.returnTo === UserRole.GRAPHIC ? OrderStatus.DESIGNING : OrderStatus.IN_PRODUCTION;
     } else if (data.pass === true && status === OrderStatus.PRODUCTION_FINISHED) {
       updateData.status = OrderStatus.QC_PASSED;
+    }
+
+    // --- 🏭 Factory-Grade Transition (Hardening) ---
+    // IN_PRODUCTION applies to the order lifecycle and does not imply total SKU completion.
+    // Idempotency: Only set productionStartedAt if it's the first time entering this state.
+    if (updateData.status === OrderStatus.IN_PRODUCTION) {
+      const currentOrder = await prisma.order.findUnique({ where: { id: orderIdInt } });
+      if (currentOrder && !currentOrder.productionStartedAt) {
+        updateData.productionStartedAt = new Date();
+      }
+    }
+
+    // Finalize production timestamp
+    if (updateData.status === OrderStatus.PRODUCTION_FINISHED) {
+      const currentOrder = await prisma.order.findUnique({ where: { id: orderIdInt } });
+      if (currentOrder && !currentOrder.productionCompletedAt) {
+        updateData.productionCompletedAt = new Date();
+      }
     }
 
     const statusLabel = StatusLabels[updateData.status] || updateData.status;
@@ -627,14 +939,131 @@ class OrderService {
   }
 
   /**
+   * Update Purchasing Info (Pre-order management)
+   */
+  async updatePurchasingInfo(orderId, data, user) {
+    const { purchasingEta, purchasingReason, confirmArrival } = data;
+    const orderIdInt = parseInt(orderId);
+
+    const currentOrder = await prisma.order.findUnique({ 
+      where: { id: orderIdInt },
+      select: { 
+        id: true, 
+        purchasingEta: true, 
+        purchasingEtaCount: true, 
+        dueDate: true,
+        preorderSubStatus: true 
+      }
+    });
+    if (!currentOrder) throw new Error('ORDER_NOT_FOUND');
+
+    const updateData = {};
+
+    // 1. Role: PURCHASING/ADMIN can update ETA and Reason
+    if (purchasingEta !== undefined || purchasingReason !== undefined) {
+      if (![UserRole.PURCHASING, UserRole.ADMIN].includes(user.role)) {
+        throw new Error('UNAUTHORIZED_ACTION: Only Purchasing can set ETA/Remarks');
+      }
+
+      if (purchasingEta) {
+        const newEta = new Date(purchasingEta);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Validation: No past dates
+        if (newEta < today) {
+          throw new Error('VALIDATION_ERROR: Cannot select a past date for ETA');
+        }
+
+        // Validation: Max 2 updates (Initial set + 1 change)
+        if (purchasingEta !== currentOrder.purchasingEta?.toISOString().split('T')[0]) {
+           if (currentOrder.purchasingEtaCount >= 2) {
+             throw new Error('VALIDATION_ERROR: ETA can only be updated twice (Initial set + 1 change)');
+           }
+           updateData.purchasingEtaCount = currentOrder.purchasingEtaCount + 1;
+           updateData.preorderSubStatus = PreorderStatus.WAITING_ARRIVAL; // ดำเนินการสั่งซื้อ
+        }
+        
+        updateData.purchasingEta = newEta;
+      }
+
+      if (purchasingReason !== undefined) {
+        updateData.purchasingReason = purchasingReason;
+      }
+    }
+
+    // 2. Special Action: Confirm Arrival (PURCHASING/ADMIN only)
+    if (confirmArrival) {
+      if (![UserRole.PURCHASING, UserRole.ADMIN].includes(user.role)) {
+        throw new Error('UNAUTHORIZED_ACTION: Only Purchasing should confirm arrival upon delivery');
+      }
+      updateData.preorderSubStatus = PreorderStatus.ARRIVED;
+      
+      // Also log this major event
+      await prisma.activityLog.create({
+        data: {
+          orderId: orderIdInt,
+          action: '📥 สินค้าเข้าคลังแล้ว (ARRIVED)',
+          details: `ยืนยันโดยฝ่ายขาย (${user.name}). ออเดอร์พร้อมผลิต`,
+          userId: user.id
+        }
+      });
+    }
+
+    const result = await prisma.order.update({
+      where: { id: orderIdInt },
+      data: updateData,
+      include: this.getStandardInclude()
+    });
+
+    return this.normalize(result, user);
+  }
+
+  /**
    * Update Technical Specs
    */
   async updateSpecs(orderId, specs, user) {
-    const result = await prisma.order.update({
-      where: { id: parseInt(orderId) },
-      data: { ...specs }, // Removed log creation for small changes
-      include: this.getStandardInclude()
+    const orderIdInt = parseInt(orderId);
+    
+    // We update atomically using a transaction to ensure positions model is synced
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Update the Order model (for artworkUrl, productionFileUrl, etc.)
+      const { embroideryDetails, ...otherSpecs } = specs;
+      
+      await tx.order.update({
+        where: { id: orderIdInt },
+        data: { ...otherSpecs, embroideryDetails }
+      });
+
+      // 2. Sync Positions Model if provided
+      if (Array.isArray(embroideryDetails)) {
+        // Delete old positions
+        await tx.orderEmbroideryPosition.deleteMany({
+          where: { orderId: orderIdInt }
+        });
+
+        // Create new positions
+        await tx.orderEmbroideryPosition.createMany({
+          data: embroideryDetails.map(pos => ({
+            orderId: orderIdInt,
+            position: pos.position || '-',
+            textToEmb: pos.textToEmb || null,
+            logoUrl: pos.logoUrl || null,
+            mockupUrl: pos.mockupUrl || null,
+            width: pos.width ? parseFloat(pos.width) : null,
+            height: pos.height ? parseFloat(pos.height) : null,
+            note: pos.details || pos.note || null
+          }))
+        });
+      }
+
+      // 3. Return refreshed order
+      return await tx.order.findUnique({
+        where: { id: orderIdInt },
+        include: this.getStandardInclude()
+      });
     });
+
     return this.normalize(result, user);
   }
 
@@ -650,6 +1079,27 @@ class OrderService {
     
     if (type === 'jobsheet') return await generateJobSheetPDF(order);
     return await generateCustomerProofPDF(order);
+  }
+  /**
+   * Daily Production Report (Supervisor Feature)
+   */
+  async createDailyReport(data, user) {
+    return await prisma.dailyProductionReport.create({
+      data: {
+        ...data,
+        foremanId: user.id
+      }
+    });
+  }
+
+  async getDailyReports(filters = {}) {
+    return await prisma.dailyProductionReport.findMany({
+      where: filters,
+      include: {
+        foreman: { select: { id: true, name: true, role: true } }
+      },
+      orderBy: { date: 'desc' }
+    });
   }
 }
 

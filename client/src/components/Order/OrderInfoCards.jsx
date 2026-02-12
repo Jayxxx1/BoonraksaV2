@@ -41,7 +41,7 @@ const OrderInfoCards = ({ order }) => {
           </div>
         </div>
       )}
-      {order.purchasingReason && (
+      {order.isDelayed && order.purchasingReason && (
         <div className="erp-card p-4 bg-orange-50 border-orange-200 flex items-start gap-4 animate-erp-in">
           <div className="p-2 bg-orange-100 rounded text-orange-600">
             <HiOutlineExclamationCircle className="w-5 h-5" />

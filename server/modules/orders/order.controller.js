@@ -137,3 +137,16 @@ export const downloadPDF = asyncHandler(async (req, res) => {
     sendError(res, 'PDF_ERROR', error.message);
   }
 });
+
+/**
+ * Daily Production Reports
+ */
+export const createDailyReport = asyncHandler(async (req, res) => {
+  const report = await orderService.createDailyReport(req.body, req.user);
+  sendSuccess(res, { report }, 'บันทึกรายงานประจำวันเรียบร้อยแล้ว');
+});
+
+export const getDailyReports = asyncHandler(async (req, res) => {
+  const reports = await orderService.getDailyReports(req.query);
+  sendSuccess(res, { reports });
+});

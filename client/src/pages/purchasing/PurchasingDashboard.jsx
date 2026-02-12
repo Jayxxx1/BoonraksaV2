@@ -1,18 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
-import { useAuth } from "../../context/auth-store";
+import api from "../../api/config";
 import {
   HiOutlineClock,
   HiOutlineCheckCircle,
   HiOutlineExclamationCircle,
   HiOutlineClipboardDocumentList,
   HiOutlineMagnifyingGlass,
+  HiOutlineArrowPath,
+  HiOutlineCalendarDays,
 } from "react-icons/hi2";
 import { Link } from "react-router-dom";
 import DateInput from "../../components/Common/DateInput";
 
 export default function PurchasingDashboard() {
-  const { token } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -20,9 +20,8 @@ export default function PurchasingDashboard() {
   const fetchWaitingOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get("http://localhost:8000/api/orders", {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { view: "available", search },
+      const res = await api.get("/orders", {
+        params: { view: "available", search, purchasingMode: true },
       });
       setOrders(res.data.data.orders);
     } catch (err) {
@@ -30,7 +29,7 @@ export default function PurchasingDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [token, search]);
+  }, [search]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -39,146 +38,177 @@ export default function PurchasingDashboard() {
     return () => clearTimeout(timer);
   }, [fetchWaitingOrders, search]);
 
-  const handleUpdateETA = async (orderId, eta, reason) => {
-    try {
-      await axios.patch(
-        `http://localhost:8000/api/orders/${orderId}/purchasing`,
-        {
-          purchasingEta: eta,
-          purchasingReason: reason,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      fetchWaitingOrders();
-    } catch {
-      alert("ไม่สามารถอัปเดตวันของเข้าได้");
-    }
-  };
-
-  const handleConfirmArrival = async (orderId) => {
-    try {
-      await axios.patch(
-        `http://localhost:8000/api/orders/${orderId}/purchasing`,
-        {
-          status: "PENDING_ARTWORK",
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      fetchWaitingOrders();
-    } catch {
-      alert("ไม่สามารถยืนยันข่าวเข้าได้");
-    }
+  const getSubStatusBadge = (subStatus) => {
+    const configs = {
+      WAITING_PURCHASE_INPUT: {
+        label: "รอระบุวันเข้า",
+        bg: "bg-amber-100",
+        text: "text-amber-700",
+      },
+      PURCHASE_CONFIRMED: {
+        label: "คอนเฟิร์มแล้ว",
+        bg: "bg-indigo-100",
+        text: "text-indigo-700",
+      },
+      WAITING_ARRIVAL: {
+        label: "รอพัสดุเข้าคลัง",
+        bg: "bg-blue-100",
+        text: "text-blue-700",
+      },
+      DELAYED_ROUND_1: {
+        label: "ล่าช้า (รอบ 1)",
+        bg: "bg-rose-100",
+        text: "text-rose-700",
+      },
+      DELAYED_ROUND_2: {
+        label: "CRITICAL (รอบ 2)",
+        bg: "bg-slate-900",
+        text: "text-white",
+      },
+      ARRIVED: {
+        label: "มาถึงแล้ว",
+        bg: "bg-emerald-100",
+        text: "text-emerald-700",
+      },
+    };
+    const config = configs[subStatus] || {
+      label: subStatus,
+      bg: "bg-slate-100",
+      text: "text-slate-600",
+    };
+    return (
+      <span
+        className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase ${config.bg} ${config.text} border border-current/20`}
+      >
+        {config.label}
+      </span>
+    );
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-        <h1 className="text-3xl font-black text-slate-800">
-          ฝ่ายจัดซื้อ (Purchasing)
-        </h1>
-
-        <div className="relative group">
-          <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
-          <input
-            type="text"
-            placeholder="ค้นหา Job ID หรือชื่อลูกค้า..."
-            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all w-64 text-xs font-bold shadow-sm"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-6">
-        {loading && orders.length === 0 ? (
-          <div className="bg-white p-12 rounded-[2rem] text-center text-slate-400 font-bold border-2 border-dashed">
-            กำลังโหลดข้อมูลจัดซื้อ...
+    <div className="min-h-screen bg-[#F8FAFC]">
+      <div className="p-8 max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+              <div className="p-2 bg-indigo-600 rounded-2xl text-white">
+                <HiOutlineCalendarDays className="w-6 h-6" />
+              </div>
+              ฝ่ายจัดซื้อ (Purchasing)
+            </h1>
+            <p className="text-slate-500 font-bold ml-14 mt-1">
+              จัดการรายการ Pre-order และติดตามวันเข้าพัสดุ
+            </p>
           </div>
-        ) : orders.length === 0 ? (
-          <div className="bg-white p-12 rounded-[2rem] text-center text-slate-400 font-bold border-2 border-dashed">
-            {search ? "ไม่พบออเดอร์ที่ค้นหา" : "ไม่มีออเดอร์ที่รอสต็อก"}
-          </div>
-        ) : (
-          orders.map((order) => (
-            <div
-              key={order.id}
-              className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between gap-6"
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={fetchWaitingOrders}
+              className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-slate-500 shadow-sm"
             >
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="bg-amber-100 text-amber-700 font-black px-3 py-1 rounded-lg text-sm">
-                    {order.jobId}
-                  </span>
-                  <h3 className="text-xl font-bold text-slate-800">
+              <HiOutlineArrowPath
+                className={`w-5 h-5 ${loading ? "animate-spin" : ""}`}
+              />
+            </button>
+            <div className="relative group">
+              <HiOutlineMagnifyingGlass className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+              <input
+                type="text"
+                placeholder="ค้นหา เลขใบงาน หรือชื่อลูกค้า..."
+                className="pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-600/5 focus:border-indigo-600 transition-all w-80 text-sm font-bold shadow-sm"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {loading && orders.length === 0 ? (
+            <div className="md:col-span-2 lg:col-span-3 bg-white p-12 rounded-[2rem] text-center border-2 border-dashed border-slate-100">
+              <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-3" />
+              <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">
+                กำลังดึงข้อมูล...
+              </p>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="md:col-span-2 lg:col-span-3 bg-white p-12 rounded-[2rem] text-center border-2 border-dashed border-slate-100">
+              <HiOutlineExclamationCircle className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">
+                {search
+                  ? "ไม่พบออเดอร์ที่ตรงกับเงื่อนไข"
+                  : "ไม่มีออเดอร์ที่รอจัดซื้อ"}
+              </p>
+            </div>
+          ) : (
+            orders.map((order) => (
+              <Link
+                key={order.id}
+                to={`/order/${order.id}`}
+                className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-indigo-300 transition-all border-l-4 border-l-indigo-600 group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="bg-slate-100 text-slate-900 font-black px-2 py-0.5 rounded text-[10px]">
+                      {order.jobId}
+                    </div>
+                    {getSubStatusBadge(order.preorderSubStatus)}
+                  </div>
+
+                  <h3 className="text-sm font-black text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors truncate">
                     {order.customerName}
                   </h3>
-                </div>
-                <p className="text-slate-500 mb-4">
-                  {order.items?.length} รายการ | ค้างชำระ: {order.balanceDue} ฿
-                </p>
 
-                <Link
-                  to={`/order/${order.id}`}
-                  className="inline-flex items-center gap-2 mb-4 text-xs font-black text-indigo-600 hover:text-indigo-800 transition-colors uppercase tracking-widest"
-                >
-                  <HiOutlineClipboardDocumentList className="w-4 h-4" />
-                  ดูรายละเอียดออเดอร์
-                </Link>
-
-                <div className="flex flex-wrap gap-4">
-                  <div className="bg-slate-50 p-3 rounded-xl min-w-[150px]">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-                      ETA (วันที่ของจะเข้า)
-                    </p>
-                    <DateInput
-                      value={order.purchasingEta?.split("T")[0]}
-                      onChange={(e) =>
-                        handleUpdateETA(
-                          order.id,
-                          e.target.value,
-                          order.purchasingReason,
-                        )
-                      }
-                      className="bg-transparent font-bold text-slate-700 outline-none w-full"
-                    />
+                  <div className="flex items-center gap-2 mb-3 text-[10px] font-bold text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <HiOutlineClipboardDocumentList className="w-3 h-3" />
+                      {order.items?.length || 0}
+                    </span>
+                    <span className="text-rose-600">
+                      ฿{order.balanceDue?.toLocaleString()}
+                    </span>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded-xl flex-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-                      เหตุผล/หมายเหตุ
-                    </p>
-                    <input
-                      type="text"
-                      defaultValue={order.purchasingReason}
-                      onBlur={(e) =>
-                        handleUpdateETA(
-                          order.id,
-                          order.purchasingEta,
-                          e.target.value,
-                        )
-                      }
-                      placeholder="ใส่เหตุผลกรณีล่าช้า..."
-                      className="bg-transparent font-bold text-slate-700 outline-none w-full"
-                    />
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-400 font-bold uppercase tracking-tighter">
+                        วันของเข้า (ETA):
+                      </span>
+                      <span
+                        className={`font-black ${order.purchasingEta ? "text-indigo-600" : "text-slate-300"}`}
+                      >
+                        {order.purchasingEta
+                          ? new Date(order.purchasingEta).toLocaleDateString(
+                              "th-TH",
+                            )
+                          : "ยังไม่ระบุ"}
+                      </span>
+                    </div>
+                    {order.purchasingReason && (
+                      <div className="bg-slate-50 p-1.5 rounded-lg border border-slate-100/50">
+                        <p className="text-[9px] text-slate-500 font-medium italic line-clamp-1">
+                          {order.purchasingReason}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center">
-                <button
-                  onClick={() => handleConfirmArrival(order.id)}
-                  className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:shadow-emerald-100 transition-all flex items-center gap-2"
-                >
-                  <HiOutlineCheckCircle className="w-6 h-6" />
-                  สินค้าเข้าคลังแล้ว (Confirm)
-                </button>
-              </div>
-            </div>
-          ))
-        )}
+                <div className="mt-3 pt-3 border-t border-slate-50 flex items-center justify-between">
+                  <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all">
+                    จัดการออเดอร์ →
+                  </span>
+                  {order.isUrgent && (
+                    <div
+                      className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"
+                      title="งานด่วน"
+                    />
+                  )}
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

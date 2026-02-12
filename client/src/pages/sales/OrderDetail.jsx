@@ -5,10 +5,15 @@ import {
   HiOutlineCube,
   HiOutlineMagnifyingGlass,
   HiOutlineXMark,
+  HiOutlineTruck,
+  HiOutlineCheckCircle,
+  HiOutlineCalendarDays,
+  HiOutlineChatBubbleBottomCenterText,
 } from "react-icons/hi2";
 import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
 import PaymentModal from "../../components/Payment/PaymentModal";
+import ConfirmationModal from "../../components/Common/ConfirmationModal";
 import { getDisplayName } from "../../utils/namePrivacy";
 import { formatDate, formatTime } from "../../utils/dateFormat"; // Import utils
 import { getStatusLabel, statusColors } from "../../utils/statusMapper";
@@ -52,6 +57,37 @@ const OrderDetail = () => {
   const [qcFailReason, setQCFailReason] = useState("");
   const [qcReturnTo, setQCReturnTo] = useState("PRODUCTION"); // Default to Production
 
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    isDangerous: false,
+    confirmLabel: "ยืนยัน (Confirm)",
+  });
+
+  const openConfirmModal = ({
+    title,
+    message,
+    onConfirm,
+    isDangerous = false,
+    confirmLabel = "ยืนยัน (Confirm)",
+  }) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      onConfirm,
+      isDangerous,
+      confirmLabel,
+    });
+  };
+
+  const closeConfirmModal = () => {
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
   const fetchOrder = useCallback(async () => {
     try {
       setLoading(true);
@@ -59,7 +95,7 @@ const OrderDetail = () => {
       if (res.data.success) {
         const fetchedOrder = res.data.data.order;
         setOrder(fetchedOrder);
-        setEditSpecs(fetchedOrder.embroideryDetails || []);
+        setEditSpecs(fetchedOrder.positions || []);
       }
     } catch (err) {
       console.error(err);
@@ -73,22 +109,12 @@ const OrderDetail = () => {
     fetchOrder();
   }, [fetchOrder]);
 
-  // Auto-refresh removed as per user request
-  // useEffect(() => {
-  //   const interval = setInterval(() => {
-  //     fetchOrder();
-  //   }, 30000); // 30 วินาที
-
-  //   return () => clearInterval(interval);
-  // }, [fetchOrder]);
-
   const downloadJobSheet = async () => {
     try {
       const response = await api.get(`/orders/${orderId}/download/jobsheet`, {
         responseType: "blob",
       });
 
-      // If the response is JSON (error), it will still be a blob
       if (response.data.type === "application/json") {
         const text = await response.data.text();
         const errorData = JSON.parse(text);
@@ -143,7 +169,7 @@ const OrderDetail = () => {
     }
   };
 
-  const handleUpdateStatus = async (endpoint, payload = {}) => {
+  const executeStatusUpdate = async (endpoint, payload = {}) => {
     try {
       setIsUpdating(true);
       await api.patch(`/orders/${orderId}/status`, {
@@ -158,13 +184,84 @@ const OrderDetail = () => {
     }
   };
 
+  const handleUpdateStatus = async (endpoint, payload = {}) => {
+    let title = "ยืนยันการเปลี่ยนสถานะ";
+    let message = "คุณต้องการเปลี่ยนสถานะออเดอร์ใช่หรือไม่?";
+    let confirmLabel = "ยืนยัน (Confirm)";
+    let shouldConfirm = false;
+
+    switch (endpoint) {
+      case "PENDING_STOCK_CHECK":
+        title = "ยืนยันส่งฝ่ายสต็อก (Send to Stock)";
+        message =
+          "คุณตรวจสอบรายละเอียดครบถ้วนแล้ว และต้องการส่งออเดอร์นี้ให้ฝ่ายสต็อกดำเนินการต่อใช่หรือไม่?";
+        confirmLabel = "ส่งสต็อก (Send)";
+        shouldConfirm = true;
+        break;
+      case "STOCK_RECHECKED":
+        title = "ยืนยันสต็อกครบ (Confirm Stock)";
+        message =
+          "คุณยืนยันว่าสินค้าในสต็อกมีเพียงพอและพร้อมสำหรับการผลิต/ดำเนินการต่อใช่หรือไม่?";
+        confirmLabel = "ยืนยัน (Confirm)";
+        shouldConfirm = true;
+        break;
+      case "PRODUCTION_FINISHED":
+        if (payload.pass) {
+          title = "ยืนยันผ่าน QC (QC Pass)";
+          message =
+            "คุณตรวจสอบงานแล้วว่ามีคุณภาพถูกต้องตามสเปค และพร้อมส่งต่อให้ฝ่ายจัดส่งใช่หรือไม่?";
+          confirmLabel = "ผ่าน QC (Pass)";
+        } else {
+          title = "ยืนยันผลิตเสร็จ (Production Finished)";
+          message =
+            "คุณดำเนินการผลิตเสร็จเรียบร้อยและพร้อมส่งต่องานให้ฝ่าย QC ตรวจสอบใช่หรือไม่?";
+          confirmLabel = "ยืนยัน (Confirm)";
+        }
+        shouldConfirm = true;
+        break;
+      case "READY_TO_SHIP":
+        title = "ยืนยันรับงานเข้าฝ่ายจัดส่ง";
+        message =
+          "คุณได้รับสินค้าจากฝ่ายผลิต/QC เรียบร้อยแล้ว และพร้อมสำหรับการแพ็ค/จัดส่งใช่หรือไม่?";
+        confirmLabel = "รับงาน (Receive)";
+        shouldConfirm = true;
+        break;
+      case "COMPLETED": {
+        title = "ยืนยันการจัดส่ง (Complete Order)";
+        const trackingMsg = payload.trackingNo
+          ? `เลขพัสดุ: ${payload.trackingNo}`
+          : "";
+        message = `คุณได้ทำการจัดส่งสินค้าเรียบร้อยแล้วใช่หรือไม่? ${trackingMsg}`;
+        confirmLabel = "ยืนยันจัดส่ง (Complete)";
+        shouldConfirm = true;
+        break;
+      }
+      case "cancel": // Handle cancel via existing modal structure, but if called directly:
+        // note: bump urgent / cancel usually called via specific handlers, but if routed here:
+        shouldConfirm = false;
+        break;
+      default:
+        shouldConfirm = false;
+    }
+
+    if (shouldConfirm) {
+      openConfirmModal({
+        title,
+        message,
+        confirmLabel,
+        onConfirm: () => executeStatusUpdate(endpoint, payload),
+      });
+    } else {
+      executeStatusUpdate(endpoint, payload);
+    }
+  };
+
   const handleUpdateSpecs = async () => {
     try {
       setIsUpdating(true);
       await api.patch(`/orders/${orderId}/specs`, {
         embroideryDetails: editSpecs,
       });
-      // alert("อัปเดตรายละเอียดทางเทคนิคเรียบร้อย"); // Auto-save silently
       await fetchOrder();
     } catch {
       console.error("Failed to update specs");
@@ -175,37 +272,95 @@ const OrderDetail = () => {
 
   const handleQCFail = async () => {
     if (!qcFailReason.trim()) return alert("กรุณาระบุเหตุผลที่ไม่ผ่าน QC");
+    openConfirmModal({
+      title: "ยืนยันผลการตรวจสอบ (Confirm QC Fail)",
+      message: `คุณกำลังจะระบุว่างานนี้ "ไม่ผ่าน QC" และส่งกลับไปยัง ${
+        qcReturnTo === "PRODUCTION" ? "ฝ่ายผลิต" : "ฝ่ายแก้แพทเทิร์น"
+      } ใช่หรือไม่?`,
+      confirmLabel: "ยืนยัน (Confirm)",
+      isDangerous: true,
+      onConfirm: async () => {
+        try {
+          setIsUpdating(true);
+          await api.patch(`/orders/${orderId}/status`, {
+            status: "PRODUCTION_FINISHED",
+            pass: false,
+            reason: qcFailReason,
+            returnTo: qcReturnTo,
+          });
+          setShowQCFailModal(false);
+          setQCFailReason("");
+          await fetchOrder();
+        } catch (err) {
+          alert(err.response?.data?.message || "บันทึกข้อมูลไม่สำเร็จ");
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
+  };
+
+  const handleUpdatePurchasingInfo = async (eta, reason) => {
     try {
       setIsUpdating(true);
-      await api.patch(`/orders/${orderId}/status`, {
-        status: "PRODUCTION_FINISHED",
-        pass: false,
-        reason: qcFailReason,
-        returnTo: qcReturnTo,
+      await api.patch(`/orders/${orderId}/purchasing`, {
+        purchasingEta: eta,
+        purchasingReason: reason,
       });
-      setShowQCFailModal(false);
-      setQCFailReason("");
       await fetchOrder();
     } catch (err) {
-      alert(err.response?.data?.message || "บันทึกข้อมูลไม่สำเร็จ");
+      alert(
+        err.response?.data?.message || "ไม่สามารถอัปเดตข้อมูลการจัดซื้อได้",
+      );
     } finally {
       setIsUpdating(false);
     }
   };
 
+  const handleConfirmArrival = async () => {
+    openConfirmModal({
+      title: "ยืนยันสินค้าเข้าคลัง (Confirm Delivery)",
+      message:
+        "คุณต้องการยืนยันว่าได้รับสินค้าตามจำนวนที่ถูกต้องและพร้อมดำเนินการในขั้นตอนถัดไปใช่หรือไม่?",
+      confirmLabel: "ยืนยัน (Confirm)",
+      onConfirm: async () => {
+        try {
+          setIsUpdating(true);
+          await api.patch(`/orders/${orderId}/purchasing`, {
+            confirmArrival: true,
+          });
+          await fetchOrder();
+          alert("ยืนยันสินค้าเข้าคลังเรียบร้อยแล้ว");
+        } catch (err) {
+          alert(err.response?.data?.message || "ไม่สามารถยืนยันสินค้าเข้าได้");
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
+  };
+
   const handleClaim = async () => {
-    try {
-      setIsUpdating(true);
-      const res = await api.post(`/orders/${orderId}/claim`);
-      if (res.data.success) {
-        setOrder(res.data.data.order);
-        alert("รับงานเรียบร้อยแล้วครับ");
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "ไม่สามารถรับงานได้");
-    } finally {
-      setIsUpdating(false);
-    }
+    openConfirmModal({
+      title: "ยืนยันการรับงาน (Claim Task)",
+      message:
+        "คุณต้องการรับผิดชอบงานนี้ใช่หรือไม่? หลังจากกดรับงานแล้ว คุณจะสามารถแก้ไขข้อมูลและดำเนินการต่อได้",
+      confirmLabel: "รับงาน (Claim)",
+      onConfirm: async () => {
+        try {
+          setIsUpdating(true);
+          const res = await api.post(`/orders/${orderId}/claim`);
+          if (res.data.success) {
+            setOrder(res.data.data.order);
+            alert("รับงานเรียบร้อยแล้วครับ");
+          }
+        } catch (err) {
+          alert(err.response?.data?.message || "ไม่สามารถรับงานได้");
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+    });
   };
 
   const handleFileUpload = async (e, type) => {
@@ -232,7 +387,6 @@ const OrderDetail = () => {
 
       await api.patch(`/orders/${orderId}/specs`, payload);
 
-      // Also update linked block if exists
       if (order.blockId) {
         await api.patch(`/blocks/${order.blockId}`, payload);
       }
@@ -359,7 +513,7 @@ const OrderDetail = () => {
   if (error || !order) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white p-8 rounded-[2rem] shadow-xl text-center max-w-md w-full">
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl text-center max-w-md w-full">
           <HiOutlineExclamationCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-black text-slate-800 mb-2">
             เกิดข้อผิดพลาด
@@ -378,6 +532,7 @@ const OrderDetail = () => {
 
   const isAdmin = user?.role === "ADMIN";
   const isSalesRole = user?.role === "SALES";
+  const isPurchasingRole = user?.role === "PURCHASING";
   const isGraphicRole = user?.role === "GRAPHIC";
   const isStockRole = user?.role === "STOCK";
   const isProductionRole = user?.role === "PRODUCTION";
@@ -387,18 +542,13 @@ const OrderDetail = () => {
   const isFinanceRole = user?.role === "FINANCE";
   const isExecutiveRole = user?.role === "EXECUTIVE";
 
-  // Viewing permissions
-  // Viewing permissions
-
-  // 1. Technical (Graphic Specs, Artwork, Production Files) - RESTRICTED
-  // QC, PRODUCTION, GRAPHIC, ADMIN ดูได้
   const canViewTechnical =
-    isSalesRole || isProductionRole || isQCRole || isGraphicRole || isAdmin; // ฝ่ายขายเห็นได้ทั้งหมด
+    (isSalesRole || isProductionRole || isQCRole || isGraphicRole || isAdmin) &&
+    !isPurchasingRole;
 
-  // 2. Financial (Prices, Deposit Slips, Balance) & General Order Info
-  // QC ดู Financial ได้, รวมทั้ง Sales, Delivery, Exec, Marketing, Finance
   const canViewFinancial =
     isSalesRole ||
+    isPurchasingRole ||
     isQCRole ||
     isDeliveryRole ||
     isExecutiveRole ||
@@ -406,16 +556,10 @@ const OrderDetail = () => {
     isFinanceRole ||
     isAdmin;
 
-  // 3. Draft Images (Mockups) - Sales needs to see this, but not Source Files
-  // Generally everyone involved in the order flow usually sees the draft
-  // QC ไม่ต้องการดู Draft
+  const canViewOrderItems = !isGraphicRole;
 
-  const canViewOrderItems = !isGraphicRole; // ฝ่ายกราฟิกไม่จำเป็นต้องเห็นรายการสินค้า
-
-  // Helper to check if task is claimed by current user
   const isClaimedByMe = (claimId) => claimId === user?.id;
 
-  // Action permissions - Now enforced by claimId
   const canPerformSalesAction = isSalesRole || isAdmin;
   const canPerformGraphicAction =
     (isGraphicRole && isClaimedByMe(order.graphicId)) || isAdmin;
@@ -426,7 +570,6 @@ const OrderDetail = () => {
   const canPerformQCAction = (isQCRole && isClaimedByMe(order.qcId)) || isAdmin;
   const canPerformDeliveryAction = isDeliveryRole || isAdmin;
 
-  // Role-based Dynamic Labels
   const technicalHeader = isProductionRole
     ? "รายละเอียดสเปคการผลิต (Production Specs)"
     : isQCRole
@@ -479,9 +622,157 @@ const OrderDetail = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Order Content */}
         <div className="lg:col-span-2 space-y-6">
           <OrderInfoCards order={order} />
+
+          {order.actionMap?.canViewPreorder && order.hasPreorder && (
+            <div
+              className={`erp-card overflow-hidden ${order.preorderSubStatus === "ARRIVED" ? "bg-emerald-50/20 border-emerald-200" : "bg-amber-50/20 border-amber-200"}`}
+            >
+              <div
+                className={`p-4 border-b flex items-center justify-between ${order.preorderSubStatus === "ARRIVED" ? "border-emerald-100 bg-emerald-50" : "border-amber-100 bg-amber-50"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <HiOutlineTruck
+                    className={`w-5 h-5 ${order.preorderSubStatus === "ARRIVED" ? "text-emerald-600" : "text-amber-600"}`}
+                  />
+                  <h3
+                    className={`font-black text-sm uppercase tracking-wide ${order.preorderSubStatus === "ARRIVED" ? "text-emerald-900" : "text-amber-900"}`}
+                  >
+                    จัดการสถานะสินค้าสั่งผลิต (Procurement Management)
+                  </h3>
+                </div>
+                {order.preorderSubStatus === "ARRIVED" ? (
+                  <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">
+                    สินค้าเข้าคลังแล้ว
+                  </span>
+                ) : (
+                  <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter animate-pulse">
+                    ดำเนินการสั่งซื้อ โปรดรอฝ่ายจัดซื้อบันทึกเข้าระบบ
+                  </span>
+                )}
+              </div>
+
+              <div className="p-6">
+                <div
+                  className={`mb-6 rounded-2xl p-4 border ${order.preorderSubStatus === "ARRIVED" ? "bg-emerald-100/50 border-emerald-200" : "bg-amber-100/50 border-amber-200"}`}
+                >
+                  <p
+                    className={`text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2 ${order.preorderSubStatus === "ARRIVED" ? "text-emerald-700" : "text-amber-700"}`}
+                  >
+                    <HiOutlineCube className="w-4 h-4" />
+                    สรุปรายการที่รอของเข้า (Inventory Shortage)
+                  </p>
+                  <div className="space-y-1.5">
+                    {order.items
+                      .filter((i) => i.isPreorder)
+                      .map((item, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between text-xs"
+                        >
+                          <span className="font-bold text-slate-700">
+                            {item.productName} ({item.variant?.color}/
+                            {item.variant?.size})
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full font-black ${order.preorderSubStatus === "ARRIVED" ? "bg-emerald-200 text-emerald-900" : "bg-amber-200 text-amber-900"}`}
+                          >
+                            สั่งเพิ่มอีก: {item.preorderQty} ตัว
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                <div
+                  className={`grid grid-cols-1 ${
+                    order.isDelayed &&
+                    (order.actionMap?.canEditPreorder || order.purchasingEta) &&
+                    order.preorderSubStatus !== "ARRIVED"
+                      ? "md:grid-cols-2"
+                      : "md:grid-cols-1"
+                  } gap-6 mb-8`}
+                >
+                  {(order.actionMap?.canEditPreorder || order.purchasingEta) &&
+                    order.preorderSubStatus !== "ARRIVED" && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                          <HiOutlineCalendarDays className="w-3.5 h-3.5" />
+                          วันที่สินค้าจะเข้าคลัง (ETA)
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full bg-white border-2 border-slate-200 rounded-2xl px-5 py-4 font-black text-lg text-indigo-600 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all"
+                          value={order.purchasingEta?.split("T")[0] || ""}
+                          min={new Date().toISOString().split("T")[0]}
+                          onChange={(e) =>
+                            handleUpdatePurchasingInfo(
+                              e.target.value,
+                              order.purchasingReason,
+                            )
+                          }
+                          disabled={
+                            isUpdating || !order.actionMap?.canEditPreorder
+                          }
+                        />
+                        <p className="text-[10px] text-slate-400 font-bold italic">
+                          {!order.actionMap?.canEditPreorder
+                            ? "* ติดตามความคืบหน้าจากฝ่ายจัดซื้อ"
+                            : `* แก้ไขได้อีก ${2 - (order.purchasingEtaCount || 0)} ครั้ง`}
+                        </p>
+                      </div>
+                    )}
+
+                  {order.isDelayed && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <HiOutlineChatBubbleBottomCenterText className="w-3.5 h-3.5" />
+                        หมายเหตุจัดซื้อ / สาเหตุที่ล่าช้า (Purchasing Remarks)
+                      </label>
+                      <textarea
+                        placeholder="ระบุความคืบหน้า..."
+                        className="w-full bg-white border-2 border-slate-200 rounded-2xl px-5 py-3 font-bold text-slate-700 h-[80px] focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all placeholder:text-slate-300 placeholder:font-normal text-sm"
+                        defaultValue={order.purchasingReason}
+                        onBlur={(e) =>
+                          handleUpdatePurchasingInfo(
+                            order.purchasingEta,
+                            e.target.value,
+                          )
+                        }
+                        disabled={
+                          isUpdating || !order.actionMap?.canEditPreorder
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {order.actionMap?.canEditPreorder &&
+                  order.preorderSubStatus !== "ARRIVED" && (
+                    <button
+                      onClick={handleConfirmArrival}
+                      disabled={isUpdating}
+                      className="w-full py-5 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white rounded-[2rem] font-black shadow-xl shadow-emerald-200 transition-all flex items-center justify-center gap-3 group"
+                    >
+                      <HiOutlineTruck className="w-6 h-6 animate-bounce" />
+                      <span>ยืนยันว่าสินค้ามาส่งแล้ว (Confirm Delivery)</span>
+                    </button>
+                  )}
+
+                {!order.actionMap?.canEditPreorder &&
+                  !isAdmin &&
+                  order.preorderSubStatus !== "ARRIVED" && (
+                    <div className="bg-slate-100 p-4 rounded-2xl text-center">
+                      <p className="text-xs font-bold text-slate-500 italic">
+                        * รอฝ่ายจัดซื้อยืนยันการรับสินค้าเมื่อของมาถึงหน้างาน
+                      </p>
+                    </div>
+                  )}
+              </div>
+            </div>
+          )}
+
           <OrderItemTable order={order} canViewOrderItems={canViewOrderItems} />
 
           <OrderTechnicalSpecs
@@ -555,7 +846,6 @@ const OrderDetail = () => {
           onClose={() => setShowPaymentModal(false)}
           onSuccess={() => {
             fetchOrder();
-            // Optional: Show success toast
           }}
         />
       )}
@@ -590,7 +880,6 @@ const OrderDetail = () => {
           </div>
         </div>
       )}
-      {/* QC Fail Modal */}
       {showQCFailModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-300">
@@ -667,7 +956,6 @@ const OrderDetail = () => {
         </div>
       )}
 
-      {/* Stock Issue Modal */}
       {showStockIssueModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-300">
@@ -711,6 +999,16 @@ const OrderDetail = () => {
           </div>
         </div>
       )}
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirmModal}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        isDangerous={confirmModal.isDangerous}
+      />
     </div>
   );
 };

@@ -7,10 +7,17 @@ export const statusLabels = {
   STOCK_RECHECKED: "รอการผลิต (สต็อกครบ)",
   IN_PRODUCTION: "กำลังผลิต",
   PRODUCTION_FINISHED: "ผลิตเสร็จสมบูรณ์",
-  QC_PASSED: "ผ่าน QC แล้ว",
-  READY_TO_SHIP: "รอจัดส่ง",
+  QC_PASSED: "รอจัดส่ง",
+  READY_TO_SHIP: "พร้อมจัดส่ง",
   COMPLETED: "สำเร็จ",
   CANCELLED: "ยกเลิกแล้ว",
+  // Pre-order Sub-statuses
+  WAITING_PURCHASE_INPUT: "รอระบุวันของเข้า",
+  PURCHASE_CONFIRMED: "จัดซื้อคอนเฟิร์มแล้ว",
+  WAITING_ARRIVAL: "รอสินค้าเข้าคลัง",
+  DELAYED_ROUND_1: "ล่าช้า (รอบที่ 1)",
+  DELAYED_ROUND_2: "ล่าช้าวิกฤต (รอบที่ 2)",
+  ARRIVED: "สินค้าเข้าคลังแล้ว",
 };
 
 export const actionLabels = {
@@ -54,4 +61,11 @@ export const statusColors = {
   READY_TO_SHIP: { bg: "bg-emerald-100", text: "text-emerald-700", border: "border-emerald-200" },
   COMPLETED: { bg: "bg-green-100", text: "text-green-700", border: "border-green-200" },
   CANCELLED: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
+  // Pre-order colors
+  WAITING_PURCHASE_INPUT: { bg: "bg-amber-100", text: "text-amber-700", border: "border-amber-200" },
+  PURCHASE_CONFIRMED: { bg: "bg-indigo-100", text: "text-indigo-700", border: "border-indigo-200" },
+  WAITING_ARRIVAL: { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200" },
+  DELAYED_ROUND_1: { bg: "bg-rose-100", text: "text-rose-700", border: "border-rose-200" },
+  DELAYED_ROUND_2: { bg: "bg-slate-900", text: "text-white", border: "border-slate-800" },
+  ARRIVED: { bg: "bg-emerald-100", text: "text-emerald-700", border: "border-emerald-200" },
 };

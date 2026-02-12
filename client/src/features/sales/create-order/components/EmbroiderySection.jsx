@@ -16,7 +16,6 @@ const EmbroiderySection = ({
   fetchCustomerBlocks,
   orderInfo,
   setOrderInfo,
-  user,
   onUploadPositionImage,
   isUploadingImage,
 }) => {
@@ -119,226 +118,164 @@ const EmbroiderySection = ({
               </div>
 
               <div className="space-y-3">
-                {/* Block Logic */}
-                {orderInfo.blockType === "บล็อคใหม่" ? (
-                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
-                    <div className="text-[10px] text-slate-500">
-                      ระบุรายละเอียดหรืออัปโหลดไฟล์โลโก้ (ในส่วนแนบไฟล์ด้านล่าง)
-                      สำหรับบล็อคใหม่
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <SearchableSelect
-                      options={blocks}
-                      value={item.blockId}
-                      onChange={(v) => {
-                        const n = [...embroidery];
-                        n[index].blockId = v;
-                        // Find and save block name for display parity
-                        const selectedBlock = blocks.find((b) => b.id === v);
-                        if (selectedBlock)
-                          n[index].blockName = selectedBlock.name;
-                        setEmbroidery(n);
-                      }}
-                      placeholder={
-                        orderInfo.blockType === "บล็อคเดิมเปลี่ยนข้อความ"
-                          ? "ค้นหาบล็อคเดิมที่ต้องการแก้..."
-                          : "ค้นหาบล็อคเดิม..."
-                      }
-                      displayKey="name"
-                      valueKey="id"
-                      imageKey="imageUrl"
-                      className="!py-1.5"
-                    />
-                    <div className="flex justify-between items-start">
-                      {orderInfo.blockType?.includes("บล็อคเดิม") && (
-                        <button
-                          type="button"
-                          onClick={() => fetchCustomerBlocks()}
-                          className="text-[10px] text-indigo-600 underline mt-1"
-                        >
-                          ดึงประวัติบล็อคเก่า (จากเบอร์/ชื่อ)
-                        </button>
+                {/* Block Logic, Details, and Uploads - Hidden if Free Option is selected */}
+                {!item.isFreeOption && (
+                  <>
+                    <div className="space-y-3">
+                      {/* Block Logic */}
+                      {orderInfo.blockType === "บล็อคใหม่" ? (
+                        <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
+                          <div className="text-[10px] text-slate-500">
+                            ระบุรายละเอียดหรืออัปโหลดไฟล์โลโก้
+                            (ในส่วนแนบไฟล์ด้านล่าง) สำหรับบล็อคใหม่
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <SearchableSelect
+                            options={blocks}
+                            value={item.blockId}
+                            onChange={(v) => {
+                              const n = [...embroidery];
+                              n[index].blockId = v;
+                              // Find and save block name for display parity
+                              const selectedBlock = blocks.find(
+                                (b) => b.id === v,
+                              );
+                              if (selectedBlock)
+                                n[index].blockName = selectedBlock.name;
+                              setEmbroidery(n);
+                            }}
+                            placeholder={
+                              orderInfo.blockType === "บล็อคเดิมเปลี่ยนข้อความ"
+                                ? "ค้นหาบล็อคเดิมที่ต้องการแก้..."
+                                : "ค้นหาบล็อคเดิม..."
+                            }
+                            displayKey="name"
+                            valueKey="id"
+                            imageKey="imageUrl"
+                            className="!py-1.5"
+                          />
+                          <div className="flex justify-between items-start">
+                            {orderInfo.blockType?.includes("บล็อคเดิม") && (
+                              <button
+                                type="button"
+                                onClick={() => fetchCustomerBlocks()}
+                                className="text-[10px] text-indigo-600 underline mt-1"
+                              >
+                                ดึงประวัติบล็อคเก่า (จากเบอร์/ชื่อ)
+                              </button>
+                            )}
+                            {orderInfo.blockType === "บล็อคเดิม" && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const n = [...embroidery];
+                                  n[index].isChangePosition =
+                                    !n[index].isChangePosition;
+                                  setEmbroidery(n);
+                                }}
+                              ></button>
+                            )}
+                          </div>
+                        </div>
                       )}
-                      {orderInfo.blockType === "บล็อคเดิม" && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const n = [...embroidery];
-                            n[index].isChangePosition =
-                              !n[index].isChangePosition;
-                            setEmbroidery(n);
-                          }}
-                          className={`text-[10px] px-2 py-0.5 rounded border ${
-                            item.isChangePosition
-                              ? "bg-slate-800 text-white border-slate-800"
-                              : "bg-white text-slate-500 border-slate-200"
-                          }`}
-                        >
-                          เปลี่ยนตำแหน่ง
-                        </button>
-                      )}
+
+                      {/* Details */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase">
+                            หมายเหตุ
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              value={item.textToEmb}
+                              onChange={(e) => {
+                                const n = [...embroidery];
+                                n[index].textToEmb = e.target.value;
+                                setEmbroidery(n);
+                              }}
+                              className="erp-input text-xs py-1.5 w-full bg-indigo-50 border-indigo-100 font-bold"
+                              placeholder="พิมพ์ข้อความที่ต้องการปักที่นี่..."
+                            />
+                          </div>
+                          {/* Common Phrases */}
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {commonPhrases.map((phrase) => (
+                              <button
+                                key={phrase}
+                                type="button"
+                                onClick={() => {
+                                  const n = [...embroidery];
+                                  n[index].textToEmb = phrase;
+                                  setEmbroidery(n);
+                                }}
+                                className="text-[9px] px-1.5 py-0.5 bg-slate-100 hover:bg-indigo-100 text-slate-600 rounded border border-slate-200 transition-colors"
+                              >
+                                +{phrase}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Image Uploads for Position */}
+                      <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-slate-50">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                            ไฟล์โลโก้ (Logo)
+                          </label>
+                          <div className="flex items-center gap-3">
+                            {item.logoUrl ? (
+                              <div className="relative w-16 h-16 rounded-lg border border-slate-200 overflow-hidden bg-slate-50 group">
+                                <img
+                                  src={item.logoUrl}
+                                  className="w-full h-full object-contain"
+                                  alt="Logo"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const n = [...embroidery];
+                                    n[index].logoUrl = "";
+                                    setEmbroidery(n);
+                                  }}
+                                  className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity"
+                                >
+                                  ลบ
+                                </button>
+                              </div>
+                            ) : (
+                              <label className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all">
+                                <HiOutlinePlus className="w-4 h-4 text-slate-400" />
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/*"
+                                  onChange={(e) =>
+                                    onUploadPositionImage(
+                                      index,
+                                      "logo",
+                                      e.target.files[0],
+                                    )
+                                  }
+                                  disabled={
+                                    isUploadingImage === `${index}-logo`
+                                  }
+                                />
+                              </label>
+                            )}
+                            <div className="text-[9px] text-slate-400 leading-tight">
+                              {isUploadingImage === `${index}-logo`
+                                ? "กำลังอัปโหลด..."
+                                : "เฉพาะไฟล์ภาพ\n(LOGO)"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
-
-                {/* Details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">
-                      ข้อความที่จะปัก :
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        value={item.textToEmb}
-                        onChange={(e) => {
-                          const n = [...embroidery];
-                          n[index].textToEmb = e.target.value;
-                          setEmbroidery(n);
-                        }}
-                        className="erp-input text-xs py-1.5 w-full bg-indigo-50 border-indigo-100 font-bold"
-                        placeholder="พิมพ์ข้อความที่ต้องการปักที่นี่..."
-                      />
-                    </div>
-                    {/* Common Phrases */}
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {commonPhrases.map((phrase) => (
-                        <button
-                          key={phrase}
-                          type="button"
-                          onClick={() => {
-                            const n = [...embroidery];
-                            n[index].textToEmb = phrase;
-                            setEmbroidery(n);
-                          }}
-                          className="text-[9px] px-1.5 py-0.5 bg-slate-100 hover:bg-indigo-100 text-slate-600 rounded border border-slate-200 transition-colors"
-                        >
-                          +{phrase}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">
-                      หมายเหตุเพิ่มเติม:
-                    </label>
-                    <input
-                      value={item.note}
-                      onChange={(e) => {
-                        const n = [...embroidery];
-                        n[index].note = e.target.value;
-                        setEmbroidery(n);
-                      }}
-                      className="erp-input text-xs py-1.5 w-full"
-                      placeholder="เช่น สีด้าย, รายละเอียดพิเศษ"
-                    />
-                  </div>
-                </div>
-
-                {/* Image Uploads for Position */}
-                <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-slate-50">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                      ไฟล์โลโก้ (Logo)
-                    </label>
-                    <div className="flex items-center gap-3">
-                      {item.logoUrl ? (
-                        <div className="relative w-16 h-16 rounded-lg border border-slate-200 overflow-hidden bg-slate-50 group">
-                          <img
-                            src={item.logoUrl}
-                            className="w-full h-full object-contain"
-                            alt="Logo"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const n = [...embroidery];
-                              n[index].logoUrl = "";
-                              setEmbroidery(n);
-                            }}
-                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity"
-                          >
-                            ลบ
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all">
-                          <HiOutlinePlus className="w-4 h-4 text-slate-400" />
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept="image/*"
-                            onChange={(e) =>
-                              onUploadPositionImage(
-                                index,
-                                "logo",
-                                e.target.files[0],
-                              )
-                            }
-                            disabled={isUploadingImage === `${index}-logo`}
-                          />
-                        </label>
-                      )}
-                      <div className="text-[9px] text-slate-400 leading-tight">
-                        {isUploadingImage === `${index}-logo`
-                          ? "กำลังอัปโหลด..."
-                          : "เฉพาะไฟล์ภาพ\n(LOGO)"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                      รูปจำลอง (Mockup)
-                    </label>
-                    <div className="flex items-center gap-3">
-                      {item.mockupUrl ? (
-                        <div className="relative w-16 h-16 rounded-lg border border-slate-200 overflow-hidden bg-slate-50 group">
-                          <img
-                            src={item.mockupUrl}
-                            className="w-full h-full object-contain"
-                            alt="Mockup"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const n = [...embroidery];
-                              n[index].mockupUrl = "";
-                              setEmbroidery(n);
-                            }}
-                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity"
-                          >
-                            ลบ
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all">
-                          <HiOutlinePlus className="w-4 h-4 text-slate-400" />
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept="image/*"
-                            onChange={(e) =>
-                              onUploadPositionImage(
-                                index,
-                                "mockup",
-                                e.target.files[0],
-                              )
-                            }
-                            disabled={isUploadingImage === `${index}-mockup`}
-                          />
-                        </label>
-                      )}
-                      <div className="text-[9px] text-slate-400 leading-tight">
-                        {isUploadingImage === `${index}-mockup`
-                          ? "กำลังอัปโหลด..."
-                          : "รูปประกอบ\n(MOCKUP เฉพาะจุด)"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
 
                 {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                   {!item.isFreeOption && (
@@ -385,7 +322,7 @@ const EmbroiderySection = ({
                       className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-0"
                     />
                     <span className="text-[10px] font-bold text-slate-400 uppercase">
-                      ตัวเลือกฟรี (Free Option)
+                      ปักฟรี
                     </span>
                   </label>
                   {item.isFreeOption && (

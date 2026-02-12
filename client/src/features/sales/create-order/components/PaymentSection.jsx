@@ -28,7 +28,7 @@ const PaymentSection = ({
           <div className="flex items-center gap-2">
             <HiOutlinePhoto className="w-5 h-5 text-indigo-600" />
             <h3 className="font-bold text-slate-800 text-sm">
-              รูปภาพม็อคอัพ (Visual Mockups)
+              รูปภาพวางแบบให้ลูกค้า{" "}
             </h3>
           </div>
           <div className="relative">

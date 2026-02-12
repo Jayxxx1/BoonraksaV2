@@ -1,6 +1,24 @@
-# Order Module Changelog
-
 This document tracks all significant structural changes and refactors to the Order Module.
+
+## [2026-02-12] - Factory-Grade Production Workflow Implementation
+
+### Changed
+
+- **Factory-Grade Production**:
+  - Implemented team-based output tracking (removing individual assignments).
+  - Added production readiness flags: `stockRechecked`, `physicalItemsReady`, `graphicJobSheetAttached`.
+  - Implemented `autoStart` transition (QR Scan flow logic) on Order fetch/view.
+  - Added shift-level accountability via `ShiftReport` model for supervisors.
+- **Backend Refactor**:
+  - Consolidated `ProductionReport` logic into the modular `OrderService`.
+  - Added data privacy rules in `normalize` to strip pricing and sales notes for the `PRODUCTION` role.
+  - Bridge legacy status update methods (`printJobSheetSignal`, `confirmStockRecheck`) with the new readiness flags.
+- **Frontend Enhancements**:
+  - `ProductionSearch.jsx`: Transitioned to "Job Sheet" centric view with high-contrast technical specs and large-scale visual.
+  - `ShiftReport.jsx`: Implemented shift output logging for production supervisors.
+- **Security & Privacy**:
+  - Hard-coded financial data stripping for `PRODUCTION` role at the service layer.
+  - Restricted internal staff name visibility for `SALES` role to department labels.
 
 ## [2026-02-10] - Initial Production Refactor
 

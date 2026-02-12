@@ -169,6 +169,7 @@ function App() {
                             "PRODUCTION",
                             "SEWING_QC",
                             "DELIVERY",
+                            "PURCHASING",
                           ]}
                         >
                           <OrderDetail />

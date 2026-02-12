@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../../context/auth-store";
@@ -9,7 +9,9 @@ import {
   HiOutlineCheckCircle,
   HiOutlineArrowLeft,
   HiOutlineExclamationTriangle,
+  HiOutlineClipboardDocumentList,
 } from "react-icons/hi2";
+import PaymentModal from "../../components/Payment/PaymentModal";
 
 export default function DeliveryOrderDetail() {
   const { orderId } = useParams();
@@ -20,30 +22,32 @@ export default function DeliveryOrderDetail() {
   const [loading, setLoading] = useState(true);
   const [trackingNo, setTrackingNo] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  const fetchOrder = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get(
+        `http://localhost:8000/api/orders/${orderId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      setOrder(res.data.data.order);
+      if (res.data.data.order.trackingNo) {
+        setTrackingNo(res.data.data.order.trackingNo);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("ไม่สามารถดึงข้อมูลออเดอร์ได้");
+    } finally {
+      setLoading(false);
+    }
+  }, [orderId, token]);
 
   useEffect(() => {
-    const fetchOrder = async () => {
-      try {
-        setLoading(true);
-        const res = await axios.get(
-          `http://localhost:8000/api/orders/${orderId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        setOrder(res.data.data.order);
-        if (res.data.data.order.trackingNo) {
-          setTrackingNo(res.data.data.order.trackingNo);
-        }
-      } catch (err) {
-        console.error(err);
-        alert("ไม่สามารถดึงข้อมูลออเดอร์ได้");
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchOrder();
-  }, [orderId, token]);
+  }, [fetchOrder]);
 
   const handleCompleteOrder = async () => {
     if (!trackingNo) return alert("กรุณากรอกเลขพัสดุ");
@@ -110,9 +114,16 @@ export default function DeliveryOrderDetail() {
             <p className="text-xs font-bold text-slate-400 uppercase mb-1">
               สถานะปัจจุบัน
             </p>
-            <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl font-black border border-indigo-100">
-              <HiOutlineCube className="w-5 h-5" />
-              {order.status}
+            <div className="flex flex-col items-end gap-1">
+              <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl font-black border border-indigo-100 uppercase tracking-tight">
+                <HiOutlineCube className="w-5 h-5" />
+                {order.displayStatusLabel || order.status}
+              </div>
+              {order.subStatusLabel && (
+                <p className="text-[10px] font-black text-rose-500 uppercase animate-pulse">
+                  ⚠️ {order.subStatusLabel}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -167,11 +178,32 @@ export default function DeliveryOrderDetail() {
               <HiOutlineBanknotes className="w-6 h-6 text-orange-500 shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-bold text-orange-800">
-                  ลูกค้ายงชำระเงินไม่ครบ
+                  ลูกค้ายังชำระเงินไม่ครบ
                 </h3>
-                <p className="text-sm text-orange-700">
-                  กรุณาตรวจสอบการโอนเงินหรือแจ้งฝ่ายขายก่อนทำการจัดส่งสินค้า
+                <p className="text-sm text-orange-700 mb-3">
+                  กรุณาแจ้งลูกค้าผ่านเพจ และอัปโหลดหลักฐานการโอนเงิน
                   (เว้นแต่เป็น COD)
+                </p>
+                <button
+                  onClick={() => setShowPaymentModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl font-black text-sm shadow-lg shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95"
+                >
+                  <HiOutlineClipboardDocumentList className="w-4 h-4" />
+                  แจ้งชำระเงิน / อัปโหลดสลิป
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isPaid && !isCOD && (
+            <div className="bg-emerald-50 border-l-4 border-emerald-400 p-4 rounded-r-xl flex items-start gap-3">
+              <HiOutlineCheckCircle className="w-6 h-6 text-emerald-500 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-bold text-emerald-800">
+                  ชำระเงินเรียบร้อยแล้ว
+                </h3>
+                <p className="text-sm text-emerald-700">
+                  ขอบคุณสำหรับการตรวจสอบ
                 </p>
               </div>
             </div>
@@ -263,6 +295,14 @@ export default function DeliveryOrderDetail() {
           </div>
         </div>
       </div>
+
+      {showPaymentModal && (
+        <PaymentModal
+          order={order}
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={fetchOrder}
+        />
+      )}
     </div>
   );
 }

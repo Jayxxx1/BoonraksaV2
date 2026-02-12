@@ -10,6 +10,11 @@ const api = axios.create({
 // Add a request interceptor to include the token
 api.interceptors.request.use(
   (config) => {
+    // 🆕 Don't attach token to auth endpoints (login/register) to prevent conflation
+    if (config.url.includes('/auth/')) {
+      return config;
+    }
+
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -26,9 +31,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle logout or token refresh if needed
-      // For now, let's just log it. The context will handle it if it sees a 401.
-      console.error('Unauthorized access - potential token expiration');
+      console.error('Unauthorized access - token expired or invalid');
+      
+      // 🆕 Force logout loop breaker
+      // Dispatch a custom event so AuthContext can update state
+      window.dispatchEvent(new Event("auth:logout"));
     }
     return Promise.reject(error);
   }

@@ -81,10 +81,17 @@ export const AuthProvider = ({ children }) => {
     // Check every minute
     const interval = setInterval(checkTimeout, 60000);
 
+    // 🆕 Listen for interceptor-triggered logout
+    const handleForceLogout = () => {
+      logout();
+    };
+    window.addEventListener("auth:logout", handleForceLogout);
+
     return () => {
       events.forEach((event) =>
         window.removeEventListener(event, updateActivity),
       );
+      window.removeEventListener("auth:logout", handleForceLogout);
       clearInterval(interval);
     };
   }, [token]);
