@@ -1,15 +1,17 @@
-import pkg from "@prisma/client";
-const { PrismaClient } = pkg;
-const prisma = new PrismaClient();
+import prisma from "../src/prisma/client.js";
 import { autoUpdateUrgentOrders } from "./orderController.js";
 import { OrderStatus } from "../constants/orderConstants.js";
 
+/**
+ * Get statistics for the current user's role
+ */
 export const getMyStats = async (req, res) => {
   try {
     // 🆕 Auto-update urgency for stale orders
     await autoUpdateUrgentOrders();
 
     const { id, role } = req.user;
+    const userId = parseInt(id); // Defensive: ensure ID is an integer
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -38,61 +40,98 @@ export const getMyStats = async (req, res) => {
       case "STOCK":
         filterField = "stockId";
         break;
+      case "DIGITIZER":
+        filterField = "digitizerId";
+        break;
+      case "PURCHASING":
+        // Purchasing doesn't track assigned orders in the same way yet,
+        // but we can add logic here if needed.
+        break;
       case "DELIVERY":
-        filterField = "deliveryId";
-        break; // Check if this field exists, otherwise use activity logs maybe?
+        // Delivery doesn't have a deliveryId in the Order model yet.
+        break;
       default:
         filterField = null;
     }
 
-    // If it's a role assigned to specific orders
+    // Management/Administrative roles see global stats
+    const managementRoles = [
+      "ADMIN",
+      "EXECUTIVE",
+      "MARKETING",
+      "FINANCE",
+      "SUPER_ADMIN",
+    ];
+
     if (filterField) {
-      // Safety check: only use field if it actually exists in schema
-      // (Simplified for now, using known fields)
-      const validFields = [
-        "salesId",
-        "graphicId",
-        "productionId",
-        "qcId",
-        "stockId",
-      ];
-      if (validFields.includes(filterField)) {
-        const whereBase = { [filterField]: id };
-
-        stats.totalCount = await prisma.order.count({
-          where: whereBase,
-        });
-
-        stats.todayCount = await prisma.order.count({
-          where: {
-            ...whereBase,
-            createdAt: {
-              gte: today,
-            },
+      // 🆕 Define "Available" criteria for each role to include in counts
+      let availableCriteria = null;
+      if (role === "GRAPHIC") {
+        availableCriteria = {
+          graphicId: null,
+          status: {
+            in: [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING],
           },
-        });
-
-        stats.urgentCount = await prisma.order.count({
-          where: {
-            ...whereBase,
-            isUrgent: true,
-            status: { notIn: ["COMPLETED", "CANCELLED"] },
+        };
+      } else if (role === "DIGITIZER") {
+        availableCriteria = {
+          digitizerId: null,
+          status: OrderStatus.PENDING_DIGITIZING,
+        };
+      } else if (role === "STOCK") {
+        availableCriteria = {
+          stockId: null,
+          status: {
+            in: [OrderStatus.PENDING_STOCK_CHECK, OrderStatus.STOCK_ISSUE],
           },
-        });
-
-        if (role === "SALES") {
-          const salesData = await prisma.order.aggregate({
-            where: whereBase,
-            _sum: {
-              totalPrice: true,
-            },
-          });
-          stats.totalSales = Number(salesData._sum.totalPrice || 0);
-        }
+        };
+      } else if (role === "SEWING_QC") {
+        availableCriteria = {
+          qcId: null,
+          status: OrderStatus.PRODUCTION_FINISHED,
+        };
       }
-    } else if (["ADMIN", "EXECUTIVE", "MARKETING", "FINANCE"].includes(role)) {
+
+      const assignedFilter = { [filterField]: userId };
+
+      const visibilityFilter = availableCriteria
+        ? { OR: [assignedFilter, availableCriteria] }
+        : assignedFilter;
+
+      const baseQuery = {
+        ...visibilityFilter,
+        status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
+      };
+
+      // Run counts in parallel to reduce sequential DB roundtrips
+      const [totalCount, todayCount, urgentCount] = await Promise.all([
+        prisma.order.count({ where: baseQuery }),
+        prisma.order.count({
+          where: { ...baseQuery, createdAt: { gte: today } },
+        }),
+        prisma.order.count({ where: { ...baseQuery, isUrgent: true } }),
+      ]);
+
+      stats.totalCount = totalCount;
+      stats.todayCount = todayCount;
+      stats.urgentCount = urgentCount;
+
+      // 4. Total Sales (Only for Sales role)
+      if (role === "SALES") {
+        const salesData = await prisma.order.aggregate({
+          where: baseQuery,
+          _sum: { totalPrice: true },
+        });
+        stats.totalSales = Number(salesData._sum.totalPrice || 0);
+      }
+    } else if (managementRoles.includes(role)) {
       // Global stats for management roles
-      stats.totalCount = await prisma.order.count();
+      stats.totalCount = await prisma.order.count({
+        where: {
+          status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
+        },
+      });
+
       stats.todayCount = await prisma.order.count({
         where: { createdAt: { gte: today } },
       });
@@ -100,7 +139,7 @@ export const getMyStats = async (req, res) => {
       stats.urgentCount = await prisma.order.count({
         where: {
           isUrgent: true,
-          status: { notIn: ["COMPLETED", "CANCELLED"] },
+          status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
         },
       });
 
@@ -117,6 +156,9 @@ export const getMyStats = async (req, res) => {
   }
 };
 
+/**
+ * Get SLA KPI data
+ */
 export const getSLAKPIs = async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
@@ -196,6 +238,9 @@ export const getSLAKPIs = async (req, res) => {
   }
 };
 
+/**
+ * Get KPIs for Executive Dashboard
+ */
 export const getExecutiveKPIs = async (req, res) => {
   try {
     const today = new Date();

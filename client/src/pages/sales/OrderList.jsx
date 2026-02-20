@@ -414,30 +414,32 @@ export default function OrderList() {
                                 </div>
                               )}
 
-                              {/* SLA Target Deadline (Target:) */}
-                              {order.sla && order.sla.targetDeadline && (
-                                <div
-                                  className={`flex items-center gap-1.5 text-[10.5px] font-bold ${
-                                    order.sla.status === "RED"
-                                      ? "text-rose-600"
-                                      : order.sla.status === "YELLOW"
-                                        ? "text-amber-600"
-                                        : "text-emerald-600"
-                                  }`}
-                                >
-                                  <HiOutlineClock className="w-3.5 h-3.5" />
-                                  <span>
-                                    เป้า:{" "}
-                                    {new Date(
-                                      order.sla.targetDeadline,
-                                    ).toLocaleDateString("th-TH", {
-                                      day: "2-digit",
-                                      month: "2-digit",
-                                      year: "2-digit",
-                                    })}
-                                  </span>
-                                </div>
-                              )}
+                              {/* SLA Target Deadline (Target:) — hidden for Sales */}
+                              {user.role !== "SALES" &&
+                                order.sla &&
+                                order.sla.targetDeadline && (
+                                  <div
+                                    className={`flex items-center gap-1.5 text-[10.5px] font-bold ${
+                                      order.sla.status === "RED"
+                                        ? "text-rose-600"
+                                        : order.sla.status === "YELLOW"
+                                          ? "text-amber-600"
+                                          : "text-emerald-600"
+                                    }`}
+                                  >
+                                    <HiOutlineClock className="w-3.5 h-3.5" />
+                                    <span>
+                                      เป้า:{" "}
+                                      {new Date(
+                                        order.sla.targetDeadline,
+                                      ).toLocaleDateString("th-TH", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "2-digit",
+                                      })}
+                                    </span>
+                                  </div>
+                                )}
                             </div>
                           </div>
                         </td>
@@ -523,7 +525,6 @@ export default function OrderList() {
                 >
                   <div className="flex justify-between items-start mb-2">
                     {/* Startup: Thumbnail for Mobile */}
-                    
 
                     <div className="flex flex-col gap-1.5 w-full">
                       <div className="flex justify-between items-start">

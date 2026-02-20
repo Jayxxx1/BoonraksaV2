@@ -26,12 +26,12 @@ const NotificationBell = () => {
   useEffect(() => {
     // Perform initial fetch
     const initFetch = async () => {
-      await fetchNotifications();
+      await fetchNotifications(); // 🆕 Re-enabled for initial load experience
     };
     initFetch();
 
-    const interval = setInterval(fetchNotifications, 60000); // Poll every minute
-    return () => clearInterval(interval);
+    // const interval = setInterval(fetchNotifications, 60000); // Poll every minute // 🆕 Disabled to stop GET requests
+    // return () => clearInterval(interval);
   }, [fetchNotifications]);
 
   const markAsRead = async (id) => {

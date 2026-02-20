@@ -74,14 +74,16 @@ const OrderHeader = ({
                     <span>แก้ไขออเดอร์</span>
                   </button>
                 )}
-                <button
-                  onClick={downloadCustomerProof}
-                  className="erp-button bg-indigo-50 text-indigo-700 border-indigo-100 py-1.5 px-3 text-xs"
-                >
-                  <HiOutlineDocumentText className="w-4 h-4" />
-                  <span>พิมพ์ใบงานสำหรับลูกค้า</span>
-                </button>
-                {user?.role !== "SALES" && (
+                {user?.role !== "DIGITIZER" && (
+                  <button
+                    onClick={downloadCustomerProof}
+                    className="erp-button bg-indigo-50 text-indigo-700 border-indigo-100 py-1.5 px-3 text-xs"
+                  >
+                    <HiOutlineDocumentText className="w-4 h-4" />
+                    <span>พิมพ์ใบงานสำหรับลูกค้า</span>
+                  </button>
+                )}
+                {user?.role !== "SALES" && user?.role !== "DIGITIZER" && (
                   <button
                     onClick={downloadJobSheet}
                     className="erp-button erp-button-secondary py-1.5 px-3 text-xs"

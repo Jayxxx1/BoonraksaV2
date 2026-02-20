@@ -21,8 +21,43 @@ import {
   generateJobSheetPDF,
   generateCustomerProofPDF,
 } from "../../services/pdfService.js";
+import { deleteFile, extractKeyFromUrl } from "../../services/uploadService.js";
 
 class OrderService {
+  /**
+   * Helper: Cleanup S3 file if replaced or removed
+   * @param {string} oldUrl - Existing file URL
+   * @param {string} newUrl - New file URL (if any)
+   */
+  async cleanupFile(oldUrl, newUrl) {
+    if (!oldUrl || oldUrl === newUrl) return;
+
+    const key = extractKeyFromUrl(oldUrl);
+    if (key) {
+      try {
+        await deleteFile(key);
+      } catch (err) {
+        console.error(`[S3-CLEANUP-ERR] Failed to delete ${key}:`, err);
+      }
+    }
+  }
+
+  /**
+   * Helper: Cleanup multiple S3 files
+   * @param {string[]} oldUrls - Current list of URLs
+   * @param {string[]} newUrls - New list of URLs
+   */
+  async cleanupFiles(oldUrls, newUrls = []) {
+    if (!Array.isArray(oldUrls) || oldUrls.length === 0) return;
+
+    const newSet = new Set(newUrls || []);
+    const toDelete = oldUrls.filter((url) => !newSet.has(url));
+
+    for (const url of toDelete) {
+      await this.cleanupFile(url);
+    }
+  }
+
   /**
    * Helper: Normalize Order Data (Computed Fields)
    */
@@ -92,11 +127,13 @@ class OrderService {
       };
 
       const deptDeadlines = {
-        STOCK: subtractDays(dueDate, 4), // ~4 days before
-        GRAPHIC: subtractDays(dueDate, 3), // 3-4 days before
-        DIGITIZER: subtractDays(dueDate, 3), // Same as Graphic
-        PRODUCTION: subtractDays(dueDate, 2), // 1-2 days before
-        QC: subtractDays(dueDate, 1), // 1 day before (Final check)
+        // Pipeline order: Graphic/Digitizer → Stock → Production → QC → Ship
+        // Each department's deadline is LATER than the previous in the chain.
+        GRAPHIC: subtractDays(dueDate, 4), // Graphic must finish 4 days before delivery
+        DIGITIZER: subtractDays(dueDate, 4), // Digitizer has the same window as Graphic
+        STOCK: subtractDays(dueDate, 3), // Stock must finish 3 days before delivery
+        PRODUCTION: subtractDays(dueDate, 2), // Production must finish 2 days before delivery
+        QC: subtractDays(dueDate, 1), // QC must finish 1 day before delivery (Final check)
       };
 
       // 3. Determine Current Target Deadline based on Order Status
@@ -129,11 +166,39 @@ class OrderService {
         slaStatus = "YELLOW"; // Warning (< 24h)
       }
 
+      // 🆕 Check if the current user's role has completed their part
+      let isRoleCompleted = false;
+      if (user) {
+        if (user.role === UserRole.DIGITIZER) {
+          isRoleCompleted = !!order.digitizingCompletedAt;
+        } else if (user.role === UserRole.PRODUCTION) {
+          isRoleCompleted = !!order.productionCompletedAt;
+        } else if (user.role === UserRole.SEWING_QC) {
+          isRoleCompleted = !!order.qcCompletedAt;
+        } else if (user.role === UserRole.STOCK) {
+          isRoleCompleted = order.stockRechecked === true;
+        } else if (user.role === UserRole.GRAPHIC) {
+          // Artwork is "Finished" for Graphic once it moves to Stock Check or beyond
+          const graphicFinishedStatuses = [
+            OrderStatus.PENDING_STOCK_CHECK,
+            OrderStatus.STOCK_RECHECKED,
+            OrderStatus.STOCK_ISSUE,
+            OrderStatus.IN_PRODUCTION,
+            OrderStatus.PRODUCTION_FINISHED,
+            OrderStatus.QC_PASSED,
+            OrderStatus.READY_TO_SHIP,
+            OrderStatus.COMPLETED,
+          ];
+          isRoleCompleted = graphicFinishedStatuses.includes(order.status);
+        }
+      }
+
       normalized.sla = {
         internalDeadline: new Date(subtractDays(dueDate, bufferDays)), // For reference only
         targetDeadline: new Date(targetDeadline),
-        status: slaStatus,
-        isLate: slaStatus === "RED",
+        status: isRoleCompleted ? "GREEN" : slaStatus,
+        isLate: !isRoleCompleted && slaStatus === "RED",
+        isCompleted: isRoleCompleted,
       };
     }
 
@@ -158,6 +223,17 @@ class OrderService {
         user.role === UserRole.PURCHASING
       ) {
         normalized = this.sanitizeOrderForProductionRole(normalized, user);
+      }
+
+      // --- 🧵 Digitizer View Optimization ---
+      // Once digitized, the order is "Finished" from the Digitizer's perspective.
+      // We mask subsequent statuses to avoid information overload.
+      if (
+        user.role === UserRole.DIGITIZER &&
+        order.digitizingCompletedAt &&
+        order.status !== OrderStatus.PENDING_DIGITIZING
+      ) {
+        normalized.status = OrderStatus.COMPLETED;
       }
     }
 
@@ -509,39 +585,59 @@ class OrderService {
 
     if (!order) return null;
 
-    // --- 🏭 Factory-Grade Scan Trigger (Auto-Start) ---
-    // If production worker views an order that is READY but NOT STARTED, auto-start it.
-    // Idempotency: Run ONLY IF productionStartedAt is null to prevent double-triggering or overwriting timestamps.
-    // IN_PRODUCTION applies to the order lifecycle and does not imply total SKU completion.
-    if (user && user.role === UserRole.PRODUCTION) {
-      const isReady =
-        order.stockRechecked &&
-        order.physicalItemsReady &&
-        order.graphicJobSheetAttached;
-      if (isReady && !order.productionStartedAt) {
-        console.log(
-          `[Auto-Start] Order ${order.id} transitioning to IN_PRODUCTION (Idempotent Trigger)`,
-        );
-        await prisma.order.update({
-          where: { id: orderIdInt },
-          data: {
-            productionStartedAt: new Date(),
-            status: OrderStatus.IN_PRODUCTION,
-            logs: {
-              create: {
-                action: "🏭 เริ่มผลิตอัตโนมัติ (Scan Job Sheet)",
-                details: `เริ่มงานโดยทีมผลิต (กะงานปัจจุบัน)`,
-                userId: user.id,
-              },
-            },
-          },
-        });
-        // Fetch fresh state after update to ensure normalized data reflect changes
-        const updatedOrder = await prisma.order.findUnique({
-          where: { id: orderIdInt },
-          include: this.getStandardInclude(),
-        });
-        return this.normalize(updatedOrder, user);
+    // --- 🔐 Strict Pipeline Authorization ---
+    if (
+      user &&
+      ![
+        UserRole.ADMIN,
+        UserRole.SUPER_ADMIN,
+        UserRole.EXECUTIVE,
+        UserRole.SALES,
+      ].includes(user.role)
+    ) {
+      // 1. If assigned, they can always view
+      const isAssignedToMe =
+        order.graphicId === user.id ||
+        order.digitizerId === user.id ||
+        order.stockId === user.id ||
+        order.productionId === user.id ||
+        order.qcId === user.id;
+
+      if (!isAssignedToMe) {
+        // 2. If not assigned, check if it's in their department's visible statuses
+        const departmentStatuses = {
+          [UserRole.GRAPHIC]: [
+            OrderStatus.PENDING_ARTWORK,
+            OrderStatus.DESIGNING,
+          ],
+          [UserRole.DIGITIZER]: [OrderStatus.PENDING_DIGITIZING],
+          [UserRole.STOCK]: [
+            OrderStatus.PENDING_STOCK_CHECK,
+            OrderStatus.STOCK_ISSUE,
+            OrderStatus.STOCK_RECHECKED,
+          ],
+          [UserRole.PRODUCTION]: [
+            OrderStatus.STOCK_RECHECKED,
+            OrderStatus.IN_PRODUCTION,
+            OrderStatus.PRODUCTION_FINISHED,
+          ],
+          [UserRole.SEWING_QC]: [
+            OrderStatus.PRODUCTION_FINISHED,
+            OrderStatus.QC_PASSED,
+            OrderStatus.READY_TO_SHIP,
+          ],
+          [UserRole.DELIVERY]: [
+            OrderStatus.QC_PASSED,
+            OrderStatus.READY_TO_SHIP,
+            OrderStatus.COMPLETED,
+          ],
+        }[user.role];
+
+        if (!departmentStatuses || !departmentStatuses.includes(order.status)) {
+          throw new Error(
+            "UNAUTHORIZED_ACCESS: Order is currently handled by another department",
+          );
+        }
       }
     }
 
@@ -555,38 +651,97 @@ class OrderService {
     const { view, search, status } = filters;
     const where = {};
 
+    // 1. Search Logic (Using AND to avoid collision with visibility OR)
     if (search) {
-      where.OR = [
-        { displayJobCode: { contains: search, mode: "insensitive" } },
-        { customerName: { contains: search, mode: "insensitive" } },
+      where.AND = [
+        {
+          OR: [
+            { displayJobCode: { contains: search, mode: "insensitive" } },
+            { customerName: { contains: search, mode: "insensitive" } },
+          ],
+        },
       ];
     }
 
-    if (user.role === UserRole.SALES) {
+    // 2. Metadata for Visibility
+    const roleField = {
+      [UserRole.GRAPHIC]: "graphicId",
+      [UserRole.SEWING_QC]: "qcId",
+      [UserRole.STOCK]: "stockId",
+      [UserRole.PRODUCTION]: "productionId",
+      [UserRole.DIGITIZER]: "digitizerId",
+    }[user.role];
+
+    const departmentStatuses = {
+      [UserRole.GRAPHIC]: [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING],
+      [UserRole.DIGITIZER]: [OrderStatus.PENDING_DIGITIZING],
+      [UserRole.STOCK]: [
+        OrderStatus.PENDING_STOCK_CHECK,
+        OrderStatus.STOCK_ISSUE,
+        OrderStatus.STOCK_RECHECKED,
+      ],
+      [UserRole.PRODUCTION]: [
+        OrderStatus.STOCK_RECHECKED,
+        OrderStatus.IN_PRODUCTION,
+        OrderStatus.PRODUCTION_FINISHED,
+      ],
+      [UserRole.SEWING_QC]: [
+        OrderStatus.PRODUCTION_FINISHED,
+        OrderStatus.QC_PASSED,
+        OrderStatus.READY_TO_SHIP,
+      ],
+      [UserRole.DELIVERY]: [
+        OrderStatus.QC_PASSED,
+        OrderStatus.READY_TO_SHIP,
+        OrderStatus.COMPLETED,
+      ],
+    }[user.role];
+
+    // 3. Visibility Application
+    if (
+      [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.EXECUTIVE].includes(
+        user.role,
+      )
+    ) {
+      // Full visibility for Admin/Executive
+    } else if (user.role === UserRole.SALES) {
       where.salesId = user.id;
     } else if (view === "me") {
-      const roleField = {
-        [UserRole.GRAPHIC]: "graphicId",
-        [UserRole.SEWING_QC]: "qcId",
-        [UserRole.STOCK]: "stockId",
-        [UserRole.PRODUCTION]: "productionId",
-        [UserRole.DIGITIZER]: "digitizerId",
-      }[user.role];
       if (roleField) {
         where[roleField] = user.id;
-        where.status = {
-          notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
-        };
+
+        // Base exclusion
+        const notInStatus = [OrderStatus.COMPLETED, OrderStatus.CANCELLED];
+
+        // Role-specific "Finished" exclusion for "My Tasks"
+        const specificExclusions = {};
+        if (user.role === UserRole.DIGITIZER) {
+          specificExclusions.digitizingCompletedAt = null;
+        } else if (user.role === UserRole.PRODUCTION) {
+          specificExclusions.productionCompletedAt = null;
+        } else if (user.role === UserRole.SEWING_QC) {
+          specificExclusions.qcCompletedAt = null;
+        } else if (user.role === UserRole.STOCK) {
+          specificExclusions.stockRechecked = false;
+        } else if (user.role === UserRole.GRAPHIC) {
+          // If artwork is uploaded and pending stock, it's "finished" for Graphic's My Tasks
+          notInStatus.push(
+            OrderStatus.PENDING_STOCK_CHECK,
+            OrderStatus.STOCK_RECHECKED,
+            OrderStatus.STOCK_ISSUE,
+          );
+        }
+
+        where.AND = [
+          { status: { notIn: notInStatus } },
+          { ...specificExclusions },
+        ];
       }
     } else if (view === "available") {
       if (user.role === UserRole.GRAPHIC) {
         where.graphicId = null;
         where.status = {
-          in: [
-            OrderStatus.PENDING_ARTWORK,
-            OrderStatus.DESIGNING,
-            OrderStatus.PENDING_DIGITIZING,
-          ],
+          in: [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING],
         };
       } else if (user.role === UserRole.DIGITIZER) {
         where.digitizerId = null;
@@ -606,9 +761,37 @@ class OrderService {
         where.qcId = null;
         where.status = OrderStatus.PRODUCTION_FINISHED;
       }
+    } else {
+      // Default / "All" Tab View for Departments: Strict Pipeline + Assigned Jobs
+      const visibilityOr = [];
+      if (departmentStatuses) {
+        visibilityOr.push({ status: { in: departmentStatuses } });
+      }
+
+      if (roleField) {
+        // Technical roles: ALWAYS see what they are responsible for (History)
+        visibilityOr.push({ [roleField]: user.id });
+      }
+
+      if (visibilityOr.length > 0) {
+        where.AND = [...(where.AND || []), { OR: visibilityOr }];
+      }
     }
 
-    if (status) where.status = status;
+    // 4. Status Filter Mapping (Accounting for Masked Statuses)
+    if (status && status === OrderStatus.COMPLETED) {
+      if (user.role === UserRole.DIGITIZER) {
+        where.digitizingCompletedAt = { not: null };
+      } else if (user.role === UserRole.PRODUCTION) {
+        where.productionCompletedAt = { not: null };
+      } else if (user.role === UserRole.SEWING_QC) {
+        where.qcCompletedAt = { not: null };
+      } else {
+        where.status = status;
+      }
+    } else if (status) {
+      where.status = status;
+    }
 
     const orders = await prisma.order.findMany({
       where,
@@ -1006,7 +1189,7 @@ class OrderService {
     return this.normalize(result, user);
   }
 
-  async startProduction(orderId, user) {
+  async startProduction(orderId, user, { workerNames = [] } = {}) {
     const id = parseInt(orderId);
     const order = await prisma.order.findUnique({ where: { id } });
 
@@ -1019,10 +1202,13 @@ class OrderService {
         status: OrderStatus.IN_PRODUCTION,
         productionId: user.id,
         productionStartedAt: new Date(),
+        assignedWorkerNames: workerNames,
         logs: {
           create: {
             action: "🏭 เริ่มกระบวนการผลิต",
-            details: `พนักงานฝ่ายผลิต ${user.name} กดเริ่มงาน`,
+            details: workerNames.length
+              ? `${user.name} มอบหมายงานให้: ${workerNames.join(", ")}`
+              : `${user.name} กดเริ่มงาน`,
             userId: user.id,
           },
         },
@@ -1378,6 +1564,11 @@ class OrderService {
       }
     }
 
+    // --- S3 Cleanup ---
+    if (data.draftImages) {
+      await this.cleanupFiles(currentOrder.draftImages, data.draftImages);
+    }
+
     return await prisma.$transaction(async (tx) => {
       // 2. Prepare Update Data for Basic Fields
       const updateData = {
@@ -1536,8 +1727,27 @@ class OrderService {
 
     // We update atomically using a transaction to ensure positions model is synced
     const result = await prisma.$transaction(async (tx) => {
+      // 0. Fetch current state for S3 Cleanup
+      const currentOrder = await tx.order.findUnique({
+        where: { id: orderIdInt },
+        include: { positions: true },
+      });
+
+      if (!currentOrder) throw new Error("Order not found");
+
       // 1. Update the Order model (for artworkUrl, productionFileUrl, etc.)
       const { embroideryDetails, positions, ...otherSpecs } = specs;
+
+      // --- S3 Cleanup (Main Order Files) ---
+      if (otherSpecs.artworkUrl !== undefined) {
+        await this.cleanupFile(currentOrder.artworkUrl, otherSpecs.artworkUrl);
+      }
+      if (otherSpecs.productionFileUrl !== undefined) {
+        await this.cleanupFile(
+          currentOrder.productionFileUrl,
+          otherSpecs.productionFileUrl,
+        );
+      }
 
       const detailsToSync = embroideryDetails || positions;
 
@@ -1548,6 +1758,30 @@ class OrderService {
 
       // 2. Sync Positions Model if provided
       if (Array.isArray(detailsToSync)) {
+        // --- S3 Cleanup (Positions Files) ---
+        // Since we delete and recreate, we cleanup EVERYTHING that isn't in the new set
+        const newLogos = detailsToSync.map((p) => p.logoUrl).filter(Boolean);
+        const newMockups = detailsToSync
+          .map((p) => p.mockupUrl)
+          .filter(Boolean);
+        const newEmbs = detailsToSync
+          .flatMap((p) => p.embroideryFileUrls || [])
+          .filter(Boolean);
+
+        const oldLogos = currentOrder.positions
+          .map((p) => p.logoUrl)
+          .filter(Boolean);
+        const oldMockups = currentOrder.positions
+          .map((p) => p.mockupUrl)
+          .filter(Boolean);
+        const oldEmbs = currentOrder.positions
+          .flatMap((p) => p.embroideryFileUrls || [])
+          .filter(Boolean);
+
+        await this.cleanupFiles(oldLogos, newLogos);
+        await this.cleanupFiles(oldMockups, newMockups);
+        await this.cleanupFiles(oldEmbs, newEmbs);
+
         // Validation: Mandatory Detail for "อื่นๆ"
         for (const pos of detailsToSync) {
           if (
@@ -1620,6 +1854,15 @@ class OrderService {
   async uploadEmbroidery(orderId, data, user) {
     const { embroideryFileUrl } = data;
     const id = parseInt(orderId);
+
+    // --- S3 Cleanup ---
+    const currentOrder = await prisma.order.findUnique({
+      where: { id },
+      select: { embroideryFileUrl: true },
+    });
+    if (currentOrder) {
+      await this.cleanupFile(currentOrder.embroideryFileUrl, embroideryFileUrl);
+    }
 
     const result = await prisma.order.update({
       where: { id },

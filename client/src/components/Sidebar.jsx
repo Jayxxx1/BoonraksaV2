@@ -19,21 +19,62 @@ import {
 } from "react-icons/hi2";
 import { useState } from "react";
 
-const getRoleBadgeColor = (role) => {
-  const styles = {
-    SUPER_ADMIN: "bg-red-50 text-red-700 border-red-100",
-    ADMIN: "bg-indigo-50 text-indigo-700 border-indigo-100",
-    EXECUTIVE: "bg-blue-50 text-blue-700 border-blue-100",
-    SALES: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    GRAPHIC: "bg-purple-50 text-purple-700 border-purple-100",
-    STOCK: "bg-orange-50 text-orange-700 border-orange-100",
-    PRODUCTION: "bg-amber-50 text-amber-700 border-amber-100",
-    SEWING_QC: "bg-teal-50 text-teal-700 border-teal-100",
-    DELIVERY: "bg-cyan-50 text-cyan-700 border-cyan-100",
-    PURCHASING: "bg-rose-50 text-rose-700 border-rose-100",
-  };
-  return styles[role] || "bg-slate-50 text-slate-600 border-slate-100";
+const ROLE_BADGE = {
+  SUPER_ADMIN: {
+    label: "ซูเปอร์แอดมิน",
+    className: "bg-red-50 text-red-700 border-red-100",
+  },
+  ADMIN: {
+    label: "แอดมิน",
+    className: "bg-indigo-50 text-indigo-700 border-indigo-100",
+  },
+  EXECUTIVE: {
+    label: "ผู้บริหาร",
+    className: "bg-blue-50 text-blue-700 border-blue-100",
+  },
+  SALES: {
+    label: "ฝ่ายขาย",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  },
+  GRAPHIC: {
+    label: "กราฟิก",
+    className: "bg-purple-50 text-purple-700 border-purple-100",
+  },
+  STOCK: {
+    label: "คลังสินค้า",
+    className: "bg-orange-50 text-orange-700 border-orange-100",
+  },
+  PRODUCTION: {
+    label: "ฝ่ายผลิต",
+    className: "bg-amber-50 text-amber-700 border-amber-100",
+  },
+  SEWING_QC: {
+    label: "QC เย็บ",
+    className: "bg-teal-50 text-teal-700 border-teal-100",
+  },
+  DELIVERY: {
+    label: "จัดส่ง",
+    className: "bg-cyan-50 text-cyan-700 border-cyan-100",
+  },
+  PURCHASING: {
+    label: "จัดซื้อ",
+    className: "bg-rose-50 text-rose-700 border-rose-100",
+  },
+  MARKETING: {
+    label: "การตลาด",
+    className: "bg-rose-50 text-rose-700 border-rose-100",
+  },
+  DIGITIZER: {
+    label: "ตีลาย",
+    className: "bg-rose-50 text-rose-700 border-rose-100",
+  },
 };
+
+const getRoleBadge = (role) =>
+  ROLE_BADGE[role] || {
+    label: role || "UNKNOWN",
+    className: "bg-slate-50 text-slate-600 border-slate-100",
+  };
 
 const NavItem = ({ to, icon: Icon, label, isActive, onClick, isCollapsed }) => (
   <Link
@@ -69,6 +110,7 @@ export default function Sidebar({
   const navigate = useNavigate();
   const location = useLocation();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const { label: roleLabel, className: roleClass } = getRoleBadge(user?.role);
 
   const handleLogout = () => {
     logout();
@@ -102,7 +144,7 @@ export default function Sidebar({
     },
     {
       label: "ฝ่ายผลิตและกราฟิก",
-      roles: ["GRAPHIC", "PRODUCTION", "SEWING_QC", "ADMIN"],
+      roles: ["GRAPHIC", "PRODUCTION", "SEWING_QC", "DIGITIZER", "ADMIN"],
       links: [
         {
           to: "/graphic",
@@ -277,9 +319,9 @@ export default function Sidebar({
                 {user?.name}
               </p>
               <div
-                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border bg-white ${getRoleBadgeColor(user?.role)}`}
+                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border bg-white ${roleClass}`}
               >
-                {user?.role}
+                {roleLabel}
               </div>
             </div>
             {isCollapsed && (

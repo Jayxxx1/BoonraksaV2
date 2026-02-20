@@ -284,21 +284,34 @@ export default function DeliveryDashboard() {
                             )}
                           </div>
 
-                          {order.subStatusLabel ? (
+                          {parseFloat(order.balanceDue || 0) > 0 &&
+                          order.paymentMethod !== "COD" ? (
                             <div className="flex flex-col gap-0.5">
-                              <span className="text-[10px] font-black text-orange-600 animate-pulse">
-                                ⚠️ {order.subStatusLabel}
+                              {order.subStatusLabel && (
+                                <span className="text-[10px] font-black text-orange-600 animate-pulse">
+                                  ⚠️ {order.subStatusLabel}
+                                </span>
+                              )}
+                              <span className="text-[10px] font-black text-rose-600">
+                                ⚠️ ยังชำระเงินไม่ครบ
                               </span>
                               <span className="text-[10px] text-slate-400 font-bold">
                                 ค้างชำระ: {order.balanceDue?.toLocaleString()}฿
                               </span>
                             </div>
                           ) : (
-                            <span className="text-[10px] text-emerald-600 font-bold">
-                              {order.paymentMethod === "COD"
-                                ? `ยอดเก็บเงินปลายทาง: ${order.balanceDue?.toLocaleString()}฿`
-                                : "ชำระเงินเรียบร้อยแล้ว"}
-                            </span>
+                            <div className="flex flex-col gap-0.5">
+                              {order.subStatusLabel && (
+                                <span className="text-[10px] font-black text-orange-600 animate-pulse">
+                                  ⚠️ {order.subStatusLabel}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-emerald-600 font-bold">
+                                {order.paymentMethod === "COD"
+                                  ? `ยอดเก็บเงินปลายทาง: ${order.balanceDue?.toLocaleString()}฿`
+                                  : "ชำระเงินเรียบร้อยแล้ว"}
+                              </span>
+                            </div>
                           )}
                         </div>
                       </td>
@@ -387,21 +400,34 @@ export default function DeliveryDashboard() {
 
                   <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-100">
                     <div className="flex flex-col gap-0.5">
-                      {order.subStatusLabel ? (
+                      {parseFloat(order.balanceDue || 0) > 0 &&
+                      order.paymentMethod !== "COD" ? (
                         <>
-                          <span className="text-[10px] font-black text-orange-600 animate-pulse">
-                            ⚠️ {order.subStatusLabel}
+                          {order.subStatusLabel && (
+                            <span className="text-[10px] font-black text-orange-600 animate-pulse">
+                              ⚠️ {order.subStatusLabel}
+                            </span>
+                          )}
+                          <span className="text-[10px] font-black text-rose-600">
+                            ⚠️ ยังชำระเงินไม่ครบ
                           </span>
                           <span className="text-[10px] text-slate-400 font-bold">
                             ค้างชำระ: {order.balanceDue?.toLocaleString()}฿
                           </span>
                         </>
                       ) : (
-                        <span className="text-[10px] text-emerald-600 font-bold">
-                          {order.paymentMethod === "COD"
-                            ? `ยอดเก็บปลายทาง: ${order.balanceDue?.toLocaleString()}฿`
-                            : "ชำระเงินเรียบร้อยแล้ว"}
-                        </span>
+                        <>
+                          {order.subStatusLabel && (
+                            <span className="text-[10px] font-black text-orange-600 animate-pulse">
+                              ⚠️ {order.subStatusLabel}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-emerald-600 font-bold">
+                            {order.paymentMethod === "COD"
+                              ? `ยอดเก็บปลายทาง: ${order.balanceDue?.toLocaleString()}฿`
+                              : "ชำระเงินเรียบร้อยแล้ว"}
+                          </span>
+                        </>
                       )}
                     </div>
                     <div className="flex items-center">

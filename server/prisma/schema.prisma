@@ -237,7 +237,7 @@ model Order {
   digitizerId Int?
   digitizer   User? @relation("DigitizerOrders", fields: [digitizerId], references: [id])
 
-  assignedWorkerName String? // ชื่อลูกมือที่หัวหน้ากะมอบหมายให้
+  assignedWorkerNames String[]   // ชื่อลูกมือที่หัวหน้ากะมอบหมายให้ (หลายคนได้)
   rejectionCount     Int     @default(0) // จำนวนครั้งที่งานถูกตีกลับ
   damagedCount       Int     @default(0) // จำนวนของเสียจากการผลิต/การแก้
 

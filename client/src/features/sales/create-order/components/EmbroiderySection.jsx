@@ -64,13 +64,6 @@ const EmbroiderySection = ({
               <option value="บล็อคใหม่">บล็อคใหม่ (+250฿)</option>
             </select>
           </div>
-          <button
-            type="button"
-            onClick={addEmbroidery}
-            className="erp-button erp-button-secondary py-1.5 text-xs"
-          >
-            <HiOutlinePlus className="w-4 h-4 mr-1" /> เพิ่มตำแหน่ง
-          </button>
         </div>
       </div>
       <div className="p-5 space-y-4">
@@ -394,6 +387,17 @@ const EmbroiderySection = ({
             </div>
           ))
         )}
+
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={addEmbroidery}
+            className="w-full py-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-500 hover:bg-indigo-50 hover:border-indigo-400 font-black text-xs transition-all flex items-center justify-center gap-2 group"
+          >
+            <HiOutlinePlus className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            เพิ่มตำแหน่ง (Add Embroidery Position)
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -157,8 +157,59 @@ export const confirmStockRecheck = asyncHandler(async (req, res) => {
 
 export const startProduction = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const order = await orderService.startProduction(id, req.user);
+  const { workerNames = [] } = req.body;
+  const order = await orderService.startProduction(id, req.user, {
+    workerNames,
+  });
   sendSuccess(res, { order }, "เริ่มการผลิตเรียบร้อย");
+});
+
+export const finishProduction = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  req.body.status = "PRODUCTION_FINISHED";
+  const order = await orderService.updateStatus(
+    id,
+    req.body.status,
+    req.user,
+    req.body,
+  );
+  sendSuccess(res, { order }, "รายงานการผลิตเสร็จสิ้น");
+});
+
+export const passQC = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  req.body.status = "READY_TO_SHIP";
+  const order = await orderService.updateStatus(
+    id,
+    req.body.status,
+    req.user,
+    req.body,
+  );
+  sendSuccess(res, { order }, "งานผ่าน QC พร้อมจัดส่ง");
+});
+
+export const readyToShip = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  req.body.status = "READY_TO_SHIP";
+  const order = await orderService.updateStatus(
+    id,
+    req.body.status,
+    req.user,
+    req.body,
+  );
+  sendSuccess(res, { order }, "งานพร้อมจัดส่ง");
+});
+
+export const completeOrder = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  req.body.status = "COMPLETED";
+  const order = await orderService.updateStatus(
+    id,
+    req.body.status,
+    req.user,
+    req.body,
+  );
+  sendSuccess(res, { order }, "จัดส่งเรียบร้อย ปิดออเดอร์");
 });
 
 export const downloadPDF = asyncHandler(async (req, res) => {
@@ -175,6 +226,12 @@ export const downloadPDF = asyncHandler(async (req, res) => {
   } catch (error) {
     sendError(res, "PDF_ERROR", error.message);
   }
+});
+
+export const uploadEmbroidery = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const order = await orderService.uploadEmbroidery(id, req.body, req.user);
+  sendSuccess(res, { order }, "บันทึกและส่งต่อฝ่ายกราฟิกเรียบร้อยแล้ว");
 });
 
 /**

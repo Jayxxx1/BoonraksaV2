@@ -15,6 +15,7 @@ const OrderStatusBar = ({
   isAdmin,
   isUpdating,
   handleUpdateStatus,
+  handleClaim,
   setShowUrgentModal,
   setShowCancelModal,
   setShowStockIssueModal,
@@ -23,6 +24,7 @@ const OrderStatusBar = ({
   setShowPaymentModal,
   trackingNo,
   setTrackingNo,
+  setShowProductionWorkerModal,
   getStatusBadge,
 }) => {
   const isClaimedByMe = (targetId) => targetId === user?.id;
@@ -54,21 +56,32 @@ const OrderStatusBar = ({
               <div className="flex items-center gap-2">
                 <span className="flex h-2 w-2 relative">
                   <span
-                    className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${order.sla?.status === "RED" ? "bg-rose-400" : order.sla?.status === "YELLOW" ? "bg-amber-400" : "bg-indigo-400"}`}
+                    className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${order.sla?.isCompleted ? "bg-emerald-400" : order.sla?.status === "RED" ? "bg-rose-400" : order.sla?.status === "YELLOW" ? "bg-amber-400" : "bg-indigo-400"}`}
                   ></span>
                   <span
-                    className={`relative inline-flex rounded-full h-2 w-2 ${order.sla?.status === "RED" ? "bg-rose-500" : order.sla?.status === "YELLOW" ? "bg-amber-500" : "bg-indigo-500"}`}
+                    className={`relative inline-flex rounded-full h-2 w-2 ${order.sla?.isCompleted ? "bg-emerald-500" : order.sla?.status === "RED" ? "bg-rose-500" : order.sla?.status === "YELLOW" ? "bg-amber-500" : "bg-indigo-500"}`}
                   ></span>
                 </span>
-                {order.sla?.status === "RED" && (
-                  <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100 uppercase tracking-tighter">
-                    เกินกำหนดระยะเวลาฝ่ายตนเอง
+                {order.sla?.isCompleted ? (
+                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase tracking-tighter flex items-center gap-1">
+                    <HiOutlineCheckCircle className="w-3 h-3" />
+                    ดำเนินการเสร็จสิ้นแล้ว
                   </span>
-                )}
-                {order.sla?.status === "YELLOW" && (
-                  <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-tighter">
-                    ใกล้กำหนดระยะเวลาฝ่ายตนเอง
-                  </span>
+                ) : (
+                  user?.role !== "SALES" && (
+                    <>
+                      {order.sla?.status === "RED" && (
+                        <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100 uppercase tracking-tighter">
+                          เกินกำหนดระยะเวลาฝ่ายตนเอง
+                        </span>
+                      )}
+                      {order.sla?.status === "YELLOW" && (
+                        <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-tighter">
+                          ใกล้กำหนดระยะเวลาฝ่ายตนเอง
+                        </span>
+                      )}
+                    </>
+                  )
                 )}
               </div>
             )}
@@ -150,6 +163,32 @@ const OrderStatusBar = ({
             </button>
           </div>
         )}
+        {/* PRODUCTION ACTIONS */}
+        {order.actionMap?.canStartProduction && (
+          <div className="flex flex-col gap-3 items-center w-full max-w-sm">
+            {!order.productionId ? (
+              <button
+                onClick={() => handleClaim("productionId")}
+                className="w-full px-6 py-3 bg-emerald-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all text-sm"
+                disabled={isUpdating}
+              >
+                รับสิทธิ์ดูแลงาน (Claim)
+              </button>
+            ) : order.productionId === user?.id ? (
+              <button
+                onClick={() => setShowProductionWorkerModal(true)}
+                className="w-full px-6 py-3 bg-indigo-600 text-white rounded-xl font-black shadow-lg hover:bg-indigo-700 transition-all text-sm flex items-center justify-center gap-2"
+                disabled={isUpdating}
+              >
+                เริ่มผลิตและระบุลูกมือ (Start & Assign)
+              </button>
+            ) : (
+              <div className="text-xs font-bold text-slate-500 bg-slate-100 px-4 py-2 rounded-lg truncate w-full text-center">
+                งานนี้รับโดย {order.production?.name || "ทีมอื่น"}
+              </div>
+            )}
+          </div>
+        )}
 
         {order.actionMap?.canFinishProduction && (
           <div className="flex gap-2">
@@ -162,7 +201,7 @@ const OrderStatusBar = ({
             </button>
             <button
               onClick={() => setShowRejectModal(true)}
-              className="erp-button bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 flex items-center gap-1.5 py-2 px-4"
+              className="erp-button bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 flex items-center gap-1.5 py-2 px-4 flex-col justify-center"
               disabled={isUpdating}
             >
               <HiOutlineExclamationCircle className="w-4 h-4" />
@@ -170,6 +209,29 @@ const OrderStatusBar = ({
             </button>
           </div>
         )}
+
+        {/* DIGITIZER ACTIONS */}
+        {user?.role === "DIGITIZER" &&
+          order.status === "PENDING_DIGITIZING" && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleUpdateStatus("DIGITIZING_FINISHED")}
+                className="erp-button erp-button-primary bg-indigo-600 py-2 px-6 shadow-lg shadow-indigo-100 flex items-center gap-2"
+                disabled={isUpdating}
+              >
+                <HiOutlineCheckCircle className="w-5 h-5" />
+                บันทึกตีลายเสร็จ (Finish Digitizing)
+              </button>
+              <button
+                onClick={() => setShowRejectModal(true)}
+                className="erp-button bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 flex items-center gap-1.5 py-2 px-4 shadow-sm"
+                disabled={isUpdating}
+              >
+                <HiOutlineExclamationCircle className="w-4 h-4" />
+                ตีกลับงาน
+              </button>
+            </div>
+          )}
 
         {/* QC ACTIONS */}
         {(order.actionMap?.canPassQC || order.actionMap?.canFailQC) && (
@@ -261,15 +323,17 @@ const OrderStatusBar = ({
         )}
 
         {/* PAYMENT BUTTON (Globally available if needed, or by permission) */}
-        {order.actionMap?.canUploadSlip && (
-          <button
-            onClick={() => setShowPaymentModal(true)}
-            className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold border border-emerald-100 hover:bg-emerald-100 transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
-          >
-            <HiOutlineCurrencyDollar className="w-4 h-4" />
-            แจ้งชำระเงิน / อัปโหลดสลิป
-          </button>
-        )}
+        {order.actionMap?.canUploadSlip &&
+          parseFloat(order.balanceDue || 0) > 0 &&
+          order.status !== "COMPLETED" && (
+            <button
+              onClick={() => setShowPaymentModal(true)}
+              className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold border border-emerald-100 hover:bg-emerald-100 transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <HiOutlineCurrencyDollar className="w-4 h-4" />
+              แจ้งชำระเงิน / อัปโหลดสลิป
+            </button>
+          )}
 
         {/* CLAIM REMINDERS FOR OTHER ROLES */}
         {(user?.role === "ADMIN" || user?.role === "EXECUTIVE") && (

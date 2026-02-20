@@ -123,7 +123,14 @@ const stripSensitiveDataForTechnicalRoles = (order, userRole) => {
 /**
  * Helper to automatically mark orders older than 3 days as urgent
  */
+let lastAutoUpdate = 0;
+const AUTO_UPDATE_INTERVAL = 30 * 60 * 1000; // 30 minutes
+
 export const autoUpdateUrgentOrders = async () => {
+  const now = Date.now();
+  if (now - lastAutoUpdate < AUTO_UPDATE_INTERVAL) return;
+  lastAutoUpdate = now;
+
   const threeDaysAgo = new Date();
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
@@ -1502,7 +1509,7 @@ export const logProductionAction = asyncHandler(async (req, res) => {
  */
 export const uploadEmbroidery = asyncHandler(async (req, res) => {
   const { orderId } = req.params;
-  const { embroideryFileUrl } = req.body;
+  const { embroideryFileUrl, embroideryFileUrls } = req.body;
 
   if (!embroideryFileUrl) {
     return res
@@ -1513,7 +1520,9 @@ export const uploadEmbroidery = asyncHandler(async (req, res) => {
   const order = await prisma.order.update({
     where: { id: parseInt(orderId) },
     data: {
-      embroideryFileUrl,
+      embroideryFileUrl: embroideryFileUrl || undefined,
+      embroideryFileUrls: embroideryFileUrls || undefined,
+      digitizerId: req.user.id,
       status: "PENDING_ARTWORK",
       digitizingCompletedAt: new Date(),
       logs: {

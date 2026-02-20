@@ -21,7 +21,7 @@ export const OrderStatus = {
  */
 export const StatusLabels = {
   PENDING_DIGITIZING: "รอตีลาย",
-  PENDING_ARTWORK: "รออาร์ตเวิร์ค",
+  PENDING_ARTWORK: "รอวางแบบ",
   DESIGNING: "กำลังออกแบบ",
   PENDING_STOCK_CHECK: "รอเช็คสต็อก",
   STOCK_ISSUE: "สต็อกมีปัญหา",

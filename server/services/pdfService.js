@@ -955,19 +955,26 @@ export const generateCustomerProofPDF = async (order) => {
 
     const getExecutablePath = () => {
       const commonPaths = [
-        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
         "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
         "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
       ];
       for (const p of commonPaths) {
         if (fs.existsSync(p)) return p;
       }
-      return undefined;
+      return undefined; // Let Puppeteer use its bundled Chromium
     };
+
+    const execPath = getExecutablePath();
+    console.log(
+      "[PDF] Launching Puppeteer with executablePath:",
+      execPath || "Bundled Chromium",
+    );
 
     browser = await puppeteer.launch({
       headless: "new",
-      executablePath: getExecutablePath(),
+      executablePath: execPath,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",

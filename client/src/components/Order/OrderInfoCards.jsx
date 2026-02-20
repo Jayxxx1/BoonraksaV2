@@ -3,10 +3,16 @@ import {
   HiOutlineNoSymbol,
   HiOutlineBellAlert,
   HiOutlineExclamationCircle,
+  HiOutlineUsers,
 } from "react-icons/hi2";
 
 const OrderInfoCards = ({ order }) => {
-  if (!order.purchasingReason && !order.urgentNote && !order.cancelReason)
+  if (
+    !order.purchasingReason &&
+    !order.urgentNote &&
+    !order.cancelReason &&
+    (!order.assignedWorkerNames || order.assignedWorkerNames.length === 0)
+  )
     return null;
 
   return (

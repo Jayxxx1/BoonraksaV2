@@ -40,8 +40,8 @@ const CreateOrder = () => {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [customUnitPrice, setCustomUnitPrice] = useState(""); // Sales can override
   const [paidAmount, setPaidAmount] = useState(""); // ยอดที่ลูกค้าชำระมา
-  const [depositSlipUrl, setDepositSlipUrl] = useState(""); // URL รูปสลิป
-  const [isUploadingSlip, setIsUploadingSlip] = useState(false);
+  const [depositSlipFile, setDepositSlipFile] = useState(null); // Local File object
+  const [depositSlipUrl, setDepositSlipUrl] = useState(""); // Preview URL (blob: or remote)
 
   const [facebookPages, setFacebookPages] = useState([]);
 
@@ -85,8 +85,8 @@ const CreateOrder = () => {
   const [successOrderId, setSuccessOrderId] = useState(null);
   const [error, setError] = useState("");
 
-  const [draftImages, setDraftImages] = useState([]);
-  const [uploadingDraft, setUploadingDraft] = useState(false);
+  const [draftFiles, setDraftFiles] = useState([]); // Array of { file, preview }
+  const [draftImages, setDraftImages] = useState([]); // This will hold the URLs for logic/summary
   const [showPreOrderConfirm, setShowPreOrderConfirm] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
 
@@ -289,21 +289,18 @@ const CreateOrder = () => {
       ...embroidery,
       {
         position: "อกซ้าย",
-        masterPositionId: 1, // Default to Left Chest (ID: 1) if available, check this logic?
-        // Better to leave empty or default to first master?
-        // Let's stick to "อกซ้าย" name but adding ID might be safer if we know ID 1 is Left Chest.
-        // Or wait, let's just init as empty/first available logic in UI?
-        // User requested "1. อกซ้าย" so ID 1 is likely "อกซ้าย".
-        // Safe to init with name, but UI needs handle matching.
+        masterPositionId: 1,
         customPosition: "",
         blockId: "",
         blockType: "บล็อคเดิม",
         width: "",
         height: "",
         note: "",
-        textToEmb: "", // สำหรับปักข้อความ (Text Lock)
-        logoUrl: "", // รูปไฟล์โลโก้เฉพาะจุด
-        mockupUrl: "", // รูปจำลองเฉพาะจุด
+        textToEmb: "",
+        logoUrl: "", // Acts as preview or final URL
+        logoFile: null, // Actual File object
+        mockupUrl: "",
+        mockupFile: null,
         isFreeOption: false,
         freeOptionName: "เซฟตี้",
         isChangePosition: false,
@@ -315,69 +312,35 @@ const CreateOrder = () => {
     setEmbroidery(embroidery.filter((_, i) => i !== index));
   };
 
-  const handleDraftImageUpload = async (e) => {
+  const handleDraftImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const uploadFormData = new FormData();
-    uploadFormData.append("file", file);
-    setUploadingDraft(true);
-    try {
-      const res = await api.post("/upload?folder=drafts", uploadFormData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setDraftImages([...draftImages, res.data.data.url]);
-    } catch (err) {
-      console.error(err);
-      alert("ไม่สามารถอัปโหลดรูปภาพได้");
-    } finally {
-      setUploadingDraft(false);
-    }
+    const previewUrl = URL.createObjectURL(file);
+    setDraftFiles([...draftFiles, { file, preview: previewUrl }]);
+    setDraftImages([...draftImages, previewUrl]); // For UI consistency
   };
 
-  const handleUploadSlip = async (e) => {
+  const handleUploadSlip = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const fd = new FormData();
-    fd.append("file", file);
-    setIsUploadingSlip(true);
-    try {
-      const res = await api.post("/upload?folder=slips", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setDepositSlipUrl(res.data.data.url);
-    } catch {
-      alert("อัปโหลดสลิปไม่สำเร็จ");
-    } finally {
-      setIsUploadingSlip(false);
-    }
+    const previewUrl = URL.createObjectURL(file);
+    setDepositSlipFile(file);
+    setDepositSlipUrl(previewUrl);
   };
 
-  const [isUploadingPositionImage, setIsUploadingPositionImage] =
-    useState(null); // Track which index/type is uploading
-
-  const handleEmbroideryImageUpload = async (index, type, file) => {
+  const handleEmbroideryImageUpload = (index, type, file) => {
     if (!file) return;
-    const fd = new FormData();
-    fd.append("file", file);
-
-    const key = `${index}-${type}`;
-    setIsUploadingPositionImage(key);
-
-    try {
-      const res = await api.post(`/upload?folder=embroidery`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      const newEmb = [...embroidery];
-      if (type === "logo") newEmb[index].logoUrl = res.data.data.url;
-      if (type === "mockup") newEmb[index].mockupUrl = res.data.data.url;
-      setEmbroidery(newEmb);
-    } catch (err) {
-      console.error(err);
-      alert("อัปโหลดรูปภาพตำแหน่งปักไม่สำเร็จ");
-    } finally {
-      setIsUploadingPositionImage(null);
+    const previewUrl = URL.createObjectURL(file);
+    const newEmb = [...embroidery];
+    if (type === "logo") {
+      newEmb[index].logoUrl = previewUrl;
+      newEmb[index].logoFile = file;
     }
+    if (type === "mockup") {
+      newEmb[index].mockupUrl = previewUrl;
+      newEmb[index].mockupFile = file;
+    }
+    setEmbroidery(newEmb);
   };
   const [paymentMethod, setPaymentMethod] = useState("TRANSFER"); // TRANSFER | COD
   const [masterPositions, setMasterPositions] = useState([]);
@@ -433,12 +396,67 @@ const CreateOrder = () => {
   const [hasManualDeposit, setHasManualDeposit] = useState(false);
   useEffect(() => {
     if (!hasManualDeposit && totals.finalTotal > 0) {
-      // If COD, usually no deposit required? Or maybe assume full COD?
-      // User didn't specify, but usually COD = No Deposit or partial.
-      // Keeping logic same: Suggest 20%
-      setPaidAmount(Math.round(totals.finalTotal * 0.2));
+      // Suggest 50% deposit as requested
+      setPaidAmount(Math.round(totals.finalTotal * 0.5));
     }
   }, [totals.finalTotal, hasManualDeposit]);
+
+  // --- Helper to finish all uploads ---
+  const performUploads = async () => {
+    // 1. Upload Slip
+    let finalSlipUrl = depositSlipUrl;
+    if (depositSlipFile) {
+      const fd = new FormData();
+      fd.append("file", depositSlipFile);
+      const res = await api.post("/upload?folder=slips", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      finalSlipUrl = res.data.data.url;
+    }
+
+    // 2. Upload Drafts
+    const finalDraftUrls = [];
+    for (const item of draftFiles) {
+      const fd = new FormData();
+      fd.append("file", item.file);
+      const res = await api.post("/upload?folder=drafts", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      finalDraftUrls.push(res.data.data.url);
+    }
+
+    // 3. Upload Embroidery Images
+    const finalEmbroidery = await Promise.all(
+      embroidery.map(async (item) => {
+        let logo = item.logoUrl;
+        let mockup = item.mockupUrl;
+
+        if (item.logoFile) {
+          const fd = new FormData();
+          fd.append("file", item.logoFile);
+          const res = await api.post("/upload?folder=embroidery", fd, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          logo = res.data.data.url;
+        }
+
+        if (item.mockupFile) {
+          const fd = new FormData();
+          fd.append("file", item.mockupFile);
+          const res = await api.post("/upload?folder=embroidery", fd, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          mockup = res.data.data.url;
+        }
+
+        // Return a cleaned object without the File objects for the DB
+        const { logoFile: _l, mockupFile: _m, ...cleanItem } = item;
+        return { ...cleanItem, logoUrl: logo, mockupUrl: mockup };
+      }),
+    );
+
+    return { finalSlipUrl, finalDraftUrls, finalEmbroidery };
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -464,6 +482,23 @@ const CreateOrder = () => {
       return;
     }
 
+    let actualDepositSlipUrl = depositSlipUrl;
+    let actualDraftImages = draftImages;
+    let actualEmbroidery = embroidery;
+
+    try {
+      // PERFORM BATCH UPLOAD ONLY AT THIS POINT
+      const uploaded = await performUploads();
+      actualDepositSlipUrl = uploaded.finalSlipUrl;
+      actualDraftImages = uploaded.finalDraftUrls;
+      actualEmbroidery = uploaded.finalEmbroidery;
+    } catch (err) {
+      console.error("Upload error", err);
+      setError("เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ กรุณาลองใหม่อีกครั้ง");
+      setLoading(false);
+      return;
+    }
+
     const payload = {
       customerName: customer.name,
       customerPhone: customer.phone,
@@ -480,12 +515,11 @@ const CreateOrder = () => {
       items,
       totalPrice: totals.finalTotal,
       paidAmount: parseFloat(paidAmount) || 0,
-      blockPrice: totals.blockPrice, // Server might need this separately
+      blockPrice: totals.blockPrice,
       unitPrice: parseFloat(customUnitPrice) || 0,
-      embroideryDetails: embroidery,
-      depositSlipUrl: depositSlipUrl,
-      draftImages: draftImages,
-      // Sending payment method info in notes or specific field if schema supports
+      embroideryDetails: actualEmbroidery,
+      depositSlipUrl: actualDepositSlipUrl,
+      draftImages: actualDraftImages,
       paymentMethod: paymentMethod,
       codSurcharge: totals.codSurcharge,
     };
@@ -701,20 +735,26 @@ const CreateOrder = () => {
               setOrderInfo={setOrderInfo}
               user={user}
               onUploadPositionImage={handleEmbroideryImageUpload}
-              isUploadingImage={isUploadingPositionImage}
+              isUploadingImage={false} // Loading handled by global submit
             />
             <PaymentSection
               draftImages={draftImages}
-              setDraftImages={setDraftImages}
+              setDraftImages={(newImages) => {
+                setDraftImages(newImages);
+                // Synchronize draftFiles by filtering out those whose preview is no longer in draftImages
+                setDraftFiles((prev) =>
+                  prev.filter((f) => newImages.includes(f.preview)),
+                );
+              }}
               onUploadDraft={handleDraftImageUpload}
-              uploadingDraft={uploadingDraft}
+              uploadingDraft={false}
               totals={totals}
               paidAmount={paidAmount}
               setPaidAmount={setPaidAmount}
               setHasManualDeposit={setHasManualDeposit}
               depositSlipUrl={depositSlipUrl}
               onUploadSlip={handleUploadSlip}
-              isUploadingSlip={isUploadingSlip}
+              isUploadingSlip={false}
               paymentMethod={paymentMethod}
               setPaymentMethod={setPaymentMethod}
             />

@@ -10,6 +10,7 @@ import PaymentHistory from "../Payment/PaymentHistory";
 
 const OrderSidebar = ({
   order,
+  user,
   canViewFinancial,
   getPaymentStatusBadge,
   formatDate,
@@ -18,77 +19,81 @@ const OrderSidebar = ({
   return (
     <div className="space-y-6">
       {/* Customer Info */}
-      <div className="erp-card p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <HiOutlineUser className="w-5 h-5 text-indigo-500" />
-          <h3 className="font-bold text-slate-800 text-sm">ข้อมูลลูกค้า</h3>
-        </div>
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-              <HiOutlineUser className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                ชื่อลูกค้า (Customer)
-              </p>
-              <p className="font-bold text-slate-800">{order.customerName}</p>
-            </div>
+      {user?.role !== "DIGITIZER" && (
+        <div className="erp-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <HiOutlineUser className="w-5 h-5 text-indigo-500" />
+            <h3 className="font-bold text-slate-800 text-sm">ข้อมูลลูกค้า</h3>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-              <HiOutlinePhone className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                เบอร์โทรศัพท์ (Contact)
-              </p>
-              <p className="font-bold text-slate-800">{order.customerPhone}</p>
-            </div>
-          </div>
-          {order.customerFb && (
+          <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                <HiOutlineChatBubbleLeftRight className="w-4 h-4" />
+                <HiOutlineUser className="w-4 h-4" />
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  Facebook
+                  ชื่อลูกค้า (Customer)
                 </p>
-                <p className="font-bold text-slate-800">{order.customerFb}</p>
+                <p className="font-bold text-slate-800">{order.customerName}</p>
               </div>
             </div>
-          )}
-          {order.customerAddress && (
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mt-1">
-                <HiOutlineMapPin className="w-4 h-4" />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                <HiOutlinePhone className="w-4 h-4" />
               </div>
-              <div className="flex-1">
+              <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  ที่อยู่จัดส่ง (Address)
+                  เบอร์โทรศัพท์ (Contact)
                 </p>
-                <p className="font-bold text-slate-800 text-sm leading-snug">
-                  {order.customerAddress}
-                </p>
-              </div>
-            </div>
-          )}
-          {order.notes && (
-            <div className="flex items-start gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
-              <HiOutlineChatBubbleLeftRight className="w-5 h-5 text-indigo-400 mt-0.5 shrink-0" />
-              <div className="flex-1">
-                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">
-                  หมายเหตุจดออเดอร์
-                </p>
-                <p className="text-xs font-bold text-indigo-900 leading-relaxed">
-                  {order.notes}
+                <p className="font-bold text-slate-800">
+                  {order.customerPhone}
                 </p>
               </div>
             </div>
-          )}
+            {order.customerFb && (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                  <HiOutlineChatBubbleLeftRight className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Facebook
+                  </p>
+                  <p className="font-bold text-slate-800">{order.customerFb}</p>
+                </div>
+              </div>
+            )}
+            {order.customerAddress && (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mt-1">
+                  <HiOutlineMapPin className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    ที่อยู่จัดส่ง (Address)
+                  </p>
+                  <p className="font-bold text-slate-800 text-sm leading-snug">
+                    {order.customerAddress}
+                  </p>
+                </div>
+              </div>
+            )}
+            {order.notes && (
+              <div className="flex items-start gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                <HiOutlineChatBubbleLeftRight className="w-5 h-5 text-indigo-400 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">
+                    หมายเหตุจดออเดอร์
+                  </p>
+                  <p className="text-xs font-bold text-indigo-900 leading-relaxed">
+                    {order.notes}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Payment & Financial summary */}
       {canViewFinancial && (
@@ -104,7 +109,7 @@ const OrderSidebar = ({
               ฿{parseFloat(order.totalPrice || 0).toLocaleString()}
             </div>
             <p className="text-[10px] font-bold text-indigo-200 uppercase">
-              ยอดสุทธิทั้งหมด 
+              ยอดสุทธิทั้งหมด
             </p>
           </div>
           <div className="p-5 space-y-4 bg-indigo-600">

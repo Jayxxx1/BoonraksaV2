@@ -25,7 +25,7 @@ const envSchema = z.object({
   // CORS
   CORS_ORIGIN: z.string().default("*"),
 
-  // S3 / NIPA
+  // S3 / NIPA / Supabase S3
   S3_ENDPOINT: isProd
     ? z.string().url("S3_ENDPOINT must be a valid URL in production")
     : z.string().min(1),
@@ -40,13 +40,6 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val === "" ? undefined : val)),
-
-  // Supabase Storage
-  SUPABASE_URL: z
-    .string()
-    .url("SUPABASE_URL must be a valid URL in production")
-    .optional(),
-  SUPABASE_KEY: z.string().optional(),
 });
 
 const result = envSchema.safeParse(process.env);

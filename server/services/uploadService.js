@@ -1,26 +1,33 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl as awsGetSignedUrl } from '@aws-sdk/s3-request-presigner';
-import config from '../src/config/config.js';
-import path from 'path';
-import fs from 'fs';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl as awsGetSignedUrl } from "@aws-sdk/s3-request-presigner";
+import config from "../src/config/config.js";
+import path from "path";
+import fs from "fs";
 
 /**
  * Upload Service for Nipa Cloud S3 (AWS S3 Compatible)
- * 
+ *
  * This service provides a unified interface for file uploads.
  * - Development: Uses local disk storage (uploads/)
  * - Production: Uses Nipa Cloud S3 bucket
- * 
+ *
  * Switching is automatic based on environment variables.
  */
 
 // Determine if S3 is properly configured
 const isS3Configured = () => {
-  return config.S3_ACCESS_KEY && 
-         config.S3_SECRET_KEY && 
-         config.S3_ENDPOINT && 
-         !config.S3_ENDPOINT.includes('localhost') &&
-         config.S3_BUCKET;
+  return (
+    config.S3_ACCESS_KEY &&
+    config.S3_SECRET_KEY &&
+    config.S3_ENDPOINT &&
+    !config.S3_ENDPOINT.includes("localhost") &&
+    config.S3_BUCKET
+  );
 };
 
 // S3 Client (lazy initialization)
@@ -30,7 +37,7 @@ const getS3Client = () => {
   if (!s3Client && isS3Configured()) {
     s3Client = new S3Client({
       endpoint: config.S3_ENDPOINT,
-      region: config.S3_REGION || 'ap-southeast-1',
+      region: config.S3_REGION || "ap-southeast-1",
       credentials: {
         accessKeyId: config.S3_ACCESS_KEY,
         secretAccessKey: config.S3_SECRET_KEY,
@@ -49,7 +56,7 @@ const getS3Client = () => {
  */
 const generateFileKey = (folderPath, originalName) => {
   const timestamp = Date.now();
-  const safeName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const safeName = originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
   return `${folderPath}/${timestamp}-${safeName}`;
 };
 
@@ -63,8 +70,14 @@ const generateFileKey = (folderPath, originalName) => {
  * @param {string} options.acl - ACL setting (default: 'public-read')
  * @returns {Promise<{url: string, key: string}>} Public URL and storage key
  */
-export const uploadFile = async (fileBuffer, fileName, folderPath = 'misc', options = {}) => {
-  const { contentType = 'application/octet-stream', acl = 'public-read' } = options;
+export const uploadFile = async (
+  fileBuffer,
+  fileName,
+  folderPath = "misc",
+  options = {},
+) => {
+  const { contentType = "application/octet-stream", acl = "public-read" } =
+    options;
   const fileKey = generateFileKey(folderPath, fileName);
 
   if (isS3Configured()) {
@@ -81,7 +94,7 @@ export const uploadFile = async (fileBuffer, fileName, folderPath = 'misc', opti
     await client.send(command);
 
     // Construct public URL
-    const publicUrl = config.S3_PUBLIC_URL 
+    const publicUrl = config.S3_PUBLIC_URL
       ? `${config.S3_PUBLIC_URL}/${fileKey}`
       : `${config.S3_ENDPOINT}/${config.S3_BUCKET}/${fileKey}`;
 
@@ -89,7 +102,7 @@ export const uploadFile = async (fileBuffer, fileName, folderPath = 'misc', opti
     return { url: publicUrl, key: fileKey };
   } else {
     // Local Disk Upload (Development)
-    const uploadDir = path.join('uploads', folderPath);
+    const uploadDir = path.join("uploads", folderPath);
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -98,7 +111,7 @@ export const uploadFile = async (fileBuffer, fileName, folderPath = 'misc', opti
     fs.writeFileSync(localPath, fileBuffer);
 
     // Normalize path for URL
-    const relativePath = localPath.replace(/\\/g, '/');
+    const relativePath = localPath.replace(/\\/g, "/");
     const localUrl = `http://localhost:${config.PORT || 8000}/${relativePath}`;
 
     console.log(`[UPLOAD-LOCAL] File saved: ${localPath}`);
@@ -124,7 +137,9 @@ export const deleteFile = async (fileKey) => {
     return true;
   } else {
     // Local file deletion
-    const localPath = fileKey.startsWith('uploads/') ? fileKey : path.join('uploads', fileKey);
+    const localPath = fileKey.startsWith("uploads/")
+      ? fileKey
+      : path.join("uploads", fileKey);
     if (fs.existsSync(localPath)) {
       fs.unlinkSync(localPath);
       console.log(`[DELETE-LOCAL] File deleted: ${localPath}`);
@@ -164,8 +179,36 @@ export const storagePath = {
   orderMockup: (orderId) => `orders/${orderId}/mockups`,
   orderProduction: (orderId) => `orders/${orderId}/production`,
   orderPayment: (orderId) => `payments/${orderId}`,
-  document: () => 'documents',
-  artwork: () => 'artworks',
+  document: () => "documents",
+  artwork: () => "artworks",
+};
+
+/**
+ * Extract S3 key from a full public URL
+ * @param {string} url - The URL to parse
+ * @returns {string|null} The key or null if not an S3 URL
+ */
+export const extractKeyFromUrl = (url) => {
+  if (!url || typeof url !== "string") return null;
+
+  // Handle S3 Public URL (configured) or Default S3 Endpoint
+  const s3PublicUrl = config.S3_PUBLIC_URL;
+  const s3Endpoint = config.S3_ENDPOINT;
+  const bucket = config.S3_BUCKET;
+
+  let key = null;
+
+  if (s3PublicUrl && url.startsWith(s3PublicUrl)) {
+    key = url.replace(s3PublicUrl, "");
+  } else if (url.includes(`${s3Endpoint}/${bucket}/`)) {
+    key = url.split(`${s3Endpoint}/${bucket}/`)[1];
+  } else if (url.includes("amazonaws.com")) {
+    // Fallback for standard AWS S3 URLs if encountered
+    key = url.split(".com/")[1];
+  }
+
+  // Remove leading slash if any
+  return key ? key.replace(/^\//, "") : null;
 };
 
 export default {

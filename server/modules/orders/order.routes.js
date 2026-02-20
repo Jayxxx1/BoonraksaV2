@@ -36,9 +36,15 @@ router.route("/:id/specs").patch(orderController.updateSpecs);
 router.route("/:id/print-signal").patch(orderController.printJobSheetSignal);
 router.route("/:id/stock-recheck").patch(orderController.confirmStockRecheck);
 router.route("/:id/production-start").patch(orderController.startProduction);
+router.route("/:id/production-finish").patch(orderController.finishProduction);
+router.route("/:id/qc-pass").patch(orderController.passQC);
+router.route("/:id/ready-to-ship").patch(orderController.readyToShip);
+router.route("/:id/complete").patch(orderController.completeOrder);
+
 router.route("/:id/cancel").patch(orderController.cancelOrder);
 router.route("/:id/urgent").patch(orderController.bumpUrgent);
 router.route("/:id/purchasing").patch(orderController.updatePurchasingInfo);
+router.route("/:id/embroidery").patch(orderController.uploadEmbroidery);
 router
   .route("/:id/production-action")
   .post(orderController.logProductionAction);

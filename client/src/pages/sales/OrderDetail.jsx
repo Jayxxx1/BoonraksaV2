@@ -10,6 +10,7 @@ import {
   HiOutlineClock,
   HiOutlineCalendarDays,
   HiOutlineChatBubbleBottomCenterText,
+  HiOutlineUsers,
 } from "react-icons/hi2";
 import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
@@ -65,6 +66,11 @@ const OrderDetail = () => {
 
   const [showBufferModal, setShowBufferModal] = useState(false);
   const [bufferLevel, setBufferLevel] = useState(0);
+
+  // Production Worker Assignment Modal
+  const [showProductionWorkerModal, setShowProductionWorkerModal] =
+    useState(false);
+  const [workerNameInput, setWorkerNameInput] = useState("");
 
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState({
@@ -190,12 +196,38 @@ const OrderDetail = () => {
         else mappedEndpoint = "production-finish";
       } else if (endpoint === "READY_TO_SHIP") mappedEndpoint = "ready-to-ship";
       else if (endpoint === "COMPLETED") mappedEndpoint = "complete";
+      else if (endpoint === "DIGITIZING_FINISHED")
+        mappedEndpoint = "embroidery";
       // cancel and urgent already match backend routes
 
       await api.patch(`/orders/${orderId}/${mappedEndpoint}`, payload);
       await fetchOrder();
     } catch (err) {
       alert(err.response?.data?.message || "Update failed");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleStartProduction = async () => {
+    if (!workerNameInput.trim()) {
+      alert("กรุณาระบุชื่อผู้รับผิดชอบอย่างน้อย 1 คน");
+      return;
+    }
+    const workers = workerNameInput
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
+
+    try {
+      setIsUpdating(true);
+      await api.patch(`/orders/${orderId}/production-start`, {
+        workerNames: workers,
+      });
+      setShowProductionWorkerModal(false);
+      await fetchOrder();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to start production");
     } finally {
       setIsUpdating(false);
     }
@@ -253,6 +285,13 @@ const OrderDetail = () => {
         shouldConfirm = true;
         break;
       }
+      case "DIGITIZING_FINISHED":
+        title = "ยืนยันการบันทึกงานตีลายเสร็จ";
+        message =
+          "คุณได้อัปโหลดไฟล์ตีลาย (.EMB) ครบถ้วนและพร้อมส่งต่องานแล้วใช่หรือไม่?";
+        confirmLabel = "บันทึกเสร็จ (Finish)";
+        shouldConfirm = true;
+        break;
       case "cancel": // Handle cancel via existing modal structure, but if called directly:
         // note: bump urgent / cancel usually called via specific handlers, but if routed here:
         shouldConfirm = false;
@@ -757,87 +796,150 @@ const OrderDetail = () => {
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* SLA Alert Banner */}
-        {order.sla && order.sla.targetDeadline && (
-          <div
-            className={`rounded-xl border px-4 py-3 flex items-center justify-between shadow-sm ${
-              order.sla.status === "RED"
-                ? "bg-rose-50 border-rose-200 text-rose-700"
-                : order.sla.status === "YELLOW"
-                  ? "bg-amber-50 border-amber-200 text-amber-700"
-                  : "bg-emerald-50 border-emerald-200 text-emerald-700"
-            }`}
-          >
-            <div className="flex items-center gap-6">
-              {/* Target Deadline (Department Goal) */}
-              <div className="flex items-center gap-3">
-                <div
-                  className={`p-2 rounded-full ${
-                    order.sla.status === "RED"
-                      ? "bg-rose-100"
-                      : order.sla.status === "YELLOW"
-                        ? "bg-amber-100"
-                        : "bg-emerald-100"
-                  }`}
-                >
-                  <HiOutlineClock className="w-5 h-5" />
+        {/* SLA Alert Banner — conditionally rendered per role */}
+        {user.role === "SALES"
+          ? // SALES: Only show customer due date, no internal SLA warnings
+            order.dueDate &&
+            order.status !== "COMPLETED" &&
+            order.status !== "CANCELLED" && (
+              <div className="rounded-xl border px-4 py-3 flex items-center gap-4 bg-sky-50 border-sky-200 text-sky-700 shadow-sm">
+                <div className="p-2 rounded-full bg-sky-100">
+                  <HiOutlineCalendarDays className="w-5 h-5" />
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[12px] font-bold uppercase tracking-wider opacity-80">
-                    กำหนดเสร็จสิ้นขั้นตอนปัจจุบัน
+                    กำหนดส่งลูกค้า
                   </span>
                   <span className="text-lg font-black">
-                    {new Date(order.sla.targetDeadline).toLocaleDateString(
-                      "th-TH",
-                      {
-                        day: "2-digit",
-                        month: "long",
-                        year: "numeric",
-                      },
-                    )}
+                    {new Date(order.dueDate).toLocaleDateString("th-TH", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })}
                   </span>
                 </div>
               </div>
-
-              {/* Vertical Divider */}
-              <div className="h-10 w-px bg-current opacity-20 hidden md:block"></div>
-
-              {/* Main Due Date (Customer Limit) */}
-              {order.dueDate && (
-                <div className="hidden md:flex items-center gap-3 opacity-75">
-                  <div className="p-2 rounded-full bg-white/50 border border-current">
-                    <HiOutlineCalendarDays className="w-5 h-5" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[12px] font-bold uppercase tracking-wider opacity-80">
-                      กำหนดส่งลูกค้า
-                    </span>
-                    <span className="text-lg font-black">
-                      {new Date(order.dueDate).toLocaleDateString("th-TH", {
-                        day: "2-digit",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Executive Buffer Control (Only for EXECUTIVE) */}
-            {user.role === "EXECUTIVE" && (
-              <button
-                onClick={() => {
-                  setBufferLevel(order.slaBufferLevel || 0);
-                  setShowBufferModal(true);
-                }}
-                className="px-3 py-1.5 bg-white border border-current rounded-lg text-xs font-bold hover:bg-opacity-50 transition-colors"
+            )
+          : order.sla &&
+            order.sla.targetDeadline &&
+            order.status !== "FINISHED" &&
+            order.status !== "COMPLETED" &&
+            order.status !== "CANCELLED" && (
+              <div
+                className={`rounded-xl border px-4 py-3 flex items-center justify-between shadow-sm ${
+                  order.sla.isCompleted
+                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                    : order.sla.status === "RED"
+                      ? "bg-rose-50 border-rose-200 text-rose-700"
+                      : order.sla.status === "YELLOW"
+                        ? "bg-amber-50 border-amber-200 text-amber-700"
+                        : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                }`}
               >
-                Adjust Buffer ({order.slaBufferLevel || 0} days)
-              </button>
+                <div className="flex items-center gap-6">
+                  {/* Target Deadline (Department Goal) */}
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`p-2 rounded-full ${
+                        order.sla.isCompleted
+                          ? "bg-emerald-100"
+                          : order.sla.status === "RED"
+                            ? "bg-rose-100"
+                            : order.sla.status === "YELLOW"
+                              ? "bg-amber-100"
+                              : "bg-emerald-100"
+                      }`}
+                    >
+                      {order.sla.isCompleted ? (
+                        <HiOutlineCheckCircle className="w-5 h-5" />
+                      ) : (
+                        <HiOutlineClock className="w-5 h-5" />
+                      )}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[12px] font-bold uppercase tracking-wider opacity-80">
+                        {order.sla.isCompleted
+                          ? "ดำเนินการในส่วนของคุณเรียบร้อยแล้ว"
+                          : "กำหนดเสร็จสิ้นขั้นตอนปัจจุบัน ภายใน"}
+                      </span>
+                      <span className="text-lg font-black">
+                        {new Date(order.sla.targetDeadline).toLocaleDateString(
+                          "th-TH",
+                          {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                          },
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Vertical Divider */}
+                  <div className="h-10 w-px bg-current opacity-20 hidden md:block"></div>
+
+                  {/* Main Due Date (Customer Limit) */}
+                  {order.dueDate && (
+                    <div className="hidden md:flex items-center gap-3 opacity-75">
+                      <div className="p-2 rounded-full bg-white/50 border border-current">
+                        <HiOutlineCalendarDays className="w-5 h-5" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[12px] font-bold uppercase tracking-wider opacity-80">
+                          กำหนดส่งลูกค้า
+                        </span>
+                        <span className="text-lg font-black">
+                          {new Date(order.dueDate).toLocaleDateString("th-TH", {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Executive Buffer Control (Only for EXECUTIVE) */}
+                {user.role === "EXECUTIVE" && (
+                  <button
+                    onClick={() => {
+                      setBufferLevel(order.slaBufferLevel || 0);
+                      setShowBufferModal(true);
+                    }}
+                    className="px-3 py-1.5 bg-white border border-current rounded-lg text-xs font-bold hover:bg-opacity-50 transition-colors"
+                  >
+                    Adjust Buffer ({order.slaBufferLevel || 0} days)
+                  </button>
+                )}
+              </div>
             )}
-          </div>
-        )}
+
+        {/* Assigned Production Workers Display (Visible to Production only) */}
+        {user.role === "PRODUCTION" &&
+          order.assignedWorkerNames &&
+          order.assignedWorkerNames.length > 0 && (
+            <div className="erp-card p-4 bg-indigo-50 border-indigo-200 flex items-start gap-4 animate-erp-in mt-6">
+              <div className="p-2 bg-indigo-100 rounded text-indigo-600">
+                <HiOutlineUsers className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1">
+                  รายชื่อลูกมือผู้รับผิดชอบการผลิต
+                </h4>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {order.assignedWorkerNames.map((name, index) => (
+                    <span
+                      key={index}
+                      className="px-3 py-1 bg-white border border-indigo-200 text-indigo-700 rounded-full text-xs font-bold shadow-sm"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
         <OrderStatusBar
           order={order}
@@ -852,6 +954,7 @@ const OrderDetail = () => {
           setShowRejectModal={setShowRejectModal}
           setShowBufferModal={setShowBufferModal}
           setShowPaymentModal={setShowPaymentModal}
+          setShowProductionWorkerModal={setShowProductionWorkerModal}
           trackingNo={trackingNo}
           setTrackingNo={setTrackingNo}
           canPerformSalesAction={canPerformSalesAction}
@@ -1018,7 +1121,10 @@ const OrderDetail = () => {
             </div>
           )}
 
-          <OrderItemTable order={order} canViewOrderItems={canViewOrderItems} />
+          <OrderItemTable
+            order={order}
+            canViewOrderItems={canViewOrderItems && !isDigitizerRole}
+          />
 
           <OrderTechnicalSpecs
             order={order}
@@ -1401,6 +1507,68 @@ const OrderDetail = () => {
         confirmLabel={confirmModal.confirmLabel}
         isDangerous={confirmModal.isDangerous}
       />
+
+      {/* Production Worker Assignment Modal */}
+      {showProductionWorkerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-erp-fade-in">
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 sm:p-8 animate-erp-scale-in">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <span className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
+                  <HiOutlineUsers className="w-6 h-6" />
+                </span>
+                ระบุลูกมือผู้รับผิดชอบงาน
+              </h2>
+              <button
+                onClick={() => setShowProductionWorkerModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                disabled={isUpdating}
+              >
+                <HiOutlineXMark className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  ชื่อลูกมือ (พิมพ์คั่นด้วยลูกน้ำ หรือเว้นวรรค)
+                </label>
+                <input
+                  type="text"
+                  placeholder="เช่น ลุงจอน, ป้านี, น้าสมชาย..."
+                  value={workerNameInput}
+                  onChange={(e) => setWorkerNameInput(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-slate-800 transition-all placeholder:font-normal"
+                />
+              </div>
+              <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+                <p className="text-xs text-indigo-700 font-medium">
+                  💡
+                  ลูกมือจะสามารถดูรายละเอียดแบบและจุดปักในออเดอร์นี้ได้ง่ายขึ้น
+                  และช่วยในการตรวจสอบกรณีพบปัญหา
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-8">
+              <button
+                onClick={() => setShowProductionWorkerModal(false)}
+                className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                disabled={isUpdating}
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleStartProduction}
+                disabled={!workerNameInput.trim() || isUpdating}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black shadow-lg shadow-indigo-200 transition-all disabled:opacity-50"
+              >
+                {isUpdating ? "กำลังบันทึก..." : "ยืนยันและเริ่มผลิต"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

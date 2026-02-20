@@ -170,7 +170,7 @@ export default function DeliveryOrderDetail() {
             </div>
           </div>
 
-          {!isPaid && !isCOD && (
+          {!isPaid && !isCOD && order.status !== "COMPLETED" && (
             <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded-r-xl flex items-start gap-3">
               <HiOutlineBanknotes className="w-6 h-6 text-orange-500 shrink-0 mt-0.5" />
               <div>
