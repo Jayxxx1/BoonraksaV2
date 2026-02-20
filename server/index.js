@@ -36,13 +36,15 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(morgan(config.NODE_ENV === "production" ? "combined" : "dev"));
 
 // CORS: Configurable whitelist from environment
+
 const corsOptions = {
-  origin: true, // Allow all origins for dev or specify yours
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  origin: true, // Phase 1 เอาให้รอดก่อน
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 };
 app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // --- API Routes ---
 app.get("/health", (req, res) => {
