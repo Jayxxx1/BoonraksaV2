@@ -20,42 +20,30 @@ import masterRoutes from "./modules/master/master.routes.js";
 import { getCategories } from "./controllers/productController.js";
 
 const app = express();
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.header(
-      "Access-Control-Allow-Methods",
-      "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-    );
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    res.header("Access-Control-Allow-Credentials", "true");
-    return res.sendStatus(204);
-  }
-  next();
-});
 // --- Security & Production Middleware ---
 app.use(
   helmet({
-    crossOriginResourcePolicy: false, // Allows loading images from other origins (S3/Local)
+    crossOriginResourcePolicy: false, // Allows loading images from S3/Local
   }),
 );
-app.use(compression()); // Compress all responses
-app.use(express.json({ limit: "10mb" })); // Limit body size for security
+app.use(compression());
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Logging: Combined format for production, dev format for development
+// Logging
 app.use(morgan(config.NODE_ENV === "production" ? "combined" : "dev"));
 
-// CORS: Configurable whitelist from environment
-
+// --- CORS Configuration ---
 const corsOptions = {
-  origin: true, // Phase 1 เอาให้รอดก่อน
+  origin: true, // Phase 1: Allow all origins to ensure connectivity
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
+  optionsSuccessStatus: 204,
 };
+
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+app.options("*", cors(corsOptions)); // Handle preflight for all routes
 
 // --- API Routes ---
 app.get("/health", (req, res) => {
