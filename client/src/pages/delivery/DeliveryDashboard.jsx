@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
 import {
   HiOutlineTruck,
@@ -29,7 +29,7 @@ export default function DeliveryDashboard() {
       // If 'available' only returns active flow, we need to fetch COMPLETED too for history tab.
       // Let's assume we can fetch all or specific statuses.
 
-      const res = await axios.get("http://localhost:8000/api/orders", {
+      const res = await api.get("/orders", {
         headers: { Authorization: `Bearer ${token}` },
         params: {
           // We want READY_TO_SHIP and COMPLETED
@@ -216,119 +216,215 @@ export default function DeliveryDashboard() {
             <p className="font-bold">ไม่มีรายการในหมวดหมู่นี้</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase font-black tracking-wider">
-                  <th className="p-4 w-[120px]">Job ID</th>
-                  <th className="p-4">ลูกค้า (Customer)</th>
-                  <th className="p-4">ที่อยู่จัดส่ง (Address)</th>
-                  <th className="p-4 w-[150px]">การชำระเงิน</th>
-                  <th className="p-4 text-right w-[280px]">
-                    {activeTab === "shipped"
-                      ? "เลขพัสดุ (Tracking)"
-                      : "ดำเนินการ (Action)"}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {filteredOrders.map((order) => (
-                  <tr
-                    key={order.id}
-                    className="hover:bg-indigo-50/30 transition-colors"
-                  >
-                    <td className="p-4 align-top">
-                      <Link
-                        to={`/delivery/order/${order.id}`}
-                        className="font-bold text-slate-900 hover:text-indigo-600 hover:underline"
-                      >
-                        {order.jobId}
-                      </Link>
-                      {order.isUrgent && (
-                        <span className="block text-[10px] text-rose-600 font-bold mt-1">
-                          ⚡ งานด่วน
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4 align-top">
-                      <div className="font-bold text-slate-800">
-                        {order.customerName}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {order.customerFb || "-"}
-                      </div>
-                    </td>
-                    <td className="p-4 align-top max-w-[300px]">
-                      <p className="text-slate-600 text-xs leading-relaxed truncate hover:whitespace-normal">
-                        {order.customerAddress || (
-                          <span className="text-rose-400 italic">
-                            ไม่ระบุที่อยู่
+          <>
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase font-black tracking-wider">
+                    <th className="p-4 w-[120px]">Job ID</th>
+                    <th className="p-4">ลูกค้า (Customer)</th>
+                    <th className="p-4">ที่อยู่จัดส่ง (Address)</th>
+                    <th className="p-4 w-[150px]">การชำระเงิน</th>
+                    <th className="p-4 text-right w-[280px]">
+                      {activeTab === "shipped"
+                        ? "เลขพัสดุ (Tracking)"
+                        : "ดำเนินการ (Action)"}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {filteredOrders.map((order) => (
+                    <tr
+                      key={order.id}
+                      className="hover:bg-indigo-50/30 transition-colors"
+                    >
+                      <td className="p-4 align-top">
+                        <Link
+                          to={`/delivery/order/${order.id}`}
+                          className="font-bold text-slate-900 hover:text-indigo-600 hover:underline"
+                        >
+                          {order.jobId}
+                        </Link>
+                        {order.isUrgent && (
+                          <span className="block text-[10px] text-rose-600 font-bold mt-1">
+                            ⚡ งานด่วน
                           </span>
                         )}
-                      </p>
-                    </td>
-                    <td className="p-4 align-top">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-slate-900 uppercase tracking-tight">
-                            {order.displayStatusLabel ||
-                              (order.status === "READY_TO_SHIP"
-                                ? "พร้อมจัดส่ง"
-                                : "รอจัดส่ง")}
-                          </span>
-                          {order.paymentMethod === "COD" && (
-                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-black uppercase">
-                              COD
+                      </td>
+                      <td className="p-4 align-top">
+                        <div className="font-bold text-slate-800">
+                          {order.customerName}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {order.customerFb || "-"}
+                        </div>
+                      </td>
+                      <td className="p-4 align-top max-w-[300px]">
+                        <p className="text-slate-600 text-xs leading-relaxed truncate hover:whitespace-normal">
+                          {order.customerAddress || (
+                            <span className="text-rose-400 italic">
+                              ไม่ระบุที่อยู่
+                            </span>
+                          )}
+                        </p>
+                      </td>
+                      <td className="p-4 align-top">
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900 uppercase tracking-tight">
+                              {order.displayStatusLabel ||
+                                (order.status === "READY_TO_SHIP"
+                                  ? "พร้อมจัดส่ง"
+                                  : "รอจัดส่ง")}
+                            </span>
+                            {order.paymentMethod === "COD" && (
+                              <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-black uppercase">
+                                COD
+                              </span>
+                            )}
+                          </div>
+
+                          {order.subStatusLabel ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[10px] font-black text-orange-600 animate-pulse">
+                                ⚠️ {order.subStatusLabel}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-bold">
+                                ค้างชำระ: {order.balanceDue?.toLocaleString()}฿
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-emerald-600 font-bold">
+                              {order.paymentMethod === "COD"
+                                ? `ยอดเก็บเงินปลายทาง: ${order.balanceDue?.toLocaleString()}฿`
+                                : "ชำระเงินเรียบร้อยแล้ว"}
                             </span>
                           )}
                         </div>
-
-                        {order.subStatusLabel ? (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] font-black text-orange-600 animate-pulse">
-                              ⚠️ {order.subStatusLabel}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-bold">
-                              ค้างชำระ: {order.balanceDue?.toLocaleString()}฿
-                            </span>
+                      </td>
+                      <td className="p-4 align-top text-right">
+                        {activeTab === "shipped" ? (
+                          <div className="inline-block bg-slate-100 px-3 py-1 rounded-full text-slate-700 font-mono text-sm border font-bold">
+                            {order.trackingNo || "-"}
                           </div>
+                        ) : activeTab === "pending_payment" ? (
+                          <Link
+                            to={`/delivery/order/${order.id}`}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline"
+                          >
+                            <HiOutlineClipboardDocumentList className="w-4 h-4" />
+                            ดูรายละเอียดยอด
+                          </Link>
                         ) : (
-                          <span className="text-[10px] text-emerald-600 font-bold">
-                            {order.paymentMethod === "COD"
-                              ? `ยอดเก็บเงินปลายทาง: ${order.balanceDue?.toLocaleString()}฿`
-                              : "ชำระเงินเรียบร้อยแล้ว"}
+                          <Link
+                            to={`/delivery/order/${order.id}`}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:underline"
+                          >
+                            <HiOutlineClipboardDocumentList className="w-4 h-4" />
+                            ดำเนินการจัดส่ง
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards for Delivery */}
+            <div className="lg:hidden flex flex-col gap-3 p-3 bg-slate-50/50">
+              {filteredOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm transition-all"
+                >
+                  <div className="flex justify-between items-start mb-2.5">
+                    <div className="flex flex-col gap-1.5 w-full">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col">
+                          <span
+                            className={`text-sm font-black tracking-tight ${order.isUrgent ? "text-rose-600" : "text-slate-900"}`}
+                          >
+                            {order.jobId}
+                          </span>
+                          <span className="text-[11px] text-slate-600 font-bold max-w-[160px] truncate">
+                            {order.customerName}
+                          </span>
+                        </div>
+                        <span className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg border flex-shrink-0 text-center bg-indigo-50 text-indigo-700 border-transparent">
+                          {order.displayStatusLabel ||
+                            (order.status === "QC_PASSED" ||
+                            order.status === "READY_TO_SHIP"
+                              ? "พร้อมจัดส่ง"
+                              : "รอจัดส่ง")}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-1">
+                        {order.isUrgent && (
+                          <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200">
+                            ⚡ งานด่วน
+                          </span>
+                        )}
+                        {order.paymentMethod === "COD" && (
+                          <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-black uppercase">
+                            COD
                           </span>
                         )}
                       </div>
-                    </td>
-                    <td className="p-4 align-top text-right">
+                    </div>
+                  </div>
+
+                  <div className="mb-3">
+                    <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
+                      {order.customerAddress || (
+                        <span className="text-rose-400 italic">
+                          ไม่ระบุที่อยู่
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-100">
+                    <div className="flex flex-col gap-0.5">
+                      {order.subStatusLabel ? (
+                        <>
+                          <span className="text-[10px] font-black text-orange-600 animate-pulse">
+                            ⚠️ {order.subStatusLabel}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-bold">
+                            ค้างชำระ: {order.balanceDue?.toLocaleString()}฿
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-emerald-600 font-bold">
+                          {order.paymentMethod === "COD"
+                            ? `ยอดเก็บปลายทาง: ${order.balanceDue?.toLocaleString()}฿`
+                            : "ชำระเงินเรียบร้อยแล้ว"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center">
                       {activeTab === "shipped" ? (
-                        <div className="inline-block bg-slate-100 px-3 py-1 rounded-full text-slate-700 font-mono text-sm border font-bold">
+                        <div className="bg-slate-100 px-2 py-0.5 rounded-full text-slate-700 font-mono text-[10px] font-bold border">
                           {order.trackingNo || "-"}
                         </div>
-                      ) : activeTab === "pending_payment" ? (
-                        <Link
-                          to={`/delivery/order/${order.id}`}
-                          className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline"
-                        >
-                          <HiOutlineClipboardDocumentList className="w-4 h-4" />
-                          ดูรายละเอียดยอด
-                        </Link>
                       ) : (
                         <Link
                           to={`/delivery/order/${order.id}`}
-                          className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:underline"
+                          className="px-4 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-[10.5px] font-black hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm active:scale-95"
                         >
-                          <HiOutlineClipboardDocumentList className="w-4 h-4" />
-                          ดำเนินการจัดส่ง
+                          {activeTab === "pending_payment"
+                            ? "ดูรายละเอียด"
+                            : "ดำเนินการ"}
                         </Link>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

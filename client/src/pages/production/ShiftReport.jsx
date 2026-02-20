@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import {
   HiOutlineDocumentText,
   HiOutlinePlus,
@@ -33,12 +33,9 @@ const ShiftReport = () => {
 
   const fetchReports = useCallback(async () => {
     try {
-      const res = await axios.get(
-        "http://localhost:8000/api/orders/reports/daily",
-        {
-          headers: getAuthHeader(),
-        },
-      );
+      const res = await api.get("/orders/reports/daily", {
+        headers: getAuthHeader(),
+      });
       setReports(res.data.data.reports);
     } catch (err) {
       console.error(err);
@@ -52,13 +49,9 @@ const ShiftReport = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(
-        "http://localhost:8000/api/orders/reports/daily",
-        formData,
-        {
-          headers: getAuthHeader(),
-        },
-      );
+      await api.post("/orders/reports/daily", formData, {
+        headers: getAuthHeader(),
+      });
       setShowForm(false);
       fetchReports();
       alert("บันทึกรายงานกะเรียบร้อยแล้ว");

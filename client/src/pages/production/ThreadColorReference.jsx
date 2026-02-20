@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import {
   HiOutlineSwatch,
   HiOutlineMagnifyingGlass,
@@ -28,7 +28,7 @@ const ThreadColorReference = () => {
   const fetchThreads = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get("http://localhost:8000/api/threads", {
+      const res = await api.get("/threads", {
         headers: getAuthHeader(),
       });
       setThreads(res.data.data.threads);
@@ -46,7 +46,7 @@ const ThreadColorReference = () => {
   const handleAddThread = async (e) => {
     e.preventDefault();
     try {
-      await axios.post("http://localhost:8000/api/threads", newThread, {
+      await api.post("/threads", newThread, {
         headers: getAuthHeader(),
       });
       setShowAdd(false);

@@ -21,6 +21,7 @@ enum Role {
   PURCHASING // ฝ่ายจัดซื้อ (NEW)
   MARKETING  // ฝ่ายการตลาด (NEW)
   FINANCE    // ฝ่ายการเงิน (NEW)
+  DIGITIZER  // ฝ่ายตีลาย (NEW)
 }
 
 model User {
@@ -40,12 +41,15 @@ model User {
   qcOrders      Order[] @relation("QCOrders")
   stockOrders   Order[] @relation("StockOrders")
   productionIdOrders Order[] @relation("ProductionOrders")
+  digitizedOrders    Order[] @relation("DigitizerOrders")
 
   activityLogs ActivityLog[]
   pushSubs     PushSubscription[]
+  notifications Notification[]
   uploadedPaymentSlips PaymentSlip[]
   productionLogs ProductionLog[]
   foremanReports DailyProductionReport[]
+  rejections     RejectionLog[] // ประวัติการตีกลับงาน โดย User คนนี้
 }
 
 // --------------------------------------------------------
@@ -107,6 +111,7 @@ model ProductVariant {
 // --------------------------------------------------------
 
 enum OrderStatus {
+  PENDING_DIGITIZING   // รอตีลาย (สำหรับบล็อกใหม่)
   PENDING_ARTWORK      // รอวางแบบ
   DESIGNING            // กำลังวางแบบ
   PENDING_PAYMENT      // รอชำระส่วนที่เหลือ
@@ -160,6 +165,7 @@ model Order {
   legacyJobCode  String?        // For imported data reference, strictly optional
 
   isUrgent   Boolean   @default(false) // งานด่วน (3 วัน)
+  slaBufferLevel Int   @default(0)     // ระดับการอลุ่มอล่วยเวลา (0-3)
   blockType  BlockType @default(OLD)
   customerFb String? // ชื่อ Facebook ลูกค้า
 
@@ -210,6 +216,7 @@ model Order {
   readyForProductionAt    DateTime?
   productionStartedAt     DateTime?
   productionCompletedAt   DateTime?
+  digitizingCompletedAt   DateTime?
 
   // ผู้รับผิดชอบงาน
   salesId Int
@@ -227,12 +234,22 @@ model Order {
   productionId Int?
   production   User? @relation("ProductionOrders", fields: [productionId], references: [id])
 
+  digitizerId Int?
+  digitizer   User? @relation("DigitizerOrders", fields: [digitizerId], references: [id])
+
+  assignedWorkerName String? // ชื่อลูกมือที่หัวหน้ากะมอบหมายให้
+  rejectionCount     Int     @default(0) // จำนวนครั้งที่งานถูกตีกลับ
+  damagedCount       Int     @default(0) // จำนวนของเสียจากการผลิต/การแก้
+
   items OrderItem[]
   logs  ActivityLog[]
+  rejections RejectionLog[] // ประวัติการตีกลับงาน
+
+  notifications Notification[]
 
   artworkUrl String? // รูป Artwork จาก Graphic
-  productionFileUrl String? // ไฟล์สำหรับเครื่องผลิต (ปัก/สกรีน)
-  productionFileName String? // ชื่อไฟล์ผลิต
+  embroideryFileUrl  String?   // ไฟล์ .EMB เดิม (Legacy)
+  embroideryFileUrls String[]  // ไฟล์ .EMB ใหม่จากฝ่ายตีลาย (หลายไฟล์)
   trackingNo String? // เลขพัสดุ
   notes      String? // หมายเหตุจากออเดอร์
   cancelReason String? // เหตุผลการยกเลิก
@@ -274,8 +291,6 @@ model EmbroideryBlock {
   code        String?  @unique // Optional unique code
   description String?
   artworkUrl  String?  // Final mockup
-  productionFileUrl String? // DST/PES file
-  productionFileName String?
   
   orders      Order[]
   
@@ -353,11 +368,24 @@ model SalesChannel {
 // 🪡 ส่วนต่อยอด: ระบบตำแหน่งปักและการคุมการผลิต
 // --------------------------------------------------------
 
+model MasterEmbroideryPosition {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique // อกซ้าย, อกขวา, ...
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderPositions OrderEmbroideryPosition[]
+}
+
 model OrderEmbroideryPosition {
   id        Int     @id @default(autoincrement())
   orderId   Int
   order     Order   @relation(fields: [orderId], references: [id])
   
+  masterPositionId Int?
+  masterPosition   MasterEmbroideryPosition? @relation(fields: [masterPositionId], references: [id])
+
+  positionNo Int?    // 🆕 ลำดับตำแหน่งปัก (1-10) หรือตามที่ user gen
   position  String  // อกซ้าย, อกขวา, แขน, ฯลฯ
   textToEmb String? // ข้อความที่ต้องการปัก (สำหรับ Text Lock)
   logoUrl   String? // รูปโลโก้ (จาก S3)
@@ -366,6 +394,18 @@ model OrderEmbroideryPosition {
   width     Float?  // เซนติเมตร
   height    Float?  // เซนติเมตร
   note      String? // หมายเหตุอื่นๆ เช่น สีตรงนี้ขอเน้นๆ
+  
+  isFreeOption   Boolean @default(false)
+  freeOptionName String?
+  
+  // 🆕 ข้อมูลทางเทคนิคสำหรับฝ่ายผลิต
+  fileAddress   String? // เช่น F6:159 (Flashdrive 6 ไฟล์ที่ 159)
+  needlePattern String? // เช่น 1154 หรือ 24499
+  
+  embroideryFileUrls String[] @default([]) // 🆕 ไฟล์ .EMB ประจำจุดปัก (สูงสุด 10 ไฟล์)
+  
+  // เก็บเป็น JSON เช่น: [{ "seq": 1, "threadCode": "P101", "colorName": "แดง" }]
+  threadSequence Json? 
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -410,4 +450,34 @@ model DailyProductionReport {
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model RejectionLog {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id])
+  
+  fromRole  Role
+  toRole    Role
+  reason    String
+  isSalesError Boolean @default(false) // เป็นความผิดพลาดจากฝ่ายขาย (ข้อมูลผิด/ไม่ครบ)
+  
+  userId    Int      // ใครเป็นคนกดตีกลับ
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  
+  type      String   // e.g., "PAYMENT_REMINDER", "REJECTION", "URGENT"
+  message   String
+  isRead    Boolean  @default(false)
+  
+  orderId   Int?
+  order     Order?   @relation(fields: [orderId], references: [id])
+  
+  createdAt DateTime @default(now())
 }

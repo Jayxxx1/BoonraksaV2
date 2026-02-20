@@ -1,4 +1,4 @@
-import { OrderStatus, UserRole, PaymentStatus } from './order.constants.js';
+import { OrderStatus, UserRole, PaymentStatus } from "./order.constants.js";
 
 /**
  * Centralized Permission Engine for Orders
@@ -9,74 +9,144 @@ export const getOrderActionMap = (order, user) => {
 
   const role = user.role;
   const status = order.status;
-  const isAdmin = [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.EXECUTIVE].includes(role);
-  
+  const isAdmin = [
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+    UserRole.EXECUTIVE,
+  ].includes(role);
+
   // Ownership checks
   const isCreator = order.salesId === user.id;
-  const isClaimedByMe = (
+  const isClaimedByMe =
     order.graphicId === user.id ||
     order.stockId === user.id ||
     order.productionId === user.id ||
-    order.qcId === user.id
-  );
+    order.qcId === user.id ||
+    order.digitizerId === user.id;
 
   // Pre-order restrictions for Sales (HARD RULE)
-  const isPreorderPending = order.hasPreorder && order.preorderSubStatus !== PreorderStatus.ARRIVED;
+  const isPreorderPending =
+    order.hasPreorder && order.preorderSubStatus !== PreorderStatus.ARRIVED;
   const isRestrictiveSales = role === UserRole.SALES && isPreorderPending;
 
   return {
     // General Actions
     canView: true,
-    canEditSpecs: (isAdmin || role === UserRole.GRAPHIC) && [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status),
-    canCancel: (isAdmin || (isCreator && [OrderStatus.PENDING_ARTWORK, OrderStatus.STOCK_ISSUE].includes(status) && !isRestrictiveSales)) && status !== OrderStatus.CANCELLED,
-    canMarkUrgent: isAdmin || (isCreator && status !== OrderStatus.COMPLETED && status !== OrderStatus.CANCELLED && !isRestrictiveSales),
-    
-    // Workflow Actions
-    canClaim: !isClaimedByMe && !isAdmin && (
-      (role === UserRole.GRAPHIC && [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status) && !order.graphicId) ||
-      (role === UserRole.STOCK && [OrderStatus.PENDING_STOCK_CHECK, OrderStatus.STOCK_ISSUE].includes(status) && !order.stockId) ||
-      (role === UserRole.PRODUCTION && status === OrderStatus.STOCK_RECHECKED && !order.productionId) ||
-      (role === UserRole.SEWING_QC && status === OrderStatus.PRODUCTION_FINISHED && !order.qcId)
-    ),
-    
-    // Graphic Actions
-    canUploadArtwork: (isAdmin || (role === UserRole.GRAPHIC && (isClaimedByMe || !order.graphicId))) && 
+    canEditSpecs:
+      (isAdmin || role === UserRole.GRAPHIC) &&
       [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status),
-      
-    canSendToStock: (isAdmin || (role === UserRole.GRAPHIC && isClaimedByMe)) && 
+    canCancel:
+      (isAdmin ||
+        (isCreator &&
+          [OrderStatus.PENDING_ARTWORK, OrderStatus.STOCK_ISSUE].includes(
+            status,
+          ) &&
+          !isRestrictiveSales)) &&
+      status !== OrderStatus.CANCELLED,
+    canMarkUrgent:
+      isAdmin ||
+      (isCreator &&
+        status !== OrderStatus.COMPLETED &&
+        status !== OrderStatus.CANCELLED &&
+        !isRestrictiveSales),
+
+    // Workflow Actions
+    canClaim:
+      !isClaimedByMe &&
+      !isAdmin &&
+      ((role === UserRole.GRAPHIC &&
+        [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status) &&
+        !order.graphicId) ||
+        (role === UserRole.DIGITIZER &&
+          status === OrderStatus.PENDING_DIGITIZING &&
+          !order.digitizerId) ||
+        (role === UserRole.STOCK &&
+          [OrderStatus.PENDING_STOCK_CHECK, OrderStatus.STOCK_ISSUE].includes(
+            status,
+          ) &&
+          !order.stockId) ||
+        (role === UserRole.PRODUCTION &&
+          status === OrderStatus.STOCK_RECHECKED &&
+          !order.productionId) ||
+        (role === UserRole.SEWING_QC &&
+          status === OrderStatus.PRODUCTION_FINISHED &&
+          !order.qcId)),
+
+    // Graphic Actions
+    canUploadArtwork:
+      (isAdmin ||
+        (role === UserRole.GRAPHIC && (isClaimedByMe || !order.graphicId))) &&
       [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status),
 
+    canSendToStock:
+      (isAdmin || (role === UserRole.GRAPHIC && isClaimedByMe)) &&
+      [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status),
+
+    // Digitizer Actions
+    canUploadEmbroidery:
+      (isAdmin ||
+        (role === UserRole.DIGITIZER &&
+          (isClaimedByMe || !order.digitizerId))) &&
+      status === OrderStatus.PENDING_DIGITIZING,
+
+    canSendToGraphic:
+      (isAdmin || (role === UserRole.DIGITIZER && isClaimedByMe)) &&
+      status === OrderStatus.PENDING_DIGITIZING,
+
     // Stock Actions
-    canConfirmStock: (isAdmin || (role === UserRole.STOCK && isClaimedByMe)) && 
-      [OrderStatus.PENDING_STOCK_CHECK, OrderStatus.STOCK_ISSUE].includes(status),
-    
-    canReportStockIssue: (isAdmin || (role === UserRole.STOCK && isClaimedByMe)) && 
+    canConfirmStock:
+      (isAdmin || (role === UserRole.STOCK && isClaimedByMe)) &&
+      [OrderStatus.PENDING_STOCK_CHECK, OrderStatus.STOCK_ISSUE].includes(
+        status,
+      ),
+
+    canReportStockIssue:
+      (isAdmin || (role === UserRole.STOCK && isClaimedByMe)) &&
       status === OrderStatus.PENDING_STOCK_CHECK,
 
     // Production Actions
-    canStartProduction: (isAdmin || (role === UserRole.PRODUCTION && isClaimedByMe)) && 
+    canStartProduction:
+      (isAdmin || (role === UserRole.PRODUCTION && isClaimedByMe)) &&
       status === OrderStatus.STOCK_RECHECKED,
-      
-    canFinishProduction: (isAdmin || (role === UserRole.PRODUCTION && (isClaimedByMe || order.productionId === user.id))) && 
+
+    canFinishProduction:
+      (isAdmin ||
+        (role === UserRole.PRODUCTION &&
+          (isClaimedByMe || order.productionId === user.id))) &&
       status === OrderStatus.IN_PRODUCTION,
 
     // QC Actions
-    canPassQC: (isAdmin || (role === UserRole.SEWING_QC && isClaimedByMe)) && 
+    canPassQC:
+      (isAdmin || (role === UserRole.SEWING_QC && isClaimedByMe)) &&
       status === OrderStatus.PRODUCTION_FINISHED,
-      
-    canFailQC: (isAdmin || (role === UserRole.SEWING_QC && isClaimedByMe)) && 
+
+    canFailQC:
+      (isAdmin || (role === UserRole.SEWING_QC && isClaimedByMe)) &&
       status === OrderStatus.PRODUCTION_FINISHED,
 
     // Delivery Actions
-    canReceiveForShip: (isAdmin || role === UserRole.DELIVERY) && status === OrderStatus.QC_PASSED,
-    canShip: (isAdmin || role === UserRole.DELIVERY) && status === OrderStatus.READY_TO_SHIP && order.paymentStatus === PaymentStatus.PAID,
-    
+    canReceiveForShip:
+      (isAdmin || role === UserRole.DELIVERY) &&
+      status === OrderStatus.QC_PASSED,
+    canShip:
+      (isAdmin || role === UserRole.DELIVERY) &&
+      status === OrderStatus.READY_TO_SHIP &&
+      order.paymentStatus === PaymentStatus.PAID,
+
     // Financial Actions
-    canUploadSlip: isAdmin || role === UserRole.SALES || role === UserRole.DELIVERY,
+    canUploadSlip:
+      isAdmin || role === UserRole.SALES || role === UserRole.DELIVERY,
     canVerifyPayment: isAdmin || role === UserRole.FINANCE,
 
     // UI Visibility
-    canViewPreorder: isAdmin || [UserRole.SALES, UserRole.PURCHASING, UserRole.STOCK, UserRole.PRODUCTION].includes(role),
+    canViewPreorder:
+      isAdmin ||
+      [
+        UserRole.SALES,
+        UserRole.PURCHASING,
+        UserRole.STOCK,
+        UserRole.PRODUCTION,
+      ].includes(role),
     canEditPreorder: isAdmin || role === UserRole.PURCHASING,
   };
 };
@@ -85,7 +155,23 @@ export const getOrderActionMap = (order, user) => {
  * Standardize Order View Permissions
  */
 export const canViewOrderItems = (order, user) => true;
-export const canViewFinancial = (order, user) => 
-  [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.EXECUTIVE, UserRole.FINANCE, UserRole.MARKETING, UserRole.SALES].includes(user.role);
-export const canViewTechnical = (order, user) => 
-  [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.EXECUTIVE, UserRole.GRAPHIC, UserRole.PRODUCTION, UserRole.STOCK, UserRole.SEWING_QC].includes(user.role);
+export const canViewFinancial = (order, user) =>
+  [
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+    UserRole.EXECUTIVE,
+    UserRole.FINANCE,
+    UserRole.MARKETING,
+    UserRole.SALES,
+  ].includes(user.role);
+export const canViewTechnical = (order, user) =>
+  [
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+    UserRole.EXECUTIVE,
+    UserRole.GRAPHIC,
+    UserRole.PRODUCTION,
+    UserRole.STOCK,
+    UserRole.SEWING_QC,
+    UserRole.DIGITIZER,
+  ].includes(user.role);

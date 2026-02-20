@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import {
   HiOutlineCloudArrowUp,
   HiOutlineXMark,
@@ -52,22 +52,18 @@ export default function PaymentModal({ order, onClose, onSuccess }) {
         const formData = new FormData();
         formData.append("file", file);
 
-        const uploadRes = await axios.post(
-          "http://localhost:8000/api/upload",
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-              Authorization: `Bearer ${token}`,
-            },
+        const uploadRes = await api.post("/upload", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${token}`,
           },
-        );
+        });
         slipUrl = uploadRes.data.data.url;
       }
 
       // Create payment record
-      await axios.post(
-        `http://localhost:8000/api/orders/${order.id}/payment`,
+      await api.post(
+        `/orders/${order.id}/payment`,
         {
           amount: parseFloat(amount),
           slipUrl,

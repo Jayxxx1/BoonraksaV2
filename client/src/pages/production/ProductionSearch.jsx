@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import {
   HiOutlineMagnifyingGlass,
   HiOutlineClipboardDocumentList,
@@ -26,12 +26,9 @@ const ProductionSearch = () => {
     setOrder(null);
 
     try {
-      const res = await axios.get(
-        `http://localhost:8000/api/orders/search/${encodeURIComponent(jobId)}`,
-        {
-          headers: getAuthHeader(),
-        },
-      );
+      const res = await api.get(`/orders/search/${encodeURIComponent(jobId)}`, {
+        headers: getAuthHeader(),
+      });
       setOrder(res.data.data.order);
     } catch (err) {
       setError(err.response?.data?.message || "ไม่พบเลขออเดอร์นี้");
@@ -42,8 +39,8 @@ const ProductionSearch = () => {
 
   const handleAction = async (action) => {
     try {
-      await axios.post(
-        `http://localhost:8000/api/orders/${order.id}/production-action`,
+      await api.post(
+        `/orders/${order.id}/production-action`,
         { action },
         {
           headers: getAuthHeader(),
@@ -161,6 +158,11 @@ const ProductionSearch = () => {
                     🔥 งานด่วนพิเศษ 🔥
                   </div>
                 )}
+                {order.assignedWorkerName && (
+                  <div className="mt-4 bg-indigo-600 text-white px-6 py-2 rounded-2xl font-black text-xl shadow-lg border-2 border-indigo-400">
+                    👷‍♂️ ผู้รับผิดชอบ: {order.assignedWorkerName}
+                  </div>
+                )}
               </div>
 
               <div className="text-center md:text-right">
@@ -241,6 +243,9 @@ const ProductionSearch = () => {
                       logoUrl: p.logoUrl,
                       textToEmb: p.textToEmb,
                       threadColor: p.threadColor,
+                      fileAddress: p.fileAddress,
+                      needlePattern: p.needlePattern,
+                      threadSequence: p.threadSequence,
                     }),
                   );
                   const specs =
@@ -300,25 +305,82 @@ const ProductionSearch = () => {
                           )}
                         </div>
 
-                        {/* Thread Color */}
-                        {pos.threadColor && (
-                          <div className="bg-indigo-50 border-l-4 border-indigo-500 px-5 py-4 rounded-r-xl">
-                            <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1 flex items-center gap-2">
-                              🎨 สีด้าย (Thread Color)
-                            </p>
-                            <p className="text-2xl font-black text-indigo-900 leading-none">
-                              {pos.threadColor}
-                            </p>
+                        {/* 🆕 Technical Spec Board (Flashdrive & Needle) */}
+                        {!pos.isFreeOption && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-emerald-50 border-2 border-emerald-100 p-4 rounded-2xl">
+                              <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">
+                                📁 FLASHDRIVE
+                              </p>
+                              <p className="text-3xl font-black text-emerald-700">
+                                {pos.fileAddress || "-"}
+                              </p>
+                            </div>
+                            <div className="bg-rose-50 border-2 border-rose-100 p-4 rounded-2xl">
+                              <p className="text-[10px] font-black text-rose-600 uppercase mb-1">
+                                🪡 NEEDLE PATTERN
+                              </p>
+                              <p className="text-3xl font-black text-rose-700">
+                                {pos.needlePattern || "-"}
+                              </p>
+                            </div>
                           </div>
+                        )}
+
+                        {/* Thread Color / Sequence */}
+                        {Array.isArray(pos.threadSequence) &&
+                        pos.threadSequence.length > 0 ? (
+                          <div className="bg-slate-900 text-white rounded-2xl overflow-hidden shadow-lg">
+                            <div className="bg-slate-800 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-700">
+                              🧵 THREAD SEQUENCE
+                            </div>
+                            <div className="p-4 space-y-2">
+                              {pos.threadSequence.map((t, tIdx) => (
+                                <div
+                                  key={tIdx}
+                                  className="flex items-center gap-3"
+                                >
+                                  <span className="w-5 text-center font-black text-slate-500 text-xs">
+                                    {tIdx + 1}
+                                  </span>
+                                  <div
+                                    className="w-8 h-8 rounded-lg border border-white/20 shadow-inner"
+                                    style={{
+                                      backgroundColor: t.colorCode || "#ccc",
+                                    }}
+                                  />
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-black leading-none">
+                                      {t.threadCode || "-"}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-slate-400">
+                                      {t.colorName || "-"}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          pos.threadColor && (
+                            <div className="bg-indigo-50 border-l-4 border-indigo-500 px-5 py-4 rounded-r-xl">
+                              <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                🎨 สีด้าย (Thread Color)
+                              </p>
+                              <p className="text-2xl font-black text-indigo-900 leading-none">
+                                {pos.threadColor}
+                              </p>
+                            </div>
+                          )
                         )}
 
                         {/* Note / Text */}
                         {(pos.note || pos.details || pos.textToEmb) && (
-                          <div className="bg-amber-50 rounded-xl p-5 border border-amber-100">
-                            <p className="text-[10px] font-bold text-amber-600 uppercase mb-2">
+                          <div className="bg-cyan-50 rounded-xl p-5 border border-cyan-100">
+                            <p className="text-[10px] font-bold text-cyan-600 uppercase mb-2">
                               Note / Text
                             </p>
-                            <p className="text-lg font-bold text-amber-900 leading-snug">
+                            <p className="text-xl font-bold text-cyan-900 leading-snug">
                               {pos.textToEmb && `"${pos.textToEmb}"`}{" "}
                               {pos.textToEmb &&
                                 (pos.note || pos.details) &&

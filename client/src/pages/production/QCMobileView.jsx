@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
 import {
   HiOutlineQrCode,
@@ -18,7 +18,7 @@ export default function QCTaskBoard() {
   const fetchQCWork = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get("http://localhost:8000/api/orders", {
+      const res = await api.get("/orders", {
         headers: { Authorization: `Bearer ${token}` },
         params: { view: viewTab },
       });

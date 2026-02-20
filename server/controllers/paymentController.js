@@ -162,7 +162,7 @@ export const getPaymentHistory = asyncHandler(async (req, res) => {
         id: 'legacy-' + orderId,
         amount: legacyAmount,
         slipUrl: order.depositSlipUrl,
-        note: 'เงินมัดจำ (Legacy Data)',
+        note: 'เงินมัดจำ',
         uploadedBy: null,
         uploader: { name: order.sales?.name || 'Unknown Sales' }, // Use Sales name
         createdAt: order.createdAt

@@ -1,7 +1,8 @@
-import pkg from '@prisma/client';
+import pkg from "@prisma/client";
 const { PrismaClient } = pkg;
 const prisma = new PrismaClient();
-import { autoUpdateUrgentOrders } from './orderController.js'; // 🆕 Import helper
+import { autoUpdateUrgentOrders } from "./orderController.js";
+import { OrderStatus } from "../constants/orderConstants.js";
 
 export const getMyStats = async (req, res) => {
   try {
@@ -16,7 +17,7 @@ export const getMyStats = async (req, res) => {
       todayCount: 0,
       totalCount: 0,
       totalSales: 0,
-      urgentCount: 0
+      urgentCount: 0,
     };
 
     // Determine which field to filter by based on role
@@ -75,7 +76,7 @@ export const getMyStats = async (req, res) => {
           where: {
             ...whereBase,
             isUrgent: true,
-            status: { notIn: ['COMPLETED', 'CANCELLED'] }
+            status: { notIn: ["COMPLETED", "CANCELLED"] },
           },
         });
 
@@ -99,7 +100,7 @@ export const getMyStats = async (req, res) => {
       stats.urgentCount = await prisma.order.count({
         where: {
           isUrgent: true,
-          status: { notIn: ['COMPLETED', 'CANCELLED'] }
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
         },
       });
 
@@ -111,7 +112,190 @@ export const getMyStats = async (req, res) => {
 
     res.json(stats);
   } catch (error) {
-    console.error('Stats Error:', error);
-    res.status(500).json({ error: 'Failed to fetch statistics' });
+    console.error("Stats Error:", error);
+    res.status(500).json({ error: "Failed to fetch statistics" });
+  }
+};
+
+export const getSLAKPIs = async (req, res) => {
+  try {
+    const orders = await prisma.order.findMany({
+      where: {
+        status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
+        dueDate: { not: null },
+      },
+      select: {
+        id: true,
+        status: true,
+        dueDate: true,
+        slaBufferLevel: true,
+      },
+    });
+
+    const now = new Date().getTime();
+    const kpi = {
+      STOCK: { total: 0, late: 0, label: "ฝ่ายสต็อก" },
+      GRAPHIC: { total: 0, late: 0, label: "ฝ่ายกราฟิก/ตีลาย" },
+      PRODUCTION: { total: 0, late: 0, label: "ฝ่ายผลิต" },
+      QC: { total: 0, late: 0, label: "ฝ่าย QC" },
+    };
+
+    orders.forEach((order) => {
+      const dueDate = new Date(order.dueDate);
+      const bufferDays = parseInt(order.slaBufferLevel || 0);
+      const internalDeadline = new Date(dueDate);
+      internalDeadline.setDate(internalDeadline.getDate() - bufferDays);
+
+      const deptDeadlines = {
+        STOCK: new Date(internalDeadline).getTime() - 5 * 24 * 60 * 60 * 1000,
+        GRAPHIC: new Date(internalDeadline).getTime() - 4 * 24 * 60 * 60 * 1000,
+        PRODUCTION:
+          new Date(internalDeadline).getTime() - 2 * 24 * 60 * 60 * 1000,
+        QC: new Date(internalDeadline).getTime() - 0.5 * 24 * 60 * 60 * 1000,
+      };
+
+      let dept = null;
+      let deadline = null;
+
+      if (order.status === OrderStatus.PENDING_STOCK_CHECK) {
+        dept = "STOCK";
+        deadline = deptDeadlines.STOCK;
+      } else if (
+        [
+          OrderStatus.PENDING_ARTWORK,
+          OrderStatus.DESIGNING,
+          OrderStatus.PENDING_DIGITIZING,
+        ].includes(order.status)
+      ) {
+        dept = "GRAPHIC";
+        deadline = deptDeadlines.GRAPHIC;
+      } else if (
+        [OrderStatus.STOCK_RECHECKED, OrderStatus.IN_PRODUCTION].includes(
+          order.status,
+        )
+      ) {
+        dept = "PRODUCTION";
+        deadline = deptDeadlines.PRODUCTION;
+      } else if (order.status === OrderStatus.PRODUCTION_FINISHED) {
+        dept = "QC";
+        deadline = deptDeadlines.QC;
+      }
+
+      if (dept) {
+        kpi[dept].total++;
+        if (now > deadline) {
+          kpi[dept].late++;
+        }
+      }
+    });
+
+    res.json(kpi);
+  } catch (error) {
+    console.error("SLA KPI Error:", error);
+    res.status(500).json({ error: "Failed to fetch SLA KPIs" });
+  }
+};
+
+export const getExecutiveKPIs = async (req, res) => {
+  try {
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // 1. SLA Health (Current active orders)
+    const activeOrders = await prisma.order.findMany({
+      where: {
+        status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
+        dueDate: { not: null },
+      },
+      select: {
+        status: true,
+        dueDate: true,
+        slaBufferLevel: true,
+      },
+    });
+
+    const now = new Date().getTime();
+    const slaHealth = { GREEN: 0, YELLOW: 0, RED: 0 };
+
+    activeOrders.forEach((order) => {
+      const dueDate = new Date(order.dueDate);
+      const bufferDays = parseInt(order.slaBufferLevel || 0);
+      const internalDeadline = new Date(dueDate);
+      internalDeadline.setDate(internalDeadline.getDate() - bufferDays);
+
+      const deptDeadlines = {
+        STOCK: new Date(internalDeadline).getTime() - 5 * 24 * 60 * 60 * 1000,
+        GRAPHIC: new Date(internalDeadline).getTime() - 4 * 24 * 60 * 60 * 1000,
+        PRODUCTION:
+          new Date(internalDeadline).getTime() - 2 * 24 * 60 * 60 * 1000,
+        QC: new Date(internalDeadline).getTime() - 0.5 * 24 * 60 * 60 * 1000,
+      };
+
+      let targetDeadline = deptDeadlines.QC;
+      if ([OrderStatus.PENDING_STOCK_CHECK].includes(order.status)) {
+        targetDeadline = deptDeadlines.STOCK;
+      } else if (
+        [
+          OrderStatus.PENDING_ARTWORK,
+          OrderStatus.DESIGNING,
+          OrderStatus.PENDING_DIGITIZING,
+        ].includes(order.status)
+      ) {
+        targetDeadline = deptDeadlines.GRAPHIC;
+      } else if (
+        [OrderStatus.STOCK_RECHECKED, OrderStatus.IN_PRODUCTION].includes(
+          order.status,
+        )
+      ) {
+        targetDeadline = deptDeadlines.PRODUCTION;
+      }
+
+      const timeLeft = targetDeadline - now;
+      if (timeLeft < 0) slaHealth.RED++;
+      else if (timeLeft < 24 * 60 * 60 * 1000) slaHealth.YELLOW++;
+      else slaHealth.GREEN++;
+    });
+
+    // 2. Rejection Trends (Last 30 days)
+    const rejections = await prisma.rejectionLog.findMany({
+      where: { createdAt: { gte: thirtyDaysAgo } },
+      select: { reason: true, isSalesError: true },
+    });
+
+    const reasonsMap = {};
+    let salesErrorCount = 0;
+    rejections.forEach((r) => {
+      reasonsMap[r.reason] = (reasonsMap[r.reason] || 0) + 1;
+      if (r.isSalesError) salesErrorCount++;
+    });
+
+    const topReasons = Object.entries(reasonsMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([reason, count]) => ({ reason, count }));
+
+    // 3. Overall Order Stats & Waste (Last 30 days)
+    const orderStats = await prisma.order.aggregate({
+      where: { createdAt: { gte: thirtyDaysAgo } },
+      _sum: { damagedCount: true },
+      _count: { id: true },
+    });
+
+    res.json({
+      slaHealth,
+      rejectionTrends: {
+        total: rejections.length,
+        salesErrorCount,
+        topReasons,
+      },
+      productionWaste: {
+        totalDamaged: orderStats._sum.damagedCount || 0,
+        totalOrders: orderStats._count.id,
+      },
+    });
+  } catch (error) {
+    console.error("Executive KPI Error:", error);
+    res.status(500).json({ error: "Failed to fetch Executive KPIs" });
   }
 };

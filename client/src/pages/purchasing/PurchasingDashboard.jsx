@@ -10,9 +10,11 @@ import {
   HiOutlineCalendarDays,
 } from "react-icons/hi2";
 import { Link } from "react-router-dom";
+import { useMaster } from "../../context/MasterContext";
 import DateInput from "../../components/Common/DateInput";
 
 export default function PurchasingDashboard() {
+  const { getPreorderLabel } = useMaster();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -39,48 +41,9 @@ export default function PurchasingDashboard() {
   }, [fetchWaitingOrders, search]);
 
   const getSubStatusBadge = (subStatus) => {
-    const configs = {
-      WAITING_PURCHASE_INPUT: {
-        label: "รอระบุวันเข้า",
-        bg: "bg-amber-100",
-        text: "text-amber-700",
-      },
-      PURCHASE_CONFIRMED: {
-        label: "คอนเฟิร์มแล้ว",
-        bg: "bg-indigo-100",
-        text: "text-indigo-700",
-      },
-      WAITING_ARRIVAL: {
-        label: "รอพัสดุเข้าคลัง",
-        bg: "bg-blue-100",
-        text: "text-blue-700",
-      },
-      DELAYED_ROUND_1: {
-        label: "ล่าช้า (รอบ 1)",
-        bg: "bg-rose-100",
-        text: "text-rose-700",
-      },
-      DELAYED_ROUND_2: {
-        label: "CRITICAL (รอบ 2)",
-        bg: "bg-slate-900",
-        text: "text-white",
-      },
-      ARRIVED: {
-        label: "มาถึงแล้ว",
-        bg: "bg-emerald-100",
-        text: "text-emerald-700",
-      },
-    };
-    const config = configs[subStatus] || {
-      label: subStatus,
-      bg: "bg-slate-100",
-      text: "text-slate-600",
-    };
     return (
-      <span
-        className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase ${config.bg} ${config.text} border border-current/20`}
-      >
-        {config.label}
+      <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-slate-100 text-slate-700 border border-current/20">
+        {getPreorderLabel(subStatus)}
       </span>
     );
   };

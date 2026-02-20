@@ -7,16 +7,17 @@ import {
   HiOutlineXMark,
   HiOutlineTruck,
   HiOutlineCheckCircle,
+  HiOutlineClock,
   HiOutlineCalendarDays,
   HiOutlineChatBubbleBottomCenterText,
 } from "react-icons/hi2";
 import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
+import { useMaster } from "../../context/MasterContext";
 import PaymentModal from "../../components/Payment/PaymentModal";
 import ConfirmationModal from "../../components/Common/ConfirmationModal";
 import { getDisplayName } from "../../utils/namePrivacy";
 import { formatDate, formatTime } from "../../utils/dateFormat"; // Import utils
-import { getStatusLabel, statusColors } from "../../utils/statusMapper";
 import OrderHeader from "../../components/Order/OrderHeader";
 import OrderStatusBar from "../../components/Order/OrderStatusBar";
 import OrderInfoCards from "../../components/Order/OrderInfoCards";
@@ -27,6 +28,7 @@ import OrderSidebar from "../../components/Order/OrderSidebar";
 const OrderDetail = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
+  const { getStatusLabel, statusColors, roleLabels } = useMaster();
   const { user } = useAuth();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -52,10 +54,17 @@ const OrderDetail = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [trackingNo, setTrackingNo] = useState("");
 
-  // QC Fail states
-  const [showQCFailModal, setShowQCFailModal] = useState(false);
-  const [qcFailReason, setQCFailReason] = useState("");
-  const [qcReturnTo, setQCReturnTo] = useState("PRODUCTION"); // Default to Production
+  // Rejection/Fail states
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectData, setRejectData] = useState({
+    targetRole: "",
+    reason: "",
+    damagedCount: 0,
+    isSalesError: false,
+  });
+
+  const [showBufferModal, setShowBufferModal] = useState(false);
+  const [bufferLevel, setBufferLevel] = useState(0);
 
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState({
@@ -172,10 +181,18 @@ const OrderDetail = () => {
   const executeStatusUpdate = async (endpoint, payload = {}) => {
     try {
       setIsUpdating(true);
-      await api.patch(`/orders/${orderId}/status`, {
-        status: endpoint,
-        ...payload,
-      });
+
+      let mappedEndpoint = endpoint;
+      if (endpoint === "PENDING_STOCK_CHECK") mappedEndpoint = "print-signal";
+      else if (endpoint === "STOCK_RECHECKED") mappedEndpoint = "stock-recheck";
+      else if (endpoint === "PRODUCTION_FINISHED") {
+        if (payload.pass !== undefined) mappedEndpoint = "qc-pass";
+        else mappedEndpoint = "production-finish";
+      } else if (endpoint === "READY_TO_SHIP") mappedEndpoint = "ready-to-ship";
+      else if (endpoint === "COMPLETED") mappedEndpoint = "complete";
+      // cancel and urgent already match backend routes
+
+      await api.patch(`/orders/${orderId}/${mappedEndpoint}`, payload);
       await fetchOrder();
     } catch (err) {
       alert(err.response?.data?.message || "Update failed");
@@ -270,27 +287,44 @@ const OrderDetail = () => {
     }
   };
 
-  const handleQCFail = async () => {
-    if (!qcFailReason.trim()) return alert("กรุณาระบุเหตุผลที่ไม่ผ่าน QC");
+  const handleUpdateBuffer = async () => {
+    try {
+      setIsUpdating(true);
+      await api.patch(`/orders/${orderId}/sla-buffer`, {
+        bufferLevel: bufferLevel,
+      });
+      setShowBufferModal(false);
+      await fetchOrder();
+      alert("ปรับระดับ Buffer เรียบร้อยแล้ว");
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to update buffer");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectData.reason.trim()) return alert("กรุณาระบุเหตุผลที่ตีกลับ");
+    if (!rejectData.targetRole) return alert("กรุณาระบุฝ่ายที่จะรับงานต่อ");
+
     openConfirmModal({
-      title: "ยืนยันผลการตรวจสอบ (Confirm QC Fail)",
-      message: `คุณกำลังจะระบุว่างานนี้ "ไม่ผ่าน QC" และส่งกลับไปยัง ${
-        qcReturnTo === "PRODUCTION" ? "ฝ่ายผลิต" : "ฝ่ายแก้แพทเทิร์น"
-      } ใช่หรือไม่?`,
-      confirmLabel: "ยืนยัน (Confirm)",
+      title: "ยืนยันการตีกลับงาน (Confirm Return)",
+      message: `คุณกำลังจะตีกลับงานนี้ไปยัง "${rejectData.targetRole === "GRAPHIC" ? "ฝ่ายกราฟิก" : rejectData.targetRole === "PRODUCTION" ? "ฝ่ายผลิต" : rejectData.targetRole === "STOCK" ? "ฝ่ายสต็อก" : "ฝ่ายตีลาย"}" พร้อมเหตุผลใช่หรือไม่?`,
+      confirmLabel: "ยืนยันการคืนงาน",
       isDangerous: true,
       onConfirm: async () => {
         try {
           setIsUpdating(true);
-          await api.patch(`/orders/${orderId}/status`, {
-            status: "PRODUCTION_FINISHED",
-            pass: false,
-            reason: qcFailReason,
-            returnTo: qcReturnTo,
+          await api.patch(`/orders/${orderId}/reject`, rejectData);
+          setShowRejectModal(false);
+          setRejectData({
+            targetRole: "",
+            reason: "",
+            damagedCount: 0,
+            isSalesError: false,
           });
-          setShowQCFailModal(false);
-          setQCFailReason("");
           await fetchOrder();
+          alert("ตีกลับงานเรียบร้อยแล้ว");
         } catch (err) {
           alert(err.response?.data?.message || "บันทึกข้อมูลไม่สำเร็จ");
         } finally {
@@ -347,10 +381,19 @@ const OrderDetail = () => {
         "คุณต้องการรับผิดชอบงานนี้ใช่หรือไม่? หลังจากกดรับงานแล้ว คุณจะสามารถแก้ไขข้อมูลและดำเนินการต่อได้",
       confirmLabel: "รับงาน (Claim)",
       onConfirm: async () => {
+        let assignedWorkerName = null;
+        if (isProductionRole) {
+          assignedWorkerName = window.prompt(
+            "ระบุชื่อพนักงานที่ได้รับมอบหมาย (ถ้ามี) / Assign to worker:",
+          );
+        }
+
         try {
           setIsUpdating(true);
-          const res = await api.post(`/orders/${orderId}/claim`);
-          if (res.data.success) {
+          const res = await api.patch(`/orders/${orderId}/claim`, {
+            assignedWorkerName,
+          });
+          if (res.data.status === "success" || res.data.success) {
             setOrder(res.data.data.order);
             alert("รับงานเรียบร้อยแล้วครับ");
           }
@@ -364,7 +407,74 @@ const OrderDetail = () => {
   };
 
   const handleFileUpload = async (e, type) => {
-    const file = e.target.files[0];
+    // 1. Multiple files for global embroidery
+    if (type === "embroideryGlobal") {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+      try {
+        setUploadingField(type);
+        const uploadedUrls = [];
+        for (const file of files) {
+          const formData = new FormData();
+          formData.append("file", file);
+          const uploadRes = await api.post(
+            `/upload?folder=embroidery`,
+            formData,
+            {
+              headers: { "Content-Type": "multipart/form-data" },
+            },
+          );
+          uploadedUrls.push(uploadRes.data.data.url);
+        }
+        const currentUrls = order.embroideryFileUrls || [];
+        const payload = {
+          embroideryFileUrls: [...currentUrls, ...uploadedUrls],
+        };
+        await api.patch(`/orders/${orderId}/specs`, payload);
+        await fetchOrder();
+      } catch {
+        alert("File upload failed");
+      } finally {
+        setUploadingField(null);
+      }
+      return;
+    }
+
+    // 2. Position-specific EMB file
+    if (type.startsWith("emb_")) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const idx = e.positionIndex;
+      try {
+        setUploadingField(type);
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await api.post(
+          `/upload?folder=embroidery`,
+          formData,
+          {
+            headers: { "Content-Type": "multipart/form-data" },
+          },
+        );
+        const newSpecs = [...editSpecs];
+        if (!newSpecs[idx].embroideryFileUrls)
+          newSpecs[idx].embroideryFileUrls = [];
+        newSpecs[idx].embroideryFileUrls.push(uploadRes.data.data.url);
+        setEditSpecs(newSpecs);
+
+        // Auto save positional specs
+        await api.patch(`/orders/${orderId}/specs`, { positions: newSpecs });
+        await fetchOrder();
+      } catch {
+        alert("Upload failed");
+      } finally {
+        setUploadingField(null);
+      }
+      return;
+    }
+
+    // 3. Single Artwork Upload
+    const file = e.target.files?.[0];
     if (!file) return;
 
     try {
@@ -372,23 +482,19 @@ const OrderDetail = () => {
       const formData = new FormData();
       formData.append("file", file);
 
-      const folder = type === "artwork" ? "artworks" : "production-files";
+      const folder = type === "artwork" ? "artworks" : "general";
       const uploadRes = await api.post(`/upload?folder=${folder}`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       const fileUrl = uploadRes.data.data.url;
-      const payload =
-        type === "artwork"
-          ? { artworkUrl: fileUrl }
-          : { productionFileUrl: fileUrl, productionFileName: file.name };
+      const payload = type === "artwork" ? { artworkUrl: fileUrl } : {};
 
-      await api.patch(`/orders/${orderId}/specs`, payload);
-
-      if (order.blockId) {
-        await api.patch(`/blocks/${order.blockId}`, payload);
+      if (Object.keys(payload).length > 0) {
+        await api.patch(`/orders/${orderId}/specs`, payload);
+        if (order.blockId && type === "artwork") {
+          await api.patch(`/blocks/${order.blockId}`, payload);
+        }
       }
 
       await fetchOrder();
@@ -541,9 +647,15 @@ const OrderDetail = () => {
   const isMarketingRole = user?.role === "MARKETING";
   const isFinanceRole = user?.role === "FINANCE";
   const isExecutiveRole = user?.role === "EXECUTIVE";
+  const isDigitizerRole = user?.role === "DIGITIZER";
 
   const canViewTechnical =
-    (isSalesRole || isProductionRole || isQCRole || isGraphicRole || isAdmin) &&
+    (isSalesRole ||
+      isProductionRole ||
+      isQCRole ||
+      isGraphicRole ||
+      isDigitizerRole ||
+      isAdmin) &&
     !isPurchasingRole;
 
   const canViewFinancial =
@@ -563,6 +675,8 @@ const OrderDetail = () => {
   const canPerformSalesAction = isSalesRole || isAdmin;
   const canPerformGraphicAction =
     (isGraphicRole && isClaimedByMe(order.graphicId)) || isAdmin;
+  const canPerformDigitizerAction =
+    (isDigitizerRole && isClaimedByMe(order.digitizerId)) || isAdmin;
   const canPerformStockAction =
     (isStockRole && isClaimedByMe(order.stockId)) || isAdmin;
   const canPerformProductionAction =
@@ -575,6 +689,18 @@ const OrderDetail = () => {
     : isQCRole
       ? "ข้อมูลประกอบการตรวจงาน (QC Specs)"
       : "รายละเอียดทางเทคนิค (Graphic Specification)";
+
+  const latestRejection = order?.rejections?.[0];
+  const isCurrentlyRejected =
+    latestRejection &&
+    ((latestRejection.toRole === "GRAPHIC" &&
+      order.status === "PENDING_ARTWORK") ||
+      (latestRejection.toRole === "PRODUCTION" &&
+        order.status === "STOCK_RECHECKED") ||
+      (latestRejection.toRole === "STOCK" &&
+        order.status === "PENDING_STOCK_CHECK") ||
+      (latestRejection.toRole === "DIGITIZER" &&
+        order.status === "PENDING_DIGITIZING"));
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-20 overflow-x-hidden font-sans">
@@ -593,9 +719,126 @@ const OrderDetail = () => {
         isStockRole={isStockRole}
         isProductionRole={isProductionRole}
         isQCRole={isQCRole}
+        isDigitizerRole={isDigitizerRole}
       />
 
-      <div className="max-w-7xl mx-auto px-4 mt-6">
+      {isCurrentlyRejected && (
+        <div className="max-w-7xl mx-auto px-4 mt-6">
+          <div className="bg-rose-50 border-2 border-rose-200 rounded-[2rem] p-6 flex flex-col md:flex-row items-center gap-6 shadow-lg animate-in slide-in-from-top-4 duration-500">
+            <div className="bg-rose-600 p-4 rounded-2xl shadow-xl shadow-rose-200 shrink-0">
+              <HiOutlineExclamationCircle className="w-8 h-8 text-white" />
+            </div>
+            <div className="flex-1 text-center md:text-left">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-1">
+                <span className="bg-rose-600 text-white px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-sm">
+                  งานถูกส่งกลับ (Order Returned)
+                </span>
+                <span className="text-rose-400 font-bold text-xs">
+                  จาก:{" "}
+                  {roleLabels[latestRejection.fromRole] ||
+                    latestRejection.fromRole}{" "}
+                  ({latestRejection.user?.name})
+                </span>
+                {latestRejection.isSalesError && (
+                  <span className="bg-amber-100 text-amber-700 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border border-amber-200">
+                    ⚠️ ข้อมูลฝ่ายขายผิดพลาด
+                  </span>
+                )}
+              </div>
+              <h3 className="text-xl font-black text-rose-900 leading-tight">
+                สาเหตุ: {latestRejection.reason}
+              </h3>
+              <p className="text-rose-500 font-bold text-sm mt-1">
+                กรุณาตรวจสอบและแก้ไขข้อมูลให้ถูกต้องก่อนดำเนินการต่อครับ
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* SLA Alert Banner */}
+        {order.sla && order.sla.targetDeadline && (
+          <div
+            className={`rounded-xl border px-4 py-3 flex items-center justify-between shadow-sm ${
+              order.sla.status === "RED"
+                ? "bg-rose-50 border-rose-200 text-rose-700"
+                : order.sla.status === "YELLOW"
+                  ? "bg-amber-50 border-amber-200 text-amber-700"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-700"
+            }`}
+          >
+            <div className="flex items-center gap-6">
+              {/* Target Deadline (Department Goal) */}
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-2 rounded-full ${
+                    order.sla.status === "RED"
+                      ? "bg-rose-100"
+                      : order.sla.status === "YELLOW"
+                        ? "bg-amber-100"
+                        : "bg-emerald-100"
+                  }`}
+                >
+                  <HiOutlineClock className="w-5 h-5" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-bold uppercase tracking-wider opacity-80">
+                    กำหนดเสร็จสิ้นขั้นตอนปัจจุบัน
+                  </span>
+                  <span className="text-lg font-black">
+                    {new Date(order.sla.targetDeadline).toLocaleDateString(
+                      "th-TH",
+                      {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                      },
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* Vertical Divider */}
+              <div className="h-10 w-px bg-current opacity-20 hidden md:block"></div>
+
+              {/* Main Due Date (Customer Limit) */}
+              {order.dueDate && (
+                <div className="hidden md:flex items-center gap-3 opacity-75">
+                  <div className="p-2 rounded-full bg-white/50 border border-current">
+                    <HiOutlineCalendarDays className="w-5 h-5" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[12px] font-bold uppercase tracking-wider opacity-80">
+                      กำหนดส่งลูกค้า
+                    </span>
+                    <span className="text-lg font-black">
+                      {new Date(order.dueDate).toLocaleDateString("th-TH", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Executive Buffer Control (Only for EXECUTIVE) */}
+            {user.role === "EXECUTIVE" && (
+              <button
+                onClick={() => {
+                  setBufferLevel(order.slaBufferLevel || 0);
+                  setShowBufferModal(true);
+                }}
+                className="px-3 py-1.5 bg-white border border-current rounded-lg text-xs font-bold hover:bg-opacity-50 transition-colors"
+              >
+                Adjust Buffer ({order.slaBufferLevel || 0} days)
+              </button>
+            )}
+          </div>
+        )}
+
         <OrderStatusBar
           order={order}
           user={user}
@@ -606,12 +849,14 @@ const OrderDetail = () => {
           setShowUrgentModal={setShowUrgentModal}
           setShowCancelModal={setShowCancelModal}
           setShowStockIssueModal={setShowStockIssueModal}
-          setShowQCFailModal={setShowQCFailModal}
+          setShowRejectModal={setShowRejectModal}
+          setShowBufferModal={setShowBufferModal}
           setShowPaymentModal={setShowPaymentModal}
           trackingNo={trackingNo}
           setTrackingNo={setTrackingNo}
           canPerformSalesAction={canPerformSalesAction}
           canPerformGraphicAction={canPerformGraphicAction}
+          canPerformDigitizerAction={canPerformDigitizerAction}
           canPerformStockAction={canPerformStockAction}
           canPerformProductionAction={canPerformProductionAction}
           canPerformQCAction={canPerformQCAction}
@@ -792,9 +1037,11 @@ const OrderDetail = () => {
             blocks={blocks}
             handleLinkBlock={handleLinkBlock}
             canPerformGraphicAction={canPerformGraphicAction}
+            canPerformDigitizerAction={canPerformDigitizerAction}
             canViewTechnical={canViewTechnical}
             technicalHeader={technicalHeader}
             isGraphicRole={isGraphicRole}
+            isDigitizerRole={isDigitizerRole}
           />
         </div>
 
@@ -880,7 +1127,7 @@ const OrderDetail = () => {
           </div>
         </div>
       )}
-      {showQCFailModal && (
+      {showRejectModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-300">
             <div className="flex items-center gap-4 mb-6">
@@ -888,68 +1135,159 @@ const OrderDetail = () => {
                 <HiOutlineXMark className="w-8 h-8" />
               </div>
               <h3 className="text-2xl font-black text-slate-800">
-                แจ้งผล QC ไม่ผ่าน
+                ตีกลับงาน / แจ้งแก้ไข
               </h3>
             </div>
 
             <div className="mb-6 space-y-4">
               <div>
                 <label className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">
-                  1. ส่งกลับไปแก้ไขที่ฝ่ายไหน?
+                  1. ส่งกลับไปแก้ไขที่ฝ่ายไหน? (Target Role)
                 </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setQCReturnTo("PRODUCTION")}
-                    className={`py-3 rounded-2xl font-black border-2 transition-all ${
-                      qcReturnTo === "PRODUCTION"
-                        ? "border-indigo-600 bg-indigo-50 text-indigo-600"
-                        : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"
-                    }`}
-                  >
-                    ฝ่ายผลิต (Production)
-                  </button>
-                  <button
-                    onClick={() => setQCReturnTo("GRAPHIC")}
-                    className={`py-3 rounded-2xl font-black border-2 transition-all ${
-                      qcReturnTo === "GRAPHIC"
-                        ? "border-indigo-600 bg-indigo-50 text-indigo-600"
-                        : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"
-                    }`}
-                  >
-                    ฝ่ายกราฟิก (Graphic)
-                  </button>
+                <div className="flex flex-wrap gap-2">
+                  {(isQCRole || isAdmin) && (
+                    <button
+                      onClick={() =>
+                        setRejectData((prev) => ({
+                          ...prev,
+                          targetRole: "PRODUCTION",
+                        }))
+                      }
+                      className={`px-4 py-2.5 rounded-xl font-black border-2 transition-all text-xs ${
+                        rejectData.targetRole === "PRODUCTION"
+                          ? "border-indigo-600 bg-indigo-50 text-indigo-600"
+                          : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"
+                      }`}
+                    >
+                      ฝ่ายผลิต
+                    </button>
+                  )}
+                  {(isQCRole || isProductionRole || isStockRole || isAdmin) && (
+                    <button
+                      onClick={() =>
+                        setRejectData((prev) => ({
+                          ...prev,
+                          targetRole: "GRAPHIC",
+                        }))
+                      }
+                      className={`px-4 py-2.5 rounded-xl font-black border-2 transition-all text-xs ${
+                        rejectData.targetRole === "GRAPHIC"
+                          ? "border-indigo-600 bg-indigo-50 text-indigo-600"
+                          : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"
+                      }`}
+                    >
+                      ฝ่ายกราฟิก
+                    </button>
+                  )}
+                  {(isQCRole || isProductionRole || isAdmin) && (
+                    <button
+                      onClick={() =>
+                        setRejectData((prev) => ({
+                          ...prev,
+                          targetRole: "DIGITIZER",
+                        }))
+                      }
+                      className={`px-4 py-2.5 rounded-xl font-black border-2 transition-all text-xs ${
+                        rejectData.targetRole === "DIGITIZER"
+                          ? "border-indigo-600 bg-indigo-50 text-indigo-600"
+                          : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"
+                      }`}
+                    >
+                      ฝ่ายตีลาย
+                    </button>
+                  )}
                 </div>
               </div>
 
               <div>
                 <label className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">
-                  2. ระบุเหตุผลที่ไม่ผ่าน
+                  2. ระบุเหตุผลการตีกลับ (Reasons)
                 </label>
                 <textarea
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-rose-50 focus:border-rose-400 outline-none transition-all min-h-[120px] font-medium text-slate-800"
-                  placeholder="เช่น สีด้ายไม่ตรงสเปค, งานปักเบี้ยว, มีรอยเปื้อน..."
-                  value={qcFailReason}
-                  onChange={(e) => setQCFailReason(e.target.value)}
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-rose-50 focus:border-rose-400 outline-none transition-all min-h-[100px] font-medium text-slate-800 text-sm"
+                  placeholder="เช่น ตำแหน่งปักผิด, ไซส์ของไม่ครบ, อาร์ตเวิร์คคนละสี..."
+                  value={rejectData.reason}
+                  onChange={(e) =>
+                    setRejectData((prev) => ({
+                      ...prev,
+                      reason: e.target.value,
+                    }))
+                  }
                 />
               </div>
+
+              {isQCRole && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-2">
+                      จำนวนของเสีย (ตัว)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-400 outline-none text-xl font-black text-indigo-600"
+                      value={rejectData.damagedCount}
+                      onChange={(e) =>
+                        setRejectData((prev) => ({
+                          ...prev,
+                          damagedCount: parseInt(e.target.value) || 0,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <button
+                      onClick={() =>
+                        setRejectData((prev) => ({
+                          ...prev,
+                          isSalesError: !prev.isSalesError,
+                        }))
+                      }
+                      className={`flex items-center gap-2 p-4 rounded-2xl font-black border-2 transition-all h-14 ${
+                        rejectData.isSalesError
+                          ? "bg-rose-50 border-rose-200 text-rose-600"
+                          : "bg-slate-50 border-slate-200 text-slate-400"
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded border-2 flex items-center justify-center ${rejectData.isSalesError ? "bg-rose-600 border-rose-600" : "border-slate-300"}`}
+                      >
+                        {rejectData.isSalesError && (
+                          <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                        )}
+                      </div>
+                      <span className="text-xs">เป็นความผิดฝ่ายขาย</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  setShowQCFailModal(false);
-                  setQCFailReason("");
+                  setShowRejectModal(false);
+                  setRejectData({
+                    targetRole: "",
+                    reason: "",
+                    damagedCount: 0,
+                    isSalesError: false,
+                  });
                 }}
-                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all font-bold"
+                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all text-sm"
               >
                 ยกเลิก
               </button>
               <button
-                onClick={handleQCFail}
-                disabled={!qcFailReason.trim() || isUpdating}
-                className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black shadow-xl shadow-rose-200 hover:bg-rose-700 disabled:opacity-50 transition-all font-black"
+                onClick={handleReject}
+                disabled={
+                  !rejectData.reason.trim() ||
+                  !rejectData.targetRole ||
+                  isUpdating
+                }
+                className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black shadow-xl shadow-rose-200 hover:bg-rose-700 disabled:opacity-50 transition-all text-sm"
               >
-                {isUpdating ? "กำลังส่ง..." : "ยืนยันส่งแก้ไข"}
+                {isUpdating ? "กำลังส่ง..." : "ยืนยันส่งคืนงาน"}
               </button>
             </div>
           </div>
@@ -994,6 +1332,60 @@ const OrderDetail = () => {
                 className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black shadow-lg shadow-red-200 hover:bg-red-700 disabled:opacity-50 transition-all"
               >
                 {isUpdating ? "กำลังส่ง..." : "แจ้งปัญหาไปยังฝ่ายขาย"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showBufferModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in duration-300">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
+                <HiOutlineCalendarDays className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-800">
+                ปรับแก้ Buffer SLA
+              </h3>
+            </div>
+
+            <div className="mb-6 space-y-4">
+              <p className="text-sm font-medium text-slate-500">
+                เลือกจำนวนวันที่ต้องการสำรองไว้ (Buffer) ก่อนถึงวันนัดส่งงานจริง
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {[0, 1, 2, 3].map((val) => (
+                  <button
+                    key={val}
+                    onClick={() => setBufferLevel(val)}
+                    className={`py-4 rounded-2xl font-black border-2 transition-all ${
+                      bufferLevel === val
+                        ? "border-indigo-600 bg-indigo-50 text-indigo-600"
+                        : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"
+                    }`}
+                  >
+                    {val}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-center font-bold text-slate-400 uppercase tracking-widest">
+                หน่วย: จำนวนวัน (Days)
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBufferModal(false)}
+                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all text-sm"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleUpdateBuffer}
+                disabled={isUpdating}
+                className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-50 transition-all text-sm"
+              >
+                {isUpdating ? "กำลังบันทึก..." : "ยืนยันการตั้งค่า"}
               </button>
             </div>
           </div>

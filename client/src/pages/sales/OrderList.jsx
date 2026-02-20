@@ -9,16 +9,20 @@ import {
   HiOutlineArrowPath,
   HiOutlineExclamationCircle,
   HiOutlineFire,
+  HiOutlineClock,
   HiOutlinePlus,
+  HiOutlineShoppingBag,
+  HiOutlineCalendarDays,
+  HiOutlineCube,
 } from "react-icons/hi2";
 import { getDisplayName } from "../../utils/namePrivacy";
-import { getStatusLabel, statusColors } from "../../utils/statusMapper";
+import { useMaster } from "../../context/MasterContext";
 
 const statusGroups = {
   ongoing: [
     "PENDING_ARTWORK",
     "DESIGNING",
-    "PENDING_PAYMENT",
+    "PENDING_DIGITIZING",
     "PENDING_STOCK_CHECK",
     "STOCK_ISSUE",
     "STOCK_RECHECKED",
@@ -30,10 +34,9 @@ const statusGroups = {
   cancelled: ["CANCELLED"],
 };
 
-const statusLabels = {}; // Placeholder if needed, but we'll use getStatusLabel
-
 export default function OrderList() {
   const { token, user } = useAuth();
+  const { getStatusLabel, statusColors } = useMaster();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -59,9 +62,24 @@ export default function OrderList() {
 
       const res = await api.get("/orders", { params });
       const rawOrders = res.data.data.orders || [];
-      const filteredByTab = rawOrders.filter((order) =>
-        statusGroups[activeTab].includes(order.status),
-      );
+
+      // Unified Tab Filtering based on Backend logic/flags
+      const filteredByTab = rawOrders.filter((order) => {
+        if (activeTab === "ongoing") {
+          return ![
+            "QC_PASSED",
+            "READY_TO_SHIP",
+            "COMPLETED",
+            "CANCELLED",
+          ].includes(order.status);
+        }
+        if (activeTab === "ready") {
+          return ["QC_PASSED", "READY_TO_SHIP"].includes(order.status);
+        }
+        if (activeTab === "completed") return order.status === "COMPLETED";
+        if (activeTab === "cancelled") return order.status === "CANCELLED";
+        return true;
+      });
 
       setOrders(filteredByTab);
     } catch (err) {
@@ -240,7 +258,7 @@ export default function OrderList() {
                 <optgroup label="สถานะออเดอร์">
                   {statusGroups[activeTab].map((st) => (
                     <option key={st} value={st}>
-                      {statusLabels[st] || st}
+                      {getStatusLabel(st)}
                     </option>
                   ))}
                 </optgroup>
@@ -301,24 +319,27 @@ export default function OrderList() {
                         }`}
                       >
                         <td className="px-4 py-3">
-                          <div className="flex flex-col gap-0.5">
-                            <span
-                              className={`text-[12.5px] font-black tracking-tight ${order.isUrgent ? "text-rose-600" : "text-slate-900"}`}
-                            >
-                              {order.jobId}
-                            </span>
-                            <div className="flex flex-wrap gap-1">
-                              {order.isUrgent && (
-                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8.5px] font-black uppercase rounded w-fit">
-                                  <HiOutlineFire className="w-2.5 h-2.5" />
-                                  ด่วน
-                                </div>
-                              )}
-                              {order.hasPreorder && (
-                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8.5px] font-black uppercase rounded w-fit border border-amber-200">
-                                  PRE
-                                </div>
-                              )}
+                          <div className="flex items-start gap-3">
+                            {/* Thumbnail */}
+                            <div className="flex flex-col gap-0.5">
+                              <span
+                                className={`text-[12.5px] font-black tracking-tight ${order.isUrgent ? "text-rose-600" : "text-slate-900"}`}
+                              >
+                                {order.jobId}
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {order.isUrgent && (
+                                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8.5px] font-black uppercase rounded w-fit">
+                                    <HiOutlineFire className="w-2.5 h-2.5" />
+                                    ด่วน
+                                  </div>
+                                )}
+                                {order.hasPreorder && (
+                                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8.5px] font-black uppercase rounded w-fit border border-amber-200">
+                                    PRE
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -330,10 +351,32 @@ export default function OrderList() {
                             <span className="text-[12px] font-bold text-slate-400 truncate max-w-[140px]">
                               {order.customerFb || "ไม่มีประวัติสื่อสาร"}
                             </span>
+                            {/* Product Summary */}
+                            {order.items && order.items.length > 0 && (
+                              <div className="flex items-start gap-1 text-[11px] text-slate-600 mt-1 bg-slate-50 p-1 rounded border border-slate-100">
+                                <HiOutlineShoppingBag className="w-3 h-3 mt-0.5 text-indigo-500" />
+                                <span className="font-bold">
+                                  {order.items.reduce(
+                                    (sum, item) => sum + item.quantity,
+                                    0,
+                                  )}{" "}
+                                  ชิ้น
+                                  <span className="text-slate-400 font-normal mx-1">
+                                    |
+                                  </span>
+                                  <span className="truncate max-w-[120px] inline-block align-bottom">
+                                    {order.items
+                                      .map((i) => i.productName || i.name)
+                                      .join(", ")}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-1.5">
+                            {/* Status Badge */}
                             {order.displayStatusLabel ? (
                               <span
                                 className={`px-2.5 py-1.5 rounded-xl text-[12px] font-black uppercase tracking-wider border transition-all duration-300 w-fit ${statusColors[order.status]?.bg || "bg-slate-100"} ${statusColors[order.status]?.text || "text-slate-700"} ${statusColors[order.status]?.border || "border-slate-200"}`}
@@ -343,11 +386,59 @@ export default function OrderList() {
                             ) : (
                               getStatusBadge(order.status)
                             )}
+
+                            {/* Sub-status Label */}
                             {order.subStatusLabel && (
                               <span className="text-[10px] font-black text-orange-600 animate-pulse">
                                 {order.subStatusLabel}
                               </span>
                             )}
+
+                            {/* Dates Container */}
+                            <div className="flex flex-col gap-0.5 mt-0.5">
+                              {/* Final Due Date (Send:) */}
+                              {order.dueDate && (
+                                <div className="flex items-center gap-1.5 text-[10.5px] text-slate-500 font-bold opacity-80">
+                                  <HiOutlineCalendarDays className="w-3.5 h-3.5" />
+                                  <span>
+                                    ส่ง:{" "}
+                                    {new Date(order.dueDate).toLocaleDateString(
+                                      "th-TH",
+                                      {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "2-digit",
+                                      },
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* SLA Target Deadline (Target:) */}
+                              {order.sla && order.sla.targetDeadline && (
+                                <div
+                                  className={`flex items-center gap-1.5 text-[10.5px] font-bold ${
+                                    order.sla.status === "RED"
+                                      ? "text-rose-600"
+                                      : order.sla.status === "YELLOW"
+                                        ? "text-amber-600"
+                                        : "text-emerald-600"
+                                  }`}
+                                >
+                                  <HiOutlineClock className="w-3.5 h-3.5" />
+                                  <span>
+                                    เป้า:{" "}
+                                    {new Date(
+                                      order.sla.targetDeadline,
+                                    ).toLocaleDateString("th-TH", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "2-digit",
+                                    })}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -431,32 +522,108 @@ export default function OrderList() {
                   }`}
                 >
                   <div className="flex justify-between items-start mb-2">
-                    <div className="flex flex-col gap-1">
-                      <span
-                        className={`text-[13px] font-black tracking-tight ${order.isUrgent ? "text-rose-600" : "text-slate-900"}`}
-                      >
-                        {order.jobId}
-                      </span>
-                      {order.isUrgent && (
-                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8px] font-black uppercase rounded w-fit">
-                          <HiOutlineFire className="w-2.5 h-2.5" />
-                          ด่วน
+                    {/* Startup: Thumbnail for Mobile */}
+                    
+
+                    <div className="flex flex-col gap-1.5 w-full">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col">
+                          <span
+                            className={`text-sm font-black ${
+                              order.isUrgent
+                                ? "text-rose-600"
+                                : "text-slate-900"
+                            }`}
+                          >
+                            {order.jobId}
+                          </span>
+                          <span className="text-[11px] text-slate-600 font-bold">
+                            {order.customerName}
+                          </span>
                         </div>
-                      )}
-                      {order.hasPreorder && (
-                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase rounded w-fit border border-amber-200">
-                          PRE-ORDER
-                        </div>
-                      )}
+
+                        <span
+                          className={`px-2 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg border flex-shrink-0 text-center ${statusColors[order.status]?.bg || "bg-slate-100"} ${statusColors[order.status]?.text || "text-slate-700"} ${statusColors[order.status]?.border || "border-slate-200"}`}
+                        >
+                          {order.displayStatusLabel ||
+                            getStatusLabel(order.status)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {order.isUrgent && (
+                          <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200">
+                            ด่วน
+                          </span>
+                        )}
+                        {order.hasPreorder && (
+                          <span className="text-[9px] font-black uppercase text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                            PRE
+                          </span>
+                        )}
+                        {/* Mobile Product Summary */}
+                        {order.items && order.items.length > 0 && (
+                          <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                            <HiOutlineShoppingBag className="w-3 h-3 text-indigo-500" />
+                            <span className="font-bold">
+                              {order.items.reduce(
+                                (sum, item) => sum + item.quantity,
+                                0,
+                              )}{" "}
+                              ชิ้น
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SLA & Due Date Mobile Display (Hidden on very small screens, moved to detail view) */}
+                      <div className="hidden sm:flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                        {order.dueDate && (
+                          <div className="flex items-center gap-1 text-[10px] text-slate-500 font-bold">
+                            <HiOutlineCalendarDays className="w-3 h-3" />
+                            <span>
+                              ส่ง:{" "}
+                              {new Date(order.dueDate).toLocaleDateString(
+                                "th-TH",
+                                {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "2-digit",
+                                },
+                              )}
+                            </span>
+                          </div>
+                        )}
+
+                        {order.sla && order.sla.targetDeadline && (
+                          <div
+                            className={`flex items-center gap-1 text-[10px] font-bold ${
+                              order.sla.status === "RED"
+                                ? "text-rose-600"
+                                : order.sla.status === "YELLOW"
+                                  ? "text-amber-600"
+                                  : "text-emerald-600"
+                            }`}
+                          >
+                            <HiOutlineClock className="w-3 h-3" />
+                            <span>
+                              เป้า:{" "}
+                              {new Date(
+                                order.sla.targetDeadline,
+                              ).toLocaleDateString("th-TH", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    {getStatusBadge(order.status)}
                   </div>
 
                   <div className="flex justify-between items-end">
                     <div className="flex flex-col min-w-0 pr-4">
-                      <span className="text-[12px] font-black text-slate-800 leading-none truncate mb-1">
-                        {order.customerName}
-                      </span>
                       <span className="text-[12px] font-bold text-slate-400 truncate">
                         {order.customerFb || "ไม่มีประวัติสื่อสาร"}
                       </span>

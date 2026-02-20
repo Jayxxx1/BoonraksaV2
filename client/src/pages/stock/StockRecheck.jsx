@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
 import {
   HiOutlineQrCode,
@@ -8,10 +8,12 @@ import {
   HiOutlineViewColumns,
   HiOutlineMagnifyingGlass,
 } from "react-icons/hi2";
-import { getStatusLabel, statusColors } from "../../utils/statusMapper";
+import RoleStatsHeader from "../../components/dashboard/RoleStatsHeader";
+import { useMaster } from "../../context/MasterContext";
 
 export default function StockRecheck() {
   const { token } = useAuth();
+  const { getStatusLabel, statusColors } = useMaster();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewTab, setViewTab] = useState("available");
@@ -20,7 +22,7 @@ export default function StockRecheck() {
   const fetchReadyOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get("http://localhost:8000/api/orders", {
+      const res = await api.get("/orders", {
         headers: { Authorization: `Bearer ${token}` },
         params: { view: viewTab, search },
       });
@@ -112,7 +114,7 @@ export default function StockRecheck() {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -175,6 +177,67 @@ export default function StockRecheck() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Cards for Stock Recheck */}
+            <div className="lg:hidden flex flex-col gap-3 p-3 bg-slate-50/50">
+              {orders.length === 0 ? (
+                <div className="px-6 py-12 text-center text-slate-300 italic font-medium">
+                  ไม่มีรายการในส่วนนี้
+                </div>
+              ) : (
+                orders.map((order) => (
+                  <div
+                    key={order.id}
+                    className={`block bg-white p-3.5 rounded-xl border transition-all ${
+                      order.isUrgent
+                        ? "border-rose-200 bg-rose-50/30 shadow-sm shadow-rose-100/50 block border-l-4 border-l-rose-500"
+                        : "border-slate-200 shadow-sm block"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2.5">
+                      <div className="flex flex-col gap-1.5 w-full">
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col">
+                            <span
+                              className={`text-sm font-black tracking-tight ${order.isUrgent ? "text-rose-600" : "text-slate-900"}`}
+                            >
+                              {order.jobId}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-bold max-w-[160px] truncate">
+                              {order.customerName}
+                            </span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter flex-shrink-0 text-center ${statusColors[order.status]?.bg || "bg-slate-100"} ${statusColors[order.status]?.text || "text-slate-600"}`}
+                          >
+                            {getStatusLabel(order.status)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-100">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-black text-slate-400">
+                          พนักงานคลัง
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-700">
+                          {order.stock?.name || "-"}
+                        </span>
+                      </div>
+                      <div className="flex items-center">
+                        <Link
+                          to={`/order/${order.id}`}
+                          className="px-4 py-1.5 bg-slate-900 text-white border border-transparent rounded-lg text-[10.5px] font-black hover:bg-indigo-600 transition-all shadow-sm active:scale-95"
+                        >
+                          ตรวจสอบและยืนยัน
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}

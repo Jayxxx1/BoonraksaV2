@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
 import {
   HiOutlineCube,
@@ -27,12 +27,9 @@ export default function DeliveryOrderDetail() {
   const fetchOrder = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get(
-        `http://localhost:8000/api/orders/${orderId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const res = await api.get(`/orders/${orderId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setOrder(res.data.data.order);
       if (res.data.data.order.trackingNo) {
         setTrackingNo(res.data.data.order.trackingNo);
@@ -56,8 +53,8 @@ export default function DeliveryOrderDetail() {
 
     try {
       setSubmitting(true);
-      await axios.patch(
-        `http://localhost:8000/api/orders/${orderId}/complete`,
+      await api.patch(
+        `/orders/${orderId}/complete`,
         { trackingNo },
         { headers: { Authorization: `Bearer ${token}` } },
       );

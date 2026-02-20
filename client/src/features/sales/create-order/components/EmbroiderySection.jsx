@@ -11,7 +11,7 @@ const EmbroiderySection = ({
   setEmbroidery,
   addEmbroidery,
   removeEmbroidery,
-  embroideryPositions,
+  masterPositions = [],
   blocks,
   fetchCustomerBlocks,
   orderInfo,
@@ -20,6 +20,19 @@ const EmbroiderySection = ({
   isUploadingImage,
 }) => {
   const commonPhrases = ["การไฟฟ้า", "PEA", "MEA", "กระทรวงเกษตร", "กรมปกครอง"];
+
+  const handlePaste = (e, index) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          // Default to uploading as 'logo' for convenience
+          onUploadPositionImage(index, "logo", file);
+        }
+      }
+    }
+  };
   return (
     <div className="erp-card shadow-sm">
       <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
@@ -72,6 +85,7 @@ const EmbroiderySection = ({
             <div
               key={index}
               className="bg-white border border-slate-200 rounded-xl p-4 relative group"
+              onPaste={(e) => handlePaste(e, index)}
             >
               <button
                 type="button"
@@ -88,32 +102,63 @@ const EmbroiderySection = ({
                     ตำแหน่ง:
                   </span>
                   <select
-                    value={item.position}
+                    value={
+                      item.masterPositionId ||
+                      masterPositions.find((m) => m.name === item.position)
+                        ?.id ||
+                      (item.position &&
+                      !masterPositions.some((m) => m.name === item.position)
+                        ? "CUSTOM"
+                        : "")
+                    }
                     onChange={(e) => {
+                      const val = e.target.value;
                       const n = [...embroidery];
-                      n[index].position = e.target.value;
+                      if (val === "CUSTOM") {
+                        n[index].masterPositionId = null;
+                        n[index].position = "";
+                      } else {
+                        const master = masterPositions.find(
+                          (m) => String(m.id) === val,
+                        );
+                        if (master) {
+                          n[index].masterPositionId = master.id;
+                          n[index].position = master.name;
+                          n[index].customPosition = "";
+                        }
+                      }
                       setEmbroidery(n);
                     }}
                     className="text-xs font-bold text-slate-700 bg-transparent border-none p-0 focus:ring-0 cursor-pointer"
                   >
-                    {embroideryPositions.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
+                    <option value="" disabled>
+                      -- เลือกตำแหน่ง --
+                    </option>
+                    {masterPositions.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id}. {m.name}
                       </option>
                     ))}
+                    <option value="CUSTOM">✏️ กำหนดเอง / อื่นๆ</option>
                   </select>
-                  {item.position === "อื่นๆ" && (
-                    <input
-                      value={item.customPosition}
-                      onChange={(e) => {
-                        const n = [...embroidery];
-                        n[index].customPosition = e.target.value;
-                        setEmbroidery(n);
-                      }}
-                      className="text-xs border-b border-slate-200 py-0.5 px-1 focus:outline-none"
-                      placeholder="ระบุ..."
-                    />
-                  )}
+                  {/* Custom input logic if not a standard position */}
+                  {!item.masterPositionId &&
+                    (item.position === "" ||
+                      !masterPositions.some(
+                        (m) => m.name === item.position,
+                      )) && (
+                      <input
+                        value={item.position || ""}
+                        onChange={(e) => {
+                          const n = [...embroidery];
+                          n[index].position = e.target.value;
+                          n[index].masterPositionId = null;
+                          setEmbroidery(n);
+                        }}
+                        className="text-xs border-b border-slate-200 py-0.5 px-1 focus:outline-none bg-amber-50 rounded"
+                        placeholder="ระบุตำแหน่ง..."
+                      />
+                    )}
                 </div>
               </div>
 
@@ -127,7 +172,8 @@ const EmbroiderySection = ({
                         <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
                           <div className="text-[10px] text-slate-500">
                             ระบุรายละเอียดหรืออัปโหลดไฟล์โลโก้
-                            (ในส่วนแนบไฟล์ด้านล่าง) สำหรับบล็อคใหม่
+                            (ในส่วนแนบไฟล์ด้านล่าง) สำหรับบล็อคใหม่ (รองรับ
+                            Ctrl+V)
                           </div>
                         </div>
                       ) : (
@@ -223,7 +269,7 @@ const EmbroiderySection = ({
                       <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-slate-50">
                         <div className="space-y-2">
                           <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                            ไฟล์โลโก้ (Logo)
+                            ไฟล์โลโก้ (Paste Logo Here)
                           </label>
                           <div className="flex items-center gap-3">
                             {item.logoUrl ? (
@@ -268,7 +314,7 @@ const EmbroiderySection = ({
                             <div className="text-[9px] text-slate-400 leading-tight">
                               {isUploadingImage === `${index}-logo`
                                 ? "กำลังอัปโหลด..."
-                                : "เฉพาะไฟล์ภาพ\n(LOGO)"}
+                                : "โลโก้ (Logo)\nรองรับ Ctrl+V"}
                             </div>
                           </div>
                         </div>

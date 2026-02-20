@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../context/auth-store";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import api from "../../api/config";
 import {
   HiOutlineArrowLeft,
   HiOutlineMagnifyingGlass,
@@ -30,11 +30,11 @@ export default function StockCheck() {
       if (selectedCategory) params.categoryId = selectedCategory;
 
       const [prodRes, catRes] = await Promise.all([
-        axios.get("http://localhost:8000/api/products", {
+        api.get("/products", {
           headers: getAuthHeader(),
           params,
         }),
-        axios.get("http://localhost:8000/api/categories", {
+        api.get("/categories", {
           headers: getAuthHeader(),
         }),
       ]);

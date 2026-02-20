@@ -18,7 +18,8 @@ const OrderStatusBar = ({
   setShowUrgentModal,
   setShowCancelModal,
   setShowStockIssueModal,
-  setShowQCFailModal,
+  setShowRejectModal,
+  setShowBufferModal,
   setShowPaymentModal,
   trackingNo,
   setTrackingNo,
@@ -50,10 +51,26 @@ const OrderStatusBar = ({
                 getStatusBadge(order.status).props.children}
             </h2>
             {order.status !== "CANCELLED" && (
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 relative">
+                  <span
+                    className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${order.sla?.status === "RED" ? "bg-rose-400" : order.sla?.status === "YELLOW" ? "bg-amber-400" : "bg-indigo-400"}`}
+                  ></span>
+                  <span
+                    className={`relative inline-flex rounded-full h-2 w-2 ${order.sla?.status === "RED" ? "bg-rose-500" : order.sla?.status === "YELLOW" ? "bg-amber-500" : "bg-indigo-500"}`}
+                  ></span>
+                </span>
+                {order.sla?.status === "RED" && (
+                  <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100 uppercase tracking-tighter">
+                    เกินกำหนดระยะเวลาฝ่ายตนเอง
+                  </span>
+                )}
+                {order.sla?.status === "YELLOW" && (
+                  <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-tighter">
+                    ใกล้กำหนดระยะเวลาฝ่ายตนเอง
+                  </span>
+                )}
+              </div>
             )}
           </div>
           {order.subStatusLabel && (
@@ -113,17 +130,45 @@ const OrderStatusBar = ({
                 ยืนยันสต็อกครบ (Confirm Stock)
               </button>
             )}
+            {order.actionMap?.canReportStockIssue && (
+              <button
+                onClick={() => setShowStockIssueModal(true)}
+                className="erp-button bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 flex items-center gap-1.5 py-2 px-4 shadow-sm"
+                disabled={isUpdating}
+              >
+                <HiOutlineExclamationCircle className="w-4 h-4" />
+                สต็อกมีปัญหา
+              </button>
+            )}
+            <button
+              onClick={() => setShowRejectModal(true)}
+              className="erp-button bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 flex items-center gap-1.5 py-2 px-4"
+              disabled={isUpdating}
+            >
+              <HiOutlineExclamationCircle className="w-4 h-4" />
+              ตีกลับงาน
+            </button>
           </div>
         )}
 
         {order.actionMap?.canFinishProduction && (
-          <button
-            onClick={() => handleUpdateStatus("PRODUCTION_FINISHED")}
-            className="erp-button erp-button-primary bg-indigo-600 py-2 px-6 shadow-lg shadow-indigo-100"
-            disabled={isUpdating}
-          >
-            บันทึกผลิตเสร็จ (Finish)
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleUpdateStatus("PRODUCTION_FINISHED")}
+              className="erp-button erp-button-primary bg-indigo-600 py-2 px-6 shadow-lg shadow-indigo-100"
+              disabled={isUpdating}
+            >
+              บันทึกผลิตเสร็จ (Finish)
+            </button>
+            <button
+              onClick={() => setShowRejectModal(true)}
+              className="erp-button bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 flex items-center gap-1.5 py-2 px-4"
+              disabled={isUpdating}
+            >
+              <HiOutlineExclamationCircle className="w-4 h-4" />
+              ตีกลับงาน
+            </button>
+          </div>
         )}
 
         {/* QC ACTIONS */}
@@ -142,7 +187,7 @@ const OrderStatusBar = ({
             )}
             {order.actionMap?.canFailQC && (
               <button
-                onClick={() => setShowQCFailModal(true)}
+                onClick={() => setShowRejectModal(true)}
                 className="px-6 py-3 bg-rose-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50"
                 disabled={isUpdating}
               >
@@ -227,6 +272,19 @@ const OrderStatusBar = ({
         )}
 
         {/* CLAIM REMINDERS FOR OTHER ROLES */}
+        {(user?.role === "ADMIN" || user?.role === "EXECUTIVE") && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowBufferModal(true)}
+              className="erp-button bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100 flex items-center gap-1.5 py-2 px-4 shadow-sm"
+              disabled={isUpdating}
+            >
+              <HiOutlineAdjustmentsHorizontal className="w-4 h-4" />
+              ค่าความคลาดเคลื่อน (Buffer: {order.slaBufferLevel || 0} วัน)
+            </button>
+          </div>
+        )}
+
         {((isStockRole &&
           !isClaimedByMe(order.stockId) &&
           (order.status === "PENDING_STOCK_CHECK" ||

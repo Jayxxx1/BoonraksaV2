@@ -11,6 +11,7 @@ import {
   HiOutlineXMark,
 } from "react-icons/hi2";
 import { useState } from "react";
+import NotificationBell from "./NotificationBell";
 
 const getRoleBadgeColor = (role) => {
   const defaultStyle = "bg-slate-100 text-slate-700 border-slate-200";
@@ -148,26 +149,31 @@ export default function Navbar() {
           {/* Right Section */}
           <div className="flex items-center gap-2">
             {user && (
-              <div className="hidden sm:flex items-center gap-3 px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg shrink-0">
-                <HiOutlineUserCircle className="w-5 h-5 text-slate-400" />
-                <div className="flex flex-col">
-                  <span className="text-[12px] font-bold text-slate-700 leading-none">
-                    {user.name}
-                  </span>
-                  <select
-                    className={`text-[9px] font-black uppercase mt-0.5 px-1 rounded bg-transparent border-none appearance-none cursor-pointer focus:ring-0 ${getRoleBadgeColor(user.role).split(" ").slice(0, 2).join(" ")}`}
-                    value={user.role}
-                    onChange={(e) => updateRole(e.target.value)}
-                  >
-                    <option value="ADMIN">ผู้ดูแลระบบ (ADMIN)</option>
-                    <option value="SALES">ฝ่ายขาย (SALES)</option>
-                    <option value="PURCHASING">ฝ่ายจัดซื้อ (PURCHASING)</option>
-                    <option value="GRAPHIC">ฝ่ายกราฟิก (GRAPHIC)</option>
-                    <option value="STOCK">ฝ่ายสต็อก (STOCK)</option>
-                    <option value="PRODUCTION">ฝ่ายผลิต (PRODUCTION)</option>
-                    <option value="SEWING_QC">ฝ่ายตรวจสอบคุณภาพ (QC)</option>
-                    <option value="DELIVERY">ฝ่ายจัดส่ง (DELIVERY)</option>
-                  </select>
+              <div className="flex items-center gap-2">
+                <NotificationBell />
+                <div className="hidden sm:flex items-center gap-3 px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg shrink-0">
+                  <HiOutlineUserCircle className="w-5 h-5 text-slate-400" />
+                  <div className="flex flex-col">
+                    <span className="text-[12px] font-bold text-slate-700 leading-none">
+                      {user.name}
+                    </span>
+                    <select
+                      className={`text-[9px] font-black uppercase mt-0.5 px-1 rounded bg-transparent border-none appearance-none cursor-pointer focus:ring-0 ${getRoleBadgeColor(user.role).split(" ").slice(0, 2).join(" ")}`}
+                      value={user.role}
+                      onChange={(e) => updateRole(e.target.value)}
+                    >
+                      <option value="ADMIN">ผู้ดูแลระบบ (ADMIN)</option>
+                      <option value="SALES">ฝ่ายขาย (SALES)</option>
+                      <option value="PURCHASING">
+                        ฝ่ายจัดซื้อ (PURCHASING)
+                      </option>
+                      <option value="GRAPHIC">ฝ่ายกราฟิก (GRAPHIC)</option>
+                      <option value="STOCK">ฝ่ายสต็อก (STOCK)</option>
+                      <option value="PRODUCTION">ฝ่ายผลิต (PRODUCTION)</option>
+                      <option value="SEWING_QC">ฝ่ายตรวจสอบคุณภาพ (QC)</option>
+                      <option value="DELIVERY">ฝ่ายจัดส่ง (DELIVERY)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             )}

@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
 import {
   HiOutlineFire,
@@ -23,12 +23,9 @@ export default function RoleStatsHeader() {
     const fetchStats = async () => {
       if (!token) return; // 🆕 Wait for token
       try {
-        const res = await axios.get(
-          "http://localhost:8000/api/dashboard/stats",
-          {
-            headers: { Authorization: `Bearer ${token}` }, // 🆕 Add auth header
-          },
-        );
+        const res = await api.get("/dashboard/stats", {
+          headers: { Authorization: `Bearer ${token}` }, // 🆕 Add auth header
+        });
         setStats(res.data);
       } catch (err) {
         console.error("Failed to fetch stats", err);

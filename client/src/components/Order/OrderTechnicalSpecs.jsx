@@ -1,4 +1,4 @@
-import React from "react";
+import { useState, useEffect } from "react";
 import {
   HiOutlineAdjustmentsHorizontal,
   HiOutlineCloudArrowUp,
@@ -6,7 +6,9 @@ import {
   HiOutlineCube,
   HiOutlineMagnifyingGlass,
   HiOutlineXMark,
+  HiOutlineBolt,
 } from "react-icons/hi2";
+import api from "../../api/config";
 
 const OrderTechnicalSpecs = ({
   order,
@@ -26,62 +28,90 @@ const OrderTechnicalSpecs = ({
   handleLinkBlock,
   canViewTechnical,
   isGraphicRole,
+  isDigitizerRole,
   user,
 }) => {
-  const canEdit = order.actionMap?.canEditSpecs;
-  const canUpload = order.actionMap?.canUploadArtwork;
+  const canEdit =
+    order.actionMap?.canEditSpecs ||
+    (isDigitizerRole && order.status === "PENDING_DIGITIZING");
+  const canUpload = order.actionMap?.canUploadArtwork || isDigitizerRole;
   const isSales = user?.role === "SALES";
   const isSalesOrAdmin = isAdmin || isSales;
+
+  /* 🆕 Master Embroidery Positions */
+  const [masterPositions, setMasterPositions] = useState([]);
+
+  useEffect(() => {
+    const fetchMasterPositions = async () => {
+      try {
+        const res = await api.get("/master/positions");
+        if (res.data.success) {
+          setMasterPositions(res.data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch master positions", err);
+      }
+    };
+    fetchMasterPositions();
+  }, []);
 
   if (!canViewTechnical) return null;
 
   // Role-based Embroidery Gating
   const canAddRemovePos = canEdit && isSalesOrAdmin;
   const canEditDesc = canEdit && isSalesOrAdmin;
-  const canEditSize = canEdit && isGraphicRole;
+  const canEditSize = (canEdit && isGraphicRole) || isAdmin;
+  const canDigitize =
+    (isDigitizerRole &&
+      order.status === "PENDING_DIGITIZING" &&
+      ["NEW", "EDIT"].includes(order.blockType)) ||
+    (isGraphicRole && canEditSize) ||
+    isAdmin;
 
   return (
     <div className="space-y-6">
       {/* 1. Visual Mockups Section (Separated as requested) */}
-      <div className="erp-card bg-white overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <HiOutlinePhoto className="w-5 h-5 text-amber-500" />
-            <h3 className="font-bold text-slate-800 text-sm">
-              รูปภาพวางแบบให้ลูกค้า{" "}
-            </h3>
+      {(!isDigitizerRole || order.draftImages?.length > 0) && (
+        <div className="erp-card bg-white overflow-hidden">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <HiOutlinePhoto className="w-5 h-5 text-amber-500" />
+              <h3 className="font-bold text-slate-800 text-sm">
+                รูปภาพวางแบบให้ลูกค้า{" "}
+              </h3>
+            </div>
+          </div>
+          <div className="p-4">
+            {order.draftImages && order.draftImages.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {order.draftImages.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="aspect-square rounded-2xl overflow-hidden border-2 border-slate-100 bg-white relative group shadow-sm hover:shadow-md transition-all"
+                  >
+                    <img
+                      src={img}
+                      alt={`Mockup ${idx + 1}`}
+                      className="w-full h-full object-cover cursor-zoom-in hover:scale-110 transition-transform duration-500"
+                      onClick={() => window.open(img)}
+                    />
+                    <div className="absolute top-2 right-2 px-2 py-0.5 bg-slate-900/40 backdrop-blur-md rounded-lg text-[8px] font-black text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                      #{idx + 1}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-center">
+                <HiOutlinePhoto className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
+                  ไม่มีรูปม็อคอัพสำหรับออเดอร์นี้
+                </p>
+              </div>
+            )}
           </div>
         </div>
-        <div className="p-4">
-          {order.draftImages && order.draftImages.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {order.draftImages.map((img, idx) => (
-                <div
-                  key={idx}
-                  className="aspect-square rounded-2xl overflow-hidden border-2 border-slate-100 bg-white relative group shadow-sm hover:shadow-md transition-all"
-                >
-                  <img
-                    src={img}
-                    alt={`Mockup ${idx + 1}`}
-                    className="w-full h-full object-cover cursor-zoom-in hover:scale-110 transition-transform duration-500"
-                    onClick={() => window.open(img)}
-                  />
-                  <div className="absolute top-2 right-2 px-2 py-0.5 bg-slate-900/40 backdrop-blur-md rounded-lg text-[8px] font-black text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                    #{idx + 1}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-8 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-center">
-              <HiOutlinePhoto className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                ไม่มีรูปม็อคอัพสำหรับออเดอร์นี้
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* 2. Embroidery Positions Section */}
       <div className="erp-card">
@@ -92,15 +122,15 @@ const OrderTechnicalSpecs = ({
               {displayHeader}
             </h3>
             <div className="ml-4 flex items-center gap-3">
-              <span className="text-xs font-black text-slate-700 bg-slate-200/50 px-2 py-1 rounded-lg">
+              <span className="text-[14px] font-black text-slate-700">
                 ตำแหน่งปัก
               </span>
               <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">
+                <span className="text-[12px] text-slate-400 font-bold uppercase">
                   ประเภทบล็อก:
                 </span>
                 <span
-                  className={`text-[10px] font-black px-2 py-0.5 rounded border ${
+                  className={`text-[14px] font-black px-2 py-0.5 rounded border ${
                     order.blockType === "NEW"
                       ? "bg-indigo-50 text-indigo-700 border-indigo-200"
                       : order.blockType === "EDIT"
@@ -123,7 +153,7 @@ const OrderTechnicalSpecs = ({
               className="erp-button erp-button-primary py-1.5 px-3 text-xs"
               disabled={isUpdating}
             >
-              บันทึกอัตโนมัติ (Auto Saved)
+              บันทึกอัตโนมัติ
             </button>
           ) : (
             isGraphicRole &&
@@ -144,51 +174,115 @@ const OrderTechnicalSpecs = ({
                 key={idx}
                 className="p-3 rounded-2xl bg-white border border-slate-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group relative"
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                      ตำแหน่งปักที่
-                      <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black">
-                        {idx + 1}
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {canEditDesc ? (
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-black text-indigo-500 shrink-0">
+                            {emb.masterPositionId ||
+                              masterPositions.find(
+                                (m) => m.name === emb.position,
+                              )?.id ||
+                              "?"}
+                            .
+                          </span>
+                          <select
+                            className="text-[11px] font-black text-slate-700 bg-slate-50 border-none p-0 focus:ring-0 cursor-pointer w-full h-6"
+                            value={
+                              emb.masterPositionId ||
+                              masterPositions.find(
+                                (m) => m.name === emb.position,
+                              )?.id ||
+                              (emb.position &&
+                              !masterPositions.some(
+                                (m) => m.name === emb.position,
+                              )
+                                ? "CUSTOM"
+                                : "")
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const newSpecs = [...editSpecs];
+                              if (val === "CUSTOM") {
+                                newSpecs[idx].masterPositionId = null;
+                                newSpecs[idx].position = "";
+                              } else {
+                                const master = masterPositions.find(
+                                  (m) => String(m.id) === val,
+                                );
+                                if (master) {
+                                  newSpecs[idx].masterPositionId = master.id;
+                                  newSpecs[idx].position = master.name;
+                                  newSpecs[idx].customPosition = "";
+                                }
+                              }
+                              setEditSpecs(newSpecs);
+                            }}
+                          >
+                            <option value="" disabled>
+                              -- เลือกตำแหน่ง --
+                            </option>
+                            {masterPositions.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.id}. {m.name}
+                              </option>
+                            ))}
+                            <option value="CUSTOM">✏️ กำหนดเอง / อื่นๆ</option>
+                          </select>
+                        </div>
+                        {/* Custom Input for 'CUSTOM' selection or if manually typed previously */}
+                        {!emb.masterPositionId && (
+                          <input
+                            type="text"
+                            placeholder="ระบุตำแหน่ง..."
+                            className="text-[10px] font-bold py-0.5 px-2 h-6 w-full bg-amber-50 border border-amber-100 rounded text-amber-900 placeholder-amber-400 outline-none focus:ring-1 focus:ring-amber-200"
+                            value={
+                              emb.position === "อื่นๆ"
+                                ? emb.customPosition || ""
+                                : emb.position || ""
+                            }
+                            onChange={(e) => {
+                              const newSpecs = [...editSpecs];
+                              newSpecs[idx].position = e.target.value;
+                              newSpecs[idx].masterPositionId = null;
+                              setEditSpecs(newSpecs);
+                            }}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[12px] font-black text-slate-700 uppercase truncate">
+                        {emb.masterPositionId ||
+                          masterPositions.find((m) => m.name === emb.position)
+                            ?.id ||
+                          ""}
+                        {emb.masterPositionId ||
+                        masterPositions.find((m) => m.name === emb.position)?.id
+                          ? ". "
+                          : ""}
+                        {emb.position || "ระบุตำแหน่งปัก"}
                       </span>
-                    </span>
+                    )}
                   </div>
-                  {canAddRemovePos && (
-                    <button
-                      onClick={() => {
-                        const newSpecs = editSpecs.filter((_, i) => i !== idx);
-                        setEditSpecs(newSpecs);
-                      }}
-                      className="p-1 text-slate-300 hover:text-rose-500 transition-colors"
-                    >
-                      <HiOutlineXMark className="w-3 h-3" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                    {canAddRemovePos && (
+                      <button
+                        onClick={() => {
+                          const newSpecs = editSpecs.filter(
+                            (_, i) => i !== idx,
+                          );
+                          setEditSpecs(newSpecs);
+                        }}
+                        className="p-1 text-slate-300 hover:text-rose-500 transition-colors"
+                      >
+                        <HiOutlineXMark className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  {/* Position & Type Row */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {(canEditDesc || emb.position) && (
-                      <div>
-                        <label className="text-[9px] font-bold text-slate-400 uppercase mb-0.5 block">
-                          ตำแหน่ง (Position)
-                        </label>
-                        <input
-                          type="text"
-                          className="erp-input-compact text-xs py-1 h-8"
-                          value={emb.position || ""}
-                          readOnly={!canEditDesc}
-                          onChange={(e) => {
-                            const newSpecs = [...editSpecs];
-                            newSpecs[idx].position = e.target.value;
-                            setEditSpecs(newSpecs);
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-
                   {/* Size Row (New for Graphic) - Compact Pro */}
                   {(canEditSize || emb.width || emb.height) && (
                     <div className="flex items-center gap-2 border-t border-slate-50 pt-2">
@@ -231,16 +325,136 @@ const OrderTechnicalSpecs = ({
                     </div>
                   )}
 
+                  {/* 🆕 TECHNICAL FIELDS (Flashdrive & Needle) */}
+                  {(canEditSize || emb.fileAddress || emb.needlePattern) && (
+                    <div className="grid grid-cols-2 gap-2 border-t border-slate-50 pt-2">
+                      <div>
+                        <label className="text-[12px] font-black text-black uppercase flex items-center gap-1">
+                          📁 ที่อยู่ไฟล์
+                        </label>
+                        <input
+                          type="text"
+                          className={`erp-input-compact text-xs py-1 h-8 w-full ${canEditSize ? "" : "bg-slate-50"}`}
+                          placeholder="เช่น F6:159"
+                          value={emb.fileAddress || ""}
+                          readOnly={!canEditSize}
+                          onChange={(e) => {
+                            const newSpecs = [...editSpecs];
+                            newSpecs[idx].fileAddress = e.target.value;
+                            setEditSpecs(newSpecs);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[12px] font-black text-black uppercase flex items-center gap-1">
+                          🪡 เลขรูปแบบเข็ม
+                        </label>
+                        <input
+                          type="text"
+                          className={`erp-input-compact text-xs py-1 h-8 w-full ${canEditSize ? "" : "bg-slate-50"}`}
+                          placeholder="เช่น 1154"
+                          value={emb.needlePattern || ""}
+                          readOnly={!canEditSize}
+                          onChange={(e) => {
+                            const newSpecs = [...editSpecs];
+                            newSpecs[idx].needlePattern = e.target.value;
+                            setEditSpecs(newSpecs);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 🆕 EMBROIDERY FILES UPLOAD PER POSITION (New for Digitizer and Graphic) */}
+                  {(canDigitize ||
+                    (emb.embroideryFileUrls &&
+                      emb.embroideryFileUrls.length > 0)) && (
+                    <div className="border-t border-slate-50 pt-2 pb-2">
+                      <label className="text-[12px] font-black text-rose-500 uppercase flex items-center gap-1 mb-2">
+                        <HiOutlineBolt className="w-3.5 h-3.5" /> ไฟล์ปัก (.EMB){" "}
+                        {emb.embroideryFileUrls?.length || 0}/10
+                      </label>
+
+                      <div className="flex flex-wrap gap-2">
+                        {/* List uploaded files */}
+                        {Array.isArray(emb.embroideryFileUrls) &&
+                          emb.embroideryFileUrls.map((url, urlIdx) => (
+                            <div
+                              key={urlIdx}
+                              className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-2 py-1 rounded-md text-xs group"
+                            >
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-bold text-rose-600 hover:text-rose-700 hover:underline max-w-[150px] truncate"
+                                title="ดาวน์โหลดไฟล์ .EMB"
+                              >
+                                ไฟล์ปัก {urlIdx + 1}
+                              </a>
+                              {canDigitize && (
+                                <button
+                                  onClick={() => {
+                                    const newSpecs = [...editSpecs];
+                                    newSpecs[idx].embroideryFileUrls.splice(
+                                      urlIdx,
+                                      1,
+                                    );
+                                    setEditSpecs(newSpecs);
+                                  }}
+                                  className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <HiOutlineXMark className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+
+                        {/* Upload button for that specific position */}
+                        {canDigitize &&
+                          (!emb.embroideryFileUrls ||
+                            emb.embroideryFileUrls.length < 10) && (
+                            <label className="flex items-center gap-1.5 px-3 py-1 bg-white border border-dashed border-rose-300 text-rose-500 rounded-md cursor-pointer hover:bg-rose-50 transition-colors text-xs font-bold shadow-sm">
+                              {uploadingField === `emb_${idx}` ? (
+                                <div className="animate-spin w-3 h-3 border-2 border-rose-500 border-t-transparent rounded-full" />
+                              ) : (
+                                <>
+                                  <HiOutlineCloudArrowUp className="w-4 h-4" />{" "}
+                                  อัปโหลด .EMB
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept=".emb"
+                                    onChange={(e) => {
+                                      const file = e.target.files[0];
+                                      if (!file) return;
+                                      const customEvent = {
+                                        target: { files: [file] },
+                                        positionIndex: idx,
+                                      };
+                                      handleFileUpload(
+                                        customEvent,
+                                        `emb_${idx}`,
+                                      );
+                                    }}
+                                  />
+                                </>
+                              )}
+                            </label>
+                          )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Text Row */}
                   {(canEditDesc || emb.textToEmb) && (
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase mb-0.5 block">
-                        ข้อความ (Text)
+                      <label className="text-[12px] font-bold text-slate-400 uppercase mb-0.5 block">
+                        ข้อความที่ต้องการปัก หรือ กำกับ
                       </label>
-                      <input
-                        type="text"
-                        className="erp-input-compact text-xs py-1 h-8"
-                        placeholder="-"
+                      <textarea
+                        className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all outline-none resize-y min-h-[80px]"
+                        placeholder="ระบุข้อความ..."
                         value={emb.textToEmb || ""}
                         readOnly={!canEditDesc}
                         onChange={(e) => {
@@ -273,64 +487,109 @@ const OrderTechnicalSpecs = ({
                           </div>
                         </div>
                       )}
-                      {emb.mockupUrl && (
-                        <div
-                          className="space-y-1 group cursor-zoom-in"
-                          onClick={() => window.open(emb.mockupUrl)}
-                        >
-                          <label className="text-[9px] font-bold text-slate-400 uppercase">
-                            ม็อคอัพจุดนี้ (Mockup)
-                          </label>
-                          <div className="aspect-square rounded-lg border border-slate-200 bg-white overflow-hidden relative">
-                            <img
-                              src={emb.mockupUrl}
-                              alt="Mockup"
-                              className="w-full h-full object-cover"
+                    </div>
+                  )}
+
+                  {/* 🆕 Thread Sequence Management (Multi-color) */}
+                  {(canEditSize ||
+                    (emb.threadSequence && emb.threadSequence.length > 0)) && (
+                    <div className="mt-3 border-t border-slate-50 pt-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">
+                          🧵 ลำดับสีไหม (Thread Colors)
+                        </label>
+                        {canEditSize && (
+                          <button
+                            onClick={() => {
+                              const newSpecs = [...editSpecs];
+                              const seq = newSpecs[idx].threadSequence || [];
+                              newSpecs[idx].threadSequence = [
+                                ...seq,
+                                {
+                                  threadCode: "",
+                                  colorName: "",
+                                  colorCode: "#000000",
+                                },
+                              ];
+                              setEditSpecs(newSpecs);
+                            }}
+                            className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors"
+                          >
+                            + เพิ่มสี
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {(emb.threadSequence || []).map((t, tIdx) => (
+                          <div
+                            key={tIdx}
+                            className="flex items-center gap-1.5 group/thread"
+                          >
+                            <span className="text-[9px] font-black text-slate-300 w-3">
+                              {tIdx + 1}
+                            </span>
+                            <input
+                              type="text"
+                              placeholder="รหัสสี"
+                              className="w-16 px-1.5 py-1 text-[10px] bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 outline-none font-bold"
+                              value={t.threadCode || ""}
+                              readOnly={!canEditSize}
+                              onChange={(e) => {
+                                const newSpecs = [...editSpecs];
+                                newSpecs[idx].threadSequence[tIdx].threadCode =
+                                  e.target.value;
+                                setEditSpecs(newSpecs);
+                              }}
                             />
-                            <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/10 transition-all" />
+                            <input
+                              type="text"
+                              placeholder="ชื่อสี"
+                              className="flex-1 px-1.5 py-1 text-[10px] bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 outline-none font-medium"
+                              value={t.colorName || ""}
+                              readOnly={!canEditSize}
+                              onChange={(e) => {
+                                const newSpecs = [...editSpecs];
+                                newSpecs[idx].threadSequence[tIdx].colorName =
+                                  e.target.value;
+                                setEditSpecs(newSpecs);
+                              }}
+                            />
+                            <input
+                              type="color"
+                              className="w-6 h-6 p-0 border-0 bg-transparent cursor-pointer"
+                              value={t.colorCode || "#000000"}
+                              disabled={!canEditSize}
+                              onChange={(e) => {
+                                const newSpecs = [...editSpecs];
+                                newSpecs[idx].threadSequence[tIdx].colorCode =
+                                  e.target.value;
+                                setEditSpecs(newSpecs);
+                              }}
+                            />
+                            {canEditSize && (
+                              <button
+                                onClick={() => {
+                                  const newSpecs = [...editSpecs];
+                                  newSpecs[idx].threadSequence = newSpecs[
+                                    idx
+                                  ].threadSequence.filter((_, i) => i !== tIdx);
+                                  setEditSpecs(newSpecs);
+                                }}
+                                className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover/thread:opacity-100 transition-all"
+                              >
+                                <HiOutlineXMark className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {(canEditDesc || emb.details || emb.note) && (
-                    <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase mb-0.5 block">
-                        เพิ่มเติม (Note)
-                      </label>
-                      <textarea
-                        className="erp-input-compact min-h-[40px] resize-none text-xs leading-snug"
-                        value={emb.details || emb.note || ""}
-                        readOnly={!canEditDesc}
-                        onChange={(e) => {
-                          const newSpecs = [...editSpecs];
-                          newSpecs[idx].details = e.target.value;
-                          setEditSpecs(newSpecs);
-                        }}
-                        placeholder="ระบุรายละเอียดเพิ่มเติม..."
-                      />
-                    </div>
-                  )}
-
-                  {/* Thread Color (New) */}
-                  {(canEditDesc || emb.threadColor) && (
-                    <div className="mt-2">
-                      <label className="text-[9px] font-bold text-indigo-400 uppercase mb-0.5 block flex items-center gap-1">
-                        🎨 สีด้าย (Thread Color)
-                      </label>
-                      <input
-                        type="text"
-                        className="erp-input-compact text-xs py-1 h-8 border-indigo-200 focus:border-indigo-500 focus:ring-indigo-200"
-                        value={emb.threadColor || ""}
-                        readOnly={!canEditDesc}
-                        onChange={(e) => {
-                          const newSpecs = [...editSpecs];
-                          newSpecs[idx].threadColor = e.target.value;
-                          setEditSpecs(newSpecs);
-                        }}
-                        placeholder="ระบุรหัสสี/ชื่อสี (Optional)"
-                      />
+                        ))}
+                        {(!emb.threadSequence ||
+                          emb.threadSequence.length === 0) && (
+                          <p className="text-[9px] text-slate-400 font-bold italic text-center py-2 bg-slate-50/50 rounded-lg">
+                            -- ยังไม่มีข้อมูลสีไหม --
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -339,12 +598,23 @@ const OrderTechnicalSpecs = ({
 
             {canAddRemovePos && (
               <button
-                onClick={() =>
+                onClick={() => {
+                  const maxPos = editSpecs.reduce(
+                    (max, item) => Math.max(max, item.positionNo || 0),
+                    0,
+                  );
                   setEditSpecs([
                     ...editSpecs,
-                    { position: "", type: "EMBROIDERY", size: "", details: "" },
-                  ])
-                }
+                    {
+                      positionNo: maxPos + 1,
+                      position: "",
+                      type: "EMBROIDERY",
+                      size: "",
+                      details: "",
+                      threadSequence: [],
+                    },
+                  ]);
+                }}
                 className="p-4 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/30 transition-all flex flex-col items-center justify-center gap-2 group"
               >
                 <div className="p-2 rounded-full bg-slate-100 group-hover:bg-indigo-100 transition-colors">
@@ -357,9 +627,9 @@ const OrderTechnicalSpecs = ({
             )}
           </div>
 
-          {/* Graphic Outputs Section (Final Artwork + Production File) */}
+          {/* Graphic Outputs Section (Final Artwork + Production File + Embroidery File) */}
           {!isSales && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 border-t border-slate-100 pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6 border-t border-slate-100 pt-6">
               {/* Artwork Upload (Final Artwork) */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -424,49 +694,83 @@ const OrderTechnicalSpecs = ({
                 )}
               </div>
 
-              {/* DST File Section (Production File) */}
+              {/* EMB File Section (Embroidery File) */}
               <div className="space-y-3">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                  ไฟล์สติ๊ก/ผลิต (Production File)
+                <label className="text-[11px] font-black text-rose-400 uppercase tracking-[0.2em]">
+                  ไฟล์ตีลาย (Embroidery File)
                 </label>
                 <div className="erp-card p-5 bg-slate-900 text-white min-h-[160px] flex flex-col justify-between">
-                  <div className="flex items-start justify-between">
-                    <div className="p-2.5 rounded-xl bg-slate-800 border border-slate-700">
-                      <HiOutlineCube className="w-6 h-6 text-indigo-400" />
-                    </div>
-                    {order.productionFileUrl && (
-                      <a
-                        href={order.productionFileUrl}
-                        download
-                        className="text-[10px] bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg font-black transition-all"
-                      >
-                        DOWNLOAD .DST
-                      </a>
+                  <div className="flex flex-col gap-3 max-h-[120px] overflow-y-auto pr-2 custom-scrollbar">
+                    {order.embroideryFileUrls &&
+                    order.embroideryFileUrls.length > 0 ? (
+                      order.embroideryFileUrls.map((url, i) => (
+                        <div
+                          key={i}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-800 border border-slate-700"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <HiOutlineBolt className="w-5 h-5 text-rose-400 shrink-0" />
+                            <span className="text-xs font-mono truncate text-rose-300">
+                              ไฟล์ที่ {i + 1} (.emb)
+                            </span>
+                          </div>
+                          <a
+                            href={url}
+                            download
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap shrink-0"
+                          >
+                            DOWNLOAD
+                          </a>
+                        </div>
+                      ))
+                    ) : order.embroideryFileUrl ? (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-800 border border-slate-700">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <HiOutlineBolt className="w-5 h-5 text-rose-400 shrink-0" />
+                          <span className="text-xs font-mono truncate text-rose-300">
+                            ไฟล์เดิม (.emb)
+                          </span>
+                        </div>
+                        <a
+                          href={order.embroideryFileUrl}
+                          download
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap shrink-0"
+                        >
+                          DOWNLOAD
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-4 h-full border border-dashed border-slate-700 rounded-xl bg-slate-800/50">
+                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest text-center mt-2">
+                          ยังไม่ได้อัปโหลดไฟล์ตีลายหลัก
+                        </p>
+                      </div>
                     )}
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                      Filename:
-                    </p>
-                    <p className="text-sm font-mono font-medium truncate text-indigo-300">
-                      {order.productionFileName || "No file uploaded"}
-                    </p>
-                  </div>
+
                   {canUpload && (
-                    <label className="mt-4 flex items-center justify-center gap-2 py-2 border border-dashed border-slate-700 rounded-xl hover:bg-slate-800 cursor-pointer transition-all">
+                    <label className="mt-4 flex items-center justify-center gap-2 py-2 border border-dashed border-slate-700 rounded-xl hover:bg-slate-800 cursor-pointer transition-all shrink-0">
                       <input
                         type="file"
+                        multiple
                         className="hidden"
-                        onChange={(e) => handleFileUpload(e, "production")}
-                        disabled={uploadingField === "production"}
+                        accept=".emb"
+                        onChange={(e) =>
+                          handleFileUpload(e, "embroideryGlobal")
+                        }
+                        disabled={uploadingField === "embroideryGlobal"}
                       />
-                      {uploadingField === "production" ? (
-                        <div className="animate-spin w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full" />
+                      {uploadingField === "embroideryGlobal" ? (
+                        <div className="animate-spin w-4 h-4 border-2 border-rose-500 border-t-transparent rounded-full" />
                       ) : (
                         <>
                           <HiOutlineCloudArrowUp className="w-4 h-4 text-slate-500" />
                           <span className="text-[10px] font-black uppercase text-slate-400">
-                            อัปโหลดไฟล์ใหม่ (New Source)
+                            อัปโหลดไฟล์ปักเพิ่ม
                           </span>
                         </>
                       )}

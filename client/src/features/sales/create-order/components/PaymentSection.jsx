@@ -20,15 +20,34 @@ const PaymentSection = ({
   paymentMethod,
   setPaymentMethod,
 }) => {
+  const handlePaste = (e, uploadType) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          if (uploadType === "draft") {
+            onUploadDraft({ target: { files: [file] } });
+          } else if (uploadType === "slip") {
+            onUploadSlip({ target: { files: [file] } });
+          }
+        }
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* 4. Attachments (Mockups) */}
-      <div className="erp-card shadow-sm">
+      <div
+        className="erp-card shadow-sm"
+        onPaste={(e) => handlePaste(e, "draft")}
+      >
         <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <HiOutlinePhoto className="w-5 h-5 text-indigo-600" />
             <h3 className="font-bold text-slate-800 text-sm">
-              รูปภาพวางแบบให้ลูกค้า{" "}
+              รูปภาพวางแบบให้ลูกค้า (Paste Here)
             </h3>
           </div>
           <div className="relative">
@@ -74,7 +93,7 @@ const PaymentSection = ({
             </div>
           ) : (
             <p className="text-[10px] font-bold text-slate-400 text-center py-4">
-              อัปโหลดรูปภาพแบบเพื่อให้ลูกค้าคอนเฟิร์ม
+              อัปโหลดรูปภาพแบบเพื่อให้ลูกค้าคอนเฟิร์ม (รองรับ Ctrl+V)
             </p>
           )}
         </div>
@@ -114,7 +133,7 @@ const PaymentSection = ({
                 >
                   โอนจ่าย (Transfer)
                 </button>
-                <button
+                {/* <button
                   type="button"
                   onClick={() => setPaymentMethod("COD")}
                   className={`px-4 py-1.5 rounded-md text-[10px] font-bold transition-all ${
@@ -124,7 +143,7 @@ const PaymentSection = ({
                   }`}
                 >
                   เก็บเงินปลายทาง (COD +3%)
-                </button>
+                </button> */}
               </div>
             </div>
 
@@ -159,8 +178,8 @@ const PaymentSection = ({
                 className="erp-input py-2 text-lg font-black text-emerald-600 bg-emerald-50"
               />
               <p className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-tighter">
-                ขั้นต่ำที่แนะนำ (20%): ฿
-                {Math.round(totals.finalTotal * 0.2).toLocaleString()}
+                ขั้นต่ำที่แนะนำ (50%): ฿
+                {Math.round(totals.finalTotal * 0.5).toLocaleString()}
               </p>
             </div>
             <div className="space-y-1">
@@ -174,7 +193,7 @@ const PaymentSection = ({
             </div>
           </div>
 
-          <div className="relative">
+          <div className="relative" onPaste={(e) => handlePaste(e, "slip")}>
             <input
               type="file"
               accept="image/*"
@@ -193,8 +212,8 @@ const PaymentSection = ({
               {isUploadingSlip
                 ? "กำลังอัปโหลด..."
                 : depositSlipUrl
-                  ? "เปลี่ยนสลิป (Change Slip)"
-                  : "+ อัปโหลดสลิปโอนเงิน (Upload Slip)"}
+                  ? "เปลี่ยนสลิป (Change Slip / Paste New)"
+                  : "+ อัปโหลดสลิปโอนเงิน (Upload Slip / Paste)"}
             </button>
           </div>
         </div>

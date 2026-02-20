@@ -111,6 +111,12 @@ export default function Sidebar({
           roles: ["GRAPHIC", "ADMIN"],
         },
         {
+          to: "/digitizer",
+          label: "งานตีลาย",
+          icon: HiOutlineRectangleGroup,
+          roles: ["DIGITIZER", "ADMIN"],
+        },
+        {
           to: "/production",
           label: "งานผลิต",
           icon: HiOutlineCube,
@@ -181,6 +187,12 @@ export default function Sidebar({
           label: "ระบบการตลาด",
           icon: HiOutlineChartBarSquare,
           roles: ["EXECUTIVE", "ADMIN", "MARKETING"],
+        },
+        {
+          to: "/monitor/kpi",
+          label: "ภาพรวมดัชนี (KPIs)",
+          icon: HiOutlineChartBarSquare,
+          roles: ["EXECUTIVE", "ADMIN"],
         },
       ],
     },

@@ -6,6 +6,7 @@ import {
   HiOutlinePrinter,
   HiOutlineCheckBadge,
   HiOutlineClock,
+  HiOutlinePencil,
 } from "react-icons/hi2";
 
 const OrderHeader = ({
@@ -37,7 +38,7 @@ const OrderHeader = ({
             </button>
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-slate-900 leading-none">
+                <h1 className="text-sm font-bold text-slate-900 leading-none w-[120px]">
                   เลขใบงาน: {order.jobId}
                 </h1>
                 {order.isUrgent && (
@@ -64,6 +65,15 @@ const OrderHeader = ({
           <div className="flex items-center gap-2">
             {user?.role !== "PURCHASING" && (
               <>
+                {(user?.role === "SALES" || user?.role === "ADMIN") && (
+                  <button
+                    onClick={() => navigate(`/order/${order.id}/edit`)}
+                    className="erp-button bg-amber-50 text-amber-700 border-amber-100 py-1.5 px-3 text-xs flex items-center gap-1.5"
+                  >
+                    <HiOutlinePencil className="w-4 h-4" />
+                    <span>แก้ไขออเดอร์</span>
+                  </button>
+                )}
                 <button
                   onClick={downloadCustomerProof}
                   className="erp-button bg-indigo-50 text-indigo-700 border-indigo-100 py-1.5 px-3 text-xs"
@@ -119,9 +129,16 @@ const OrderHeader = ({
                   <span className="text-slate-500 uppercase tracking-tighter">
                     โรงงาน (Factory):
                   </span>
-                  <span className="bg-slate-800 px-2 py-0.5 rounded text-white border border-slate-700">
-                    {getDisplayName(order.production, user)}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="bg-slate-800 px-2 py-0.5 rounded text-white border border-slate-700">
+                      {getDisplayName(order.production, user)}
+                    </span>
+                    {order.assignedWorkerName && (
+                      <span className="text-[9px] text-orange-400 mt-0.5 font-black">
+                        → มอบหมาย: {order.assignedWorkerName}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
               {order.qc && (

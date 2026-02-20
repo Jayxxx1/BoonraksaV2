@@ -18,19 +18,7 @@ export default function Login() {
   // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated && user) {
-      const role = user.role;
-      if (role === "MARKETING")
-        navigate("/monitor/marketing", { replace: true });
-      else if (role === "FINANCE")
-        navigate("/monitor/finance", { replace: true });
-      else if (role === "EXECUTIVE")
-        navigate("/monitor/finance", { replace: true });
-      else if (role === "GRAPHIC") navigate("/graphic", { replace: true });
-      else if (role === "PRODUCTION")
-        navigate("/production", { replace: true });
-      else if (role === "SEWING_QC") navigate("/qc", { replace: true });
-      else if (role === "STOCK") navigate("/stock-recheck", { replace: true });
-      else navigate("/", { replace: true });
+      navigate("/", { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -42,24 +30,7 @@ export default function Login() {
     const result = await login(username, password);
 
     if (result.success) {
-      const role = result.user?.role;
-      if (role === "MARKETING") {
-        navigate("/monitor/marketing");
-      } else if (role === "FINANCE") {
-        navigate("/monitor/finance");
-      } else if (role === "EXECUTIVE") {
-        navigate("/monitor/finance");
-      } else if (role === "GRAPHIC") {
-        navigate("/graphic");
-      } else if (role === "PRODUCTION") {
-        navigate("/production");
-      } else if (role === "SEWING_QC") {
-        navigate("/qc");
-      } else if (role === "STOCK") {
-        navigate("/stock-recheck");
-      } else {
-        navigate("/");
-      }
+      navigate("/");
     } else {
       setError(result.message);
     }

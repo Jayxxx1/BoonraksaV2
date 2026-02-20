@@ -2,6 +2,7 @@
  * Order Status Enums
  */
 export const OrderStatus = {
+  PENDING_DIGITIZING: "PENDING_DIGITIZING",
   PENDING_ARTWORK: "PENDING_ARTWORK",
   DESIGNING: "DESIGNING",
   PENDING_STOCK_CHECK: "PENDING_STOCK_CHECK",
@@ -19,6 +20,7 @@ export const OrderStatus = {
  * Order Status Labels (Thai)
  */
 export const StatusLabels = {
+  PENDING_DIGITIZING: "รอตีลาย",
   PENDING_ARTWORK: "รออาร์ตเวิร์ค",
   DESIGNING: "กำลังออกแบบ",
   PENDING_STOCK_CHECK: "รอเช็คสต็อก",
@@ -63,6 +65,7 @@ export const RoleLabels = {
   PURCHASING: "ฝ่ายจัดซื้อ",
   MARKETING: "ฝ่ายการตลาด",
   FINANCE: "ฝ่ายบัญชี",
+  DIGITIZER: "ฝ่ายตีลาย",
   ADMIN: "ผู้ดูแลระบบ",
   SUPER_ADMIN: "ผู้ดูแลสูงสุด",
   EXECUTIVE: "ผู้บริหาร",
@@ -84,6 +87,7 @@ export const UserRole = {
   DELIVERY: "DELIVERY",
   FINANCE: "FINANCE",
   PURCHASING: "PURCHASING",
+  DIGITIZER: "DIGITIZER",
 };
 
 /**
@@ -99,11 +103,11 @@ export const SubStatus = {
 export const PreorderStatus = {
   NONE: "NONE",
   WAITING_PURCHASE_INPUT: "WAITING_PURCHASE_INPUT", // รอจัดซื้อระบุวัน
-  WAITING_ARRIVAL: "WAITING_ARRIVAL",             // รอสินค้าเข้า
-  PURCHASE_CONFIRMED: "PURCHASE_CONFIRMED",       // ยืนยันการสั่งซื้อแล้ว
-  DELAYED_ROUND_1: "DELAYED_ROUND_1",             // ล่าช้าครั้งที่ 1
-  DELAYED_ROUND_2: "DELAYED_ROUND_2",             // ล่าช้าครั้งที่ 2 (แจังผู้บริหาร)
-  ARRIVED: "ARRIVED",                             // สินค้าเข้าแล้ว
+  WAITING_ARRIVAL: "WAITING_ARRIVAL", // รอสินค้าเข้า
+  PURCHASE_CONFIRMED: "PURCHASE_CONFIRMED", // ยืนยันการสั่งซื้อแล้ว
+  DELAYED_ROUND_1: "DELAYED_ROUND_1", // ล่าช้าครั้งที่ 1
+  DELAYED_ROUND_2: "DELAYED_ROUND_2", // ล่าช้าครั้งที่ 2 (แจังผู้บริหาร)
+  ARRIVED: "ARRIVED", // สินค้าเข้าแล้ว
 };
 
 /**

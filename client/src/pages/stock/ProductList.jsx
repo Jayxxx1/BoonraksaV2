@@ -1,6 +1,6 @@
 // client/src/components/ProductList.jsx
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import { Link } from "react-router-dom";
 import {
   HiOutlinePlus,
@@ -24,10 +24,10 @@ export default function ProductList() {
       setError(null);
 
       const [prodRes, catRes] = await Promise.all([
-        axios.get("http://localhost:8000/api/products", {
+        api.get("/products", {
           params: { search, categoryId: selectedCategory },
         }),
-        axios.get("http://localhost:8000/api/categories"),
+        api.get("/categories"),
       ]);
 
       if (prodRes.data.success) setProducts(prodRes.data.data);

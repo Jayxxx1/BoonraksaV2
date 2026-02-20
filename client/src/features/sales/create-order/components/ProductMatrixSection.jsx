@@ -1,5 +1,5 @@
 import React from "react";
-import { HiOutlineShoppingBag, HiOutlineDocumentText } from "react-icons/hi2";
+import { HiOutlineShoppingBag, HiOutlineDocumentText} from "react-icons/hi2";
 import SearchableSelect from "../../../../components/SearchableSelect";
 
 const ProductMatrixSection = ({

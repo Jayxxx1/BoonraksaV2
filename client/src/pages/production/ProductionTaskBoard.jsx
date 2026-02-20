@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import { useAuth } from "../../context/auth-store";
 import {
   HiOutlineWrenchScrewdriver,
@@ -9,10 +9,11 @@ import {
 } from "react-icons/hi2";
 import { Link } from "react-router-dom";
 import RoleStatsHeader from "../../components/dashboard/RoleStatsHeader";
-import { getStatusLabel } from "../../utils/statusMapper";
+import { useMaster } from "../../context/MasterContext";
 
 export default function ProductionTaskBoard() {
   const { token } = useAuth();
+  const { getStatusLabel } = useMaster();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewTab, setViewTab] = useState("available");
@@ -21,7 +22,7 @@ export default function ProductionTaskBoard() {
   const fetchProductionOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get("http://localhost:8000/api/orders", {
+      const res = await api.get("/orders", {
         headers: { Authorization: `Bearer ${token}` },
         params: { view: viewTab, search },
       });
@@ -29,10 +30,8 @@ export default function ProductionTaskBoard() {
       // Filter to only production-relevant statuses for available/all tabs
       let filtered = productionOrders;
       if (viewTab === "available" || viewTab === "all") {
-        filtered = productionOrders.filter((o) =>
-          ["STOCK_RECHECKED", "IN_PRODUCTION", "PRODUCTION_FINISHED"].includes(
-            o.status,
-          ),
+        filtered = productionOrders.filter(
+          (o) => o.isReadyForProduction || o.productionStatus !== "NOT_READY",
         );
       }
       // Sort: Urgent first
@@ -114,7 +113,7 @@ export default function ProductionTaskBoard() {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-400 uppercase tracking-wider">
@@ -173,11 +172,18 @@ export default function ProductionTaskBoard() {
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-[11px] font-bold text-slate-600">
-                            {order.production
-                              ? order.production.name
-                              : "ยังไม่มีคนรับงาน"}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-[11px] font-black text-slate-600">
+                              {order.production
+                                ? order.production.name
+                                : "ยังไม่มีคนรับงาน"}
+                            </span>
+                            {order.assignedWorkerName && (
+                              <span className="text-[9px] font-black text-orange-500">
+                                → {order.assignedWorkerName}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <Link
@@ -192,6 +198,82 @@ export default function ProductionTaskBoard() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Cards for Production */}
+            <div className="lg:hidden flex flex-col gap-3 p-3 bg-slate-50/50">
+              {orders.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 font-medium">
+                  ไม่มีงานในรายการนี้
+                </div>
+              ) : (
+                orders.map((order) => (
+                  <div
+                    key={order.id}
+                    className={`block bg-white p-3.5 rounded-xl border transition-all ${
+                      order.isUrgent
+                        ? "border-rose-200 bg-rose-50/20 shadow-sm shadow-rose-100/50"
+                        : "border-slate-200 shadow-sm"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2.5">
+                      <div className="flex flex-col gap-1.5 w-full">
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col">
+                            <span
+                              className={`text-sm font-black tracking-tight ${order.isUrgent ? "text-rose-600" : "text-slate-900"}`}
+                            >
+                              {order.jobId || `#${order.id}`}
+                            </span>
+                            <span className="text-[11px] text-slate-600 font-bold max-w-[160px] truncate">
+                              {order.customerName}
+                            </span>
+                          </div>
+                          <span
+                            className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg border flex-shrink-0 text-center ${order.status === "IN_PRODUCTION" ? "bg-orange-100 text-orange-600 border-transparent" : "bg-blue-100 text-blue-600 border-transparent"}`}
+                          >
+                            {getStatusLabel(order.status)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 mt-1">
+                          {order.isUrgent && (
+                            <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200">
+                              งานด่วน
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-100">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-black text-slate-400">
+                          ผู้รับผิดชอบ
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-700">
+                          {order.production
+                            ? order.production.name
+                            : "ยังไม่มีคนรับงาน"}
+                        </span>
+                        {order.assignedWorkerName && (
+                          <span className="text-[9px] font-black text-orange-500">
+                            → {order.assignedWorkerName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center">
+                        <Link
+                          to={`/order/${order.id}`}
+                          className="px-4 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-[10.5px] font-black hover:bg-orange-600 hover:text-white hover:border-orange-600 transition-all shadow-sm active:scale-95"
+                        >
+                          ตรวจสอบ
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}

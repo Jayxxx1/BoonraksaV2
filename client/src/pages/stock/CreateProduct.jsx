@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import { useNavigate, Link } from "react-router-dom";
 import {
   HiOutlineSparkles,
@@ -47,11 +47,12 @@ export default function CreateProduct() {
     const fetchData = async () => {
       try {
         const [catRes, prodRes] = await Promise.all([
-          axios.get("http://localhost:8000/api/categories", {
+          api.get("/categories", {
             headers: getAuthHeader(),
           }),
-          axios.get("http://localhost:8000/api/products?limit=100", {
+          api.get("/products", {
             headers: getAuthHeader(),
+            params: { limit: 100 },
           }),
         ]);
         setCategories(catRes.data.data);
@@ -66,8 +67,8 @@ export default function CreateProduct() {
   // Fetch product details when selected in Add Stock mode
   useEffect(() => {
     if (selectedProductId) {
-      axios
-        .get(`http://localhost:8000/api/products/${selectedProductId}`, {
+      api
+        .get(`/products/${selectedProductId}`, {
           headers: getAuthHeader(),
         })
         .then((res) => {
@@ -88,16 +89,12 @@ export default function CreateProduct() {
 
     setUploading(true);
     try {
-      const res = await axios.post(
-        "http://localhost:8000/api/upload",
-        uploadFormData,
-        {
-          headers: {
-            ...getAuthHeader(),
-            "Content-Type": "multipart/form-data",
-          },
+      const res = await api.post("/upload", uploadFormData, {
+        headers: {
+          ...getAuthHeader(),
+          "Content-Type": "multipart/form-data",
         },
-      );
+      });
       setFormData({ ...formData, imageUrl: res.data.data.url });
     } catch (err) {
       console.error(err);
@@ -138,8 +135,8 @@ export default function CreateProduct() {
 
     setIsSubmitting(true);
     try {
-      await axios.post(
-        "http://localhost:8000/api/stock/receive",
+      await api.post(
+        "/stock/receive",
         { items },
         { headers: getAuthHeader() },
       );
@@ -166,7 +163,7 @@ export default function CreateProduct() {
           code: `${formData.codePrefix}-${v.color}-${v.size}`,
         })),
       };
-      await axios.post("http://localhost:8000/api/products", payload, {
+      await api.post("/products", payload, {
         headers: getAuthHeader(),
       });
       navigate("/");

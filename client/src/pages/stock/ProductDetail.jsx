@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../../api/config";
 import { useParams, Link } from "react-router-dom";
 import {
   HiOutlineArrowLeft,
@@ -19,7 +19,7 @@ export default function ProductDetail() {
     const fetchProduct = async () => {
       try {
         setLoading(true);
-        const res = await axios.get(`http://localhost:8000/api/products/${id}`);
+        const res = await api.get(`/products/${id}`);
         if (res.data.success) {
           setProduct(res.data.data);
         }

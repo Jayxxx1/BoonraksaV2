@@ -95,8 +95,8 @@ const OrderSidebar = ({
         <div className="erp-card bg-indigo-600 text-white overflow-hidden shadow-indigo-200">
           <div className="p-5 border-b border-indigo-500/50 bg-indigo-700/30">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200">
-                สรุปยอดเงิน (Financial)
+              <span className="text-[12px] font-black uppercase tracking-[0.2em] text-indigo-200">
+                สรุปยอดเงิน
               </span>
               {getPaymentStatusBadge(order.paymentStatus)}
             </div>
@@ -104,18 +104,18 @@ const OrderSidebar = ({
               ฿{parseFloat(order.totalPrice || 0).toLocaleString()}
             </div>
             <p className="text-[10px] font-bold text-indigo-200 uppercase">
-              ยอดสุทธิทั้งหมด (Net Amount)
+              ยอดสุทธิทั้งหมด 
             </p>
           </div>
           <div className="p-5 space-y-4 bg-indigo-600">
             <div className="flex justify-between items-center text-xs">
-              <span className="font-bold opacity-80">ชำระแล้ว (Paid)</span>
+              <span className="font-bold opacity-80">ชำระแล้ว</span>
               <span className="font-black text-emerald-300">
                 ฿{parseFloat(order.paidAmount || 0).toLocaleString()}
               </span>
             </div>
             <div className="flex justify-between items-center text-xs">
-              <span className="font-bold opacity-80">ยอดค้าง (Balance)</span>
+              <span className="font-bold opacity-80">ยอดค้าง</span>
               <span className="font-black text-rose-300">
                 ฿{parseFloat(order.balanceDue || 0).toLocaleString()}
               </span>

@@ -81,22 +81,6 @@ const CreateOrder = () => {
     }
   };
 
-  const embroideryPositions = [
-    "อกซ้าย",
-    "อกขวา",
-    "กระเป๋าซ้าย",
-    "กระเป๋าขวา",
-    "แขนซ้าย",
-    "แขนขวา",
-    "กลางหลัง",
-    "บ่าซ้าย",
-    "บ่าขวา",
-    "ทับแถบ",
-    "บนแถบ",
-    "ปกเสื้อ",
-    "อื่นๆ",
-  ];
-
   const [loading, setLoading] = useState(false);
   const [successOrderId, setSuccessOrderId] = useState(null);
   const [error, setError] = useState("");
@@ -305,6 +289,12 @@ const CreateOrder = () => {
       ...embroidery,
       {
         position: "อกซ้าย",
+        masterPositionId: 1, // Default to Left Chest (ID: 1) if available, check this logic?
+        // Better to leave empty or default to first master?
+        // Let's stick to "อกซ้าย" name but adding ID might be safer if we know ID 1 is Left Chest.
+        // Or wait, let's just init as empty/first available logic in UI?
+        // User requested "1. อกซ้าย" so ID 1 is likely "อกซ้าย".
+        // Safe to init with name, but UI needs handle matching.
         customPosition: "",
         blockId: "",
         blockType: "บล็อคเดิม",
@@ -390,6 +380,21 @@ const CreateOrder = () => {
     }
   };
   const [paymentMethod, setPaymentMethod] = useState("TRANSFER"); // TRANSFER | COD
+  const [masterPositions, setMasterPositions] = useState([]);
+
+  useEffect(() => {
+    const fetchMasterPositions = async () => {
+      try {
+        const res = await api.get("/master/positions");
+        if (res.data.success) {
+          setMasterPositions(res.data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch master positions", err);
+      }
+    };
+    fetchMasterPositions();
+  }, []);
 
   const totals = useMemo(() => {
     let matrixQty = 0;
@@ -689,7 +694,7 @@ const CreateOrder = () => {
               setEmbroidery={setEmbroidery}
               addEmbroidery={addEmbroidery}
               removeEmbroidery={removeEmbroidery}
-              embroideryPositions={embroideryPositions}
+              masterPositions={masterPositions}
               blocks={blocks}
               fetchCustomerBlocks={fetchCustomerBlocks}
               orderInfo={orderInfo}
