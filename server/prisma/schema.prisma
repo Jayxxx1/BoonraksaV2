@@ -238,7 +238,7 @@ model Order {
   digitizerId Int?
   digitizer   User? @relation("DigitizerOrders", fields: [digitizerId], references: [id])
 
-  assignedWorkerNames String[] @map("assignedWorkerName") // ชื่อลูกมือที่หัวหน้ากะมอบหมายให้ (หลายคนได้)
+  assignedWorkerNames String[]   // ชื่อลูกมือที่หัวหน้ากะมอบหมายให้ (หลายคนได้)
   rejectionCount     Int     @default(0) // จำนวนครั้งที่งานถูกตีกลับ
   damagedCount       Int     @default(0) // จำนวนของเสียจากการผลิต/การแก้
 
@@ -250,7 +250,7 @@ model Order {
 
   artworkUrl String? // รูป Artwork จาก Graphic
   embroideryFileUrl  String?   // ไฟล์ .EMB เดิม (Legacy)
-  embroideryFileUrls String[]  @map("embroideryFileUrl") // ไฟล์ .EMB ใหม่จากฝ่ายตีลาย (หลายไฟล์)
+  embroideryFileUrls String[]  // ไฟล์ .EMB ใหม่จากฝ่ายตีลาย (หลายไฟล์)
   trackingNo String? // เลขพัสดุ
   notes      String? // หมายเหตุจากออเดอร์
   cancelReason String? // เหตุผลการยกเลิก
