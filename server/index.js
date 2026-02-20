@@ -20,8 +20,19 @@ import masterRoutes from "./modules/master/master.routes.js";
 import { getCategories } from "./controllers/productController.js";
 
 const app = express();
-
-// --- Security & Production Middleware ---
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.header(
+      "Access-Control-Allow-Methods",
+      "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    );
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header("Access-Control-Allow-Credentials", "true");
+    return res.sendStatus(204);
+  }
+  next();
+});
 // --- Security & Production Middleware ---
 app.use(
   helmet({
