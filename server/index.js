@@ -46,7 +46,13 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.indexOf(origin) !== -1 || config.NODE_ENV === "development") {
+    const isVercelPreview = origin.endsWith(".vercel.app") && origin.includes("boonraksa-phase1");
+
+    if (
+      allowedOrigins.indexOf(origin) !== -1 ||
+      isVercelPreview ||
+      config.NODE_ENV === "development"
+    ) {
       callback(null, true);
     } else {
       console.log("CORS Blocked for origin:", origin);
