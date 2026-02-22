@@ -35,12 +35,30 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(morgan(config.NODE_ENV === "production" ? "combined" : "dev"));
 
 // CORS: Configurable whitelist from environment
+const allowedOrigins = [
+  "https://boonraksa-phase1.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:5173",
+];
+
 const corsOptions = {
-  origin: true, // Phase 1: Allow all for easier testing
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.indexOf(origin) !== -1 || config.NODE_ENV === "development") {
+      callback(null, true);
+    } else {
+      console.log("CORS Blocked for origin:", origin);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   credentials: true,
+  optionsSuccessStatus: 200,
 };
+
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
