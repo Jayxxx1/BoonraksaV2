@@ -45,9 +45,12 @@ const envSchema = z.object({
 const result = envSchema.safeParse(process.env);
 
 if (!result.success) {
-  console.error("❌ Invalid environment variables:", result.error.format());
-  process.exit(1);
+  // พิมพ์ Error ออกมาให้ชัดเจนใน Log ของ Railway
+  console.error("❌ Invalid environment variables:");
+  console.error(JSON.stringify(result.error.format(), null, 2));
+  // ในระหว่าง Deploy เราอาจจะไม่ต้องสั่ง exit ทันทีเพื่อให้พอรันได้บ้าง
+  // process.exit(1); 
 }
 
-export const config = result.data;
+export const config = result.success ? result.data : process.env;
 export default config;

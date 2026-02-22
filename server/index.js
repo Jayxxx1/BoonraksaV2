@@ -19,6 +19,8 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import masterRoutes from "./modules/master/master.routes.js";
 import { getCategories } from "./controllers/productController.js";
 
+console.log("🎬 Booting server...");
+
 const app = express();
 
 // --- Security & Production Middleware ---
@@ -108,11 +110,11 @@ app.use(errorHandler);
 
 // --- Server Startup ---
 const PORT = process.env.PORT || config.PORT || 8000;
-const server = app.listen(PORT, "0.0.0.0", () => {
+const server = app.listen(PORT, () => {
   console.log(`
   🚀 Server is running in ${config.NODE_ENV} mode
-  🔗 Access: http://0.0.0.0:${PORT}
-  🛠️  Health: http://0.0.0.0:${PORT}/health
+  🔗 Access Port: ${PORT}
+  🛠️  Health Check: /health
   `);
 });
 
