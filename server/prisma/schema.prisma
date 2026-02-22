@@ -250,7 +250,6 @@ model Order {
 
   artworkUrl String? // รูป Artwork จาก Graphic
   embroideryFileUrl  String?   // ไฟล์ .EMB เดิม (Legacy)
-  embroideryFileUrls_legacy String? @map("embroideryFileUrl") // แมตช์ไฟล์เดิมไปก่อนให้ API ไม่พ่น 500
   trackingNo String? // เลขพัสดุ
   notes      String? // หมายเหตุจากออเดอร์
   cancelReason String? // เหตุผลการยกเลิก
