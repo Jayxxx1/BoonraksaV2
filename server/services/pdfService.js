@@ -112,11 +112,12 @@ export const generateJobSheetPDF = async (order) => {
       <html lang="th">
       <head>
         <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700;800&display=swap" rel="stylesheet">
         <style>
           /* Use standard system fonts for speed and reliability */
           * {
             box-sizing: border-box;
-            font-family: 'Tahoma', 'Arial', sans-serif;
+            font-family: 'Sarabun', 'Tahoma', sans-serif;
           }
           
           @page { size: A4; margin: 0; }
@@ -465,8 +466,9 @@ export const generateCustomerProofPDF = async (order) => {
       <html lang="th">
       <head>
         <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700;800&display=swap" rel="stylesheet">
         <style>
-          * { box-sizing: border-box; font-family: 'Tahoma', 'Arial', sans-serif; }
+          * { box-sizing: border-box; font-family: 'Sarabun', 'Tahoma', sans-serif; }
           @page { size: A4; margin: 0; }
           body { margin: 0; padding: 0; background-color: white; color: #0f172a; line-height: 1.2; }
           .page-container { width: 210mm; min-height: 297mm; padding: 8mm 12mm; margin: auto; }
