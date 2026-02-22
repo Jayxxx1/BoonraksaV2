@@ -46,13 +46,10 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
-    const isVercelPreview = origin.endsWith(".vercel.app") && origin.includes("boonraksa-phase1");
+    const isVercel = origin.includes("vercel.app");
+    const isLocal = origin.includes("localhost") || origin.includes("127.0.0.1");
 
-    if (
-      allowedOrigins.indexOf(origin) !== -1 ||
-      isVercelPreview ||
-      config.NODE_ENV === "development"
-    ) {
+    if (isVercel || isLocal || config.NODE_ENV === "development") {
       callback(null, true);
     } else {
       console.log("CORS Blocked for origin:", origin);
@@ -110,11 +107,12 @@ app.use("*", (req, res) => {
 app.use(errorHandler);
 
 // --- Server Startup ---
-const server = app.listen(config.PORT, () => {
+const PORT = process.env.PORT || config.PORT || 8000;
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`
   🚀 Server is running in ${config.NODE_ENV} mode
-  🔗 Access: http://localhost:${config.PORT}
-  🛠️  Health: http://localhost:${config.PORT}/health
+  🔗 Access: http://0.0.0.0:${PORT}
+  🛠️  Health: http://0.0.0.0:${PORT}/health
   `);
 });
 

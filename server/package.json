@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "postinstall": "prisma generate",
     "format": "prisma format",
     "migrate": "dotenv -e .env -- prisma migrate deploy",
     "generate": "prisma generate",
