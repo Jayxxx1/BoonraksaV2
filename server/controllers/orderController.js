@@ -1141,6 +1141,7 @@ export const generateJobSheet = asyncHandler(async (req, res) => {
       positions: true,
       sales: { select: { name: true } },
       salesChannel: true,
+      block: true,
     },
   });
 
@@ -1185,6 +1186,7 @@ export const downloadCustomerProofPDF = asyncHandler(async (req, res) => {
       items: { include: { variant: { include: { product: true } } } },
       positions: true,
       sales: { select: { name: true } },
+      block: true,
     },
   });
 

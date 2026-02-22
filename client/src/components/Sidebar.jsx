@@ -170,18 +170,18 @@ export default function Sidebar({
           icon: HiOutlineMagnifyingGlass,
           roles: ["PRODUCTION", "ADMIN", "FOREMAN"],
         },
-        {
-          to: "/production/threads",
-          label: "ค้นหาสีด้าย",
-          icon: HiOutlineSwatch,
-          roles: ["PRODUCTION", "ADMIN", "GRAPHIC"],
-        },
-        {
-          to: "/production/shift-report",
-          label: "สรุปยอดการผลิต (Shift)",
-          icon: HiOutlineDocumentText,
-          roles: ["ADMIN", "EXECUTIVE", "PRODUCTION"],
-        },
+        // {
+        //   to: "/production/threads",
+        //   label: "ค้นหาสีด้าย",
+        //   icon: HiOutlineSwatch,
+        //   roles: ["PRODUCTION", "ADMIN", "GRAPHIC"],
+        // },
+        // {
+        //   to: "/production/shift-report",
+        //   label: "สรุปยอดการผลิต (Shift)",
+        //   icon: HiOutlineDocumentText,
+        //   roles: ["ADMIN", "EXECUTIVE", "PRODUCTION"],
+        // },
         {
           to: "/qc",
           label: "งานตรวจสอบ (QC)",

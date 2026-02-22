@@ -90,6 +90,13 @@ export const getMyStats = async (req, res) => {
           qcId: null,
           status: OrderStatus.PRODUCTION_FINISHED,
         };
+      } else if (role === "PRODUCTION") {
+        availableCriteria = {
+          productionId: null,
+          status: {
+            in: [OrderStatus.STOCK_RECHECKED, OrderStatus.IN_PRODUCTION],
+          },
+        };
       }
 
       const assignedFilter = { [filterField]: userId };
@@ -170,6 +177,7 @@ export const getSLAKPIs = async (req, res) => {
         id: true,
         status: true,
         dueDate: true,
+        createdAt: true, // 🆕 Needed for clamping
         slaBufferLevel: true,
       },
     });
@@ -182,18 +190,27 @@ export const getSLAKPIs = async (req, res) => {
       QC: { total: 0, late: 0, label: "ฝ่าย QC" },
     };
 
+    const addDays = (d, days) => {
+      const date = new Date(d);
+      date.setHours(18, 0, 0, 0);
+      date.setDate(date.getDate() + days);
+      return date.getTime();
+    };
+
     orders.forEach((order) => {
-      const dueDate = new Date(order.dueDate);
-      const bufferDays = parseInt(order.slaBufferLevel || 0);
-      const internalDeadline = new Date(dueDate);
-      internalDeadline.setDate(internalDeadline.getDate() - bufferDays);
+      const createdAtTime = new Date(order.createdAt).getTime();
+      const dueDateObj = new Date(order.dueDate);
+      dueDateObj.setHours(18, 0, 0, 0);
+      const dueDateVal = dueDateObj.getTime();
 
       const deptDeadlines = {
-        STOCK: new Date(internalDeadline).getTime() - 5 * 24 * 60 * 60 * 1000,
-        GRAPHIC: new Date(internalDeadline).getTime() - 4 * 24 * 60 * 60 * 1000,
-        PRODUCTION:
-          new Date(internalDeadline).getTime() - 2 * 24 * 60 * 60 * 1000,
-        QC: new Date(internalDeadline).getTime() - 0.5 * 24 * 60 * 60 * 1000,
+        GRAPHIC: Math.min(addDays(order.createdAt, 2), dueDateVal),
+        STOCK: Math.max(createdAtTime, dueDateVal - 3 * 24 * 60 * 60 * 1000),
+        PRODUCTION: Math.max(
+          createdAtTime,
+          dueDateVal - 2 * 24 * 60 * 60 * 1000,
+        ),
+        QC: Math.max(createdAtTime, dueDateVal - 1 * 24 * 60 * 60 * 1000),
       };
 
       let dept = null;
@@ -256,6 +273,7 @@ export const getExecutiveKPIs = async (req, res) => {
       select: {
         status: true,
         dueDate: true,
+        createdAt: true, // 🆕 Needed for clamping
         slaBufferLevel: true,
       },
     });
@@ -263,18 +281,27 @@ export const getExecutiveKPIs = async (req, res) => {
     const now = new Date().getTime();
     const slaHealth = { GREEN: 0, YELLOW: 0, RED: 0 };
 
+    const addDays = (d, days) => {
+      const date = new Date(d);
+      date.setHours(18, 0, 0, 0);
+      date.setDate(date.getDate() + days);
+      return date.getTime();
+    };
+
     activeOrders.forEach((order) => {
-      const dueDate = new Date(order.dueDate);
-      const bufferDays = parseInt(order.slaBufferLevel || 0);
-      const internalDeadline = new Date(dueDate);
-      internalDeadline.setDate(internalDeadline.getDate() - bufferDays);
+      const createdAtTime = new Date(order.createdAt).getTime();
+      const dueDateObj = new Date(order.dueDate);
+      dueDateObj.setHours(18, 0, 0, 0);
+      const dueDateVal = dueDateObj.getTime();
 
       const deptDeadlines = {
-        STOCK: new Date(internalDeadline).getTime() - 5 * 24 * 60 * 60 * 1000,
-        GRAPHIC: new Date(internalDeadline).getTime() - 4 * 24 * 60 * 60 * 1000,
-        PRODUCTION:
-          new Date(internalDeadline).getTime() - 2 * 24 * 60 * 60 * 1000,
-        QC: new Date(internalDeadline).getTime() - 0.5 * 24 * 60 * 60 * 1000,
+        GRAPHIC: Math.min(addDays(order.createdAt, 2), dueDateVal),
+        STOCK: Math.max(createdAtTime, dueDateVal - 3 * 24 * 60 * 60 * 1000),
+        PRODUCTION: Math.max(
+          createdAtTime,
+          dueDateVal - 2 * 24 * 60 * 60 * 1000,
+        ),
+        QC: Math.max(createdAtTime, dueDateVal - 1 * 24 * 60 * 60 * 1000),
       };
 
       let targetDeadline = deptDeadlines.QC;

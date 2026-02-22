@@ -13,7 +13,7 @@ import RoleStatsHeader from "../../components/dashboard/RoleStatsHeader";
 import { useMaster } from "../../context/MasterContext";
 
 export default function DigitizerTaskBoard() {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const { getStatusLabel } = useMaster();
   const [orders, setOrders] = useState([]);
   const [claiming, setClaiming] = useState(null);
@@ -125,6 +125,7 @@ export default function DigitizerTaskBoard() {
                 {[
                   { id: "me", label: "งานของฉัน" },
                   { id: "available", label: "งานรอรับ" },
+                  { id: "history", label: "ประวัติงาน" },
                   { id: "all", label: "ทั้งหมด" },
                 ].map((tab) => (
                   <button

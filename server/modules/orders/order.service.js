@@ -117,13 +117,14 @@ class OrderService {
       // 2. Department Staggered Deadlines (Based on Rules: Graphic -3/4 days, Prod -1/2 days)
 
       const ONE_DAY = 24 * 60 * 60 * 1000;
+      const createdAtTime = new Date(order.createdAt).getTime();
 
       // Helper to subtract days and keep time at 18:00
       const subtractDays = (date, days) => {
         const d = new Date(date);
         d.setDate(d.getDate() - days);
         d.setHours(18, 0, 0, 0);
-        return d.getTime();
+        return Math.max(createdAtTime, d.getTime()); // 🆕 Clamp to creation time
       };
 
       const deptDeadlines = {
@@ -363,6 +364,7 @@ class OrderService {
       qc: { select: { id: true, name: true, role: true } },
       digitizer: { select: { id: true, name: true, role: true } },
       salesChannel: true,
+      block: true,
       paymentSlips: {
         include: { uploader: { select: { name: true, role: true } } },
         orderBy: { createdAt: "desc" },
@@ -736,6 +738,26 @@ class OrderService {
           { status: { notIn: notInStatus } },
           { ...specificExclusions },
         ];
+      }
+    } else if (view === "history") {
+      if (roleField) {
+        where[roleField] = user.id;
+
+        // Define what "Completed" means for each role
+        if (user.role === UserRole.DIGITIZER) {
+          where.digitizingCompletedAt = { not: null };
+        } else if (user.role === UserRole.PRODUCTION) {
+          where.productionCompletedAt = { not: null };
+        } else if (user.role === UserRole.SEWING_QC) {
+          where.qcCompletedAt = { not: null };
+        } else if (user.role === UserRole.STOCK) {
+          where.stockRechecked = true;
+        } else if (user.role === UserRole.GRAPHIC) {
+          // Finished for history if moved past Designing
+          where.status = {
+            notIn: [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING],
+          };
+        }
       }
     } else if (view === "available") {
       if (user.role === UserRole.GRAPHIC) {
@@ -1868,6 +1890,7 @@ class OrderService {
       where: { id },
       data: {
         embroideryFileUrl,
+        digitizerId: user.id, // Ensure digitizer is linked
         status: OrderStatus.PENDING_ARTWORK, // Once digitized, it goes to Graphic for mockup
         digitizingCompletedAt: new Date(),
         logs: {

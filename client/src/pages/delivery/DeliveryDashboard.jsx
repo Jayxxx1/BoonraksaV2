@@ -307,7 +307,8 @@ export default function DeliveryDashboard() {
                                 </span>
                               )}
                               <span className="text-[10px] text-emerald-600 font-bold">
-                                {order.paymentMethod === "COD"
+                                {order.paymentMethod === "COD" &&
+                                parseFloat(order.balanceDue || 0) > 0
                                   ? `ยอดเก็บเงินปลายทาง: ${order.balanceDue?.toLocaleString()}฿`
                                   : "ชำระเงินเรียบร้อยแล้ว"}
                               </span>

@@ -86,6 +86,7 @@ export default function ProductionTaskBoard() {
               {[
                 { id: "available", label: "งานที่รับได้" },
                 { id: "me", label: "งานของฉัน" },
+                { id: "history", label: "ประวัติงาน" },
                 { id: "all", label: "ทั้งหมด" },
               ].map((tab) => (
                 <button

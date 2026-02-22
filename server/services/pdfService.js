@@ -3,6 +3,64 @@ import puppeteer from "puppeteer";
 import QRCode from "qrcode";
 import fs from "fs";
 import path from "path";
+import axios from "axios";
+
+/**
+ * Helper: Convert external URL or local path to Base64 Data URI
+ */
+const imageUrlToBase64 = async (url) => {
+  if (!url) return url;
+
+  // Handle local filesystem paths (for development/local storage)
+  if (url.startsWith("/uploads/")) {
+    try {
+      const filePath = path.join(process.cwd(), url);
+      if (fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath);
+        const ext = path.extname(url).slice(1).toLowerCase();
+        const contentType = `image/${ext === "jpg" ? "jpeg" : ext || "png"}`;
+        return `data:${contentType};base64,${data.toString("base64")}`;
+      }
+    } catch (err) {
+      console.error(`[PDF-IMG-BASE64] Local file error for ${url}:`, err.message);
+    }
+  }
+
+  if (!url.startsWith("http")) return url;
+
+  try {
+    const response = await axios.get(url, {
+      responseType: "arraybuffer",
+      timeout: 10000, // 10s timeout
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
+    });
+    const contentType = response.headers["content-type"] || "image/png";
+    const base64 = Buffer.from(response.data, "binary").toString("base64");
+    return `data:${contentType};base64,${base64}`;
+  } catch (err) {
+    console.error(`[PDF-IMG-BASE64] Failed to fetch ${url}:`, err.message);
+    return url; // Fallback to original URL
+  }
+};
+
+/**
+ * Helper: Batch convert URLs to Base64 with caching
+ */
+const batchImageToBase64 = async (urls) => {
+  const uniqueUrls = [
+    ...new Set(urls.filter((u) => u && u.startsWith("http"))),
+  ];
+  const cache = {};
+  await Promise.all(
+    uniqueUrls.map(async (url) => {
+      cache[url] = await imageUrlToBase64(url);
+    }),
+  );
+  return cache;
+};
 
 /**
  * Generate a professional A4 Job Sheet PDF using Puppeteer
@@ -20,7 +78,35 @@ export const generateJobSheetPDF = async (order) => {
     // 1.5 Fetch Master Positions for name-to-ID matching
     const masterPositions = await prisma.masterEmbroideryPosition.findMany();
 
-    // 2. Prepare HTML Template (Standard CSS - No External Dependencies)
+    // 1.7 Prepare Spec Data with Base64 Images
+    const tablePositions = order.positions || [];
+    const jsonPositions = (order.embroideryDetails || []).map((p) => {
+      let resolvedId = p.masterPositionId;
+      if (!resolvedId && p.position) {
+        const match = masterPositions.find((m) => m.name === p.position);
+        if (match) resolvedId = match.id;
+      }
+      return {
+        ...p,
+        masterPositionId: resolvedId,
+        position: p.position || "-",
+      };
+    });
+    const specs = jsonPositions.length > 0 ? jsonPositions : tablePositions;
+
+    // Collect all image URLs and batch convert to Base64
+    const allUrls = [];
+    specs.forEach((s) => {
+      if (s.mockupUrl) allUrls.push(s.mockupUrl);
+      if (s.logoUrl) allUrls.push(s.logoUrl);
+    });
+    (order.draftImages || []).forEach((img) => allUrls.push(img));
+    if (order.artworkUrl) allUrls.push(order.artworkUrl);
+    if (order.block?.artworkUrl) allUrls.push(order.block.artworkUrl);
+
+    const imageMap = await batchImageToBase64(allUrls);
+
+    // 2. Prepare HTML Template
     const htmlContent = `
       <!DOCTYPE html>
       <html lang="th">
@@ -30,251 +116,36 @@ export const generateJobSheetPDF = async (order) => {
           /* Use standard system fonts for speed and reliability */
           * {
             box-sizing: border-box;
-            font-family: 'Tahoma', 'Arial', sans-serif; /* Standard Thai-supported fonts */
+            font-family: 'Tahoma', 'Arial', sans-serif;
           }
           
-          @page {
-            size: A4;
-            margin: 0;
-          }
-
-          body {
-            margin: 0;
-            padding: 0;
-            background-color: white;
-            color: #1e293b;
-          }
-
-          .page-container {
-            width: 210mm;
-            min-height: 297mm;
-            padding: 5mm 8mm; /* Reduced padding */
-            margin: auto;
-            position: relative;
-          }
-
-          /* Header Styles */
-          .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 8px; /* Reduced */
-            border-bottom: 2px solid #0f172a;
-            padding-bottom: 8px; /* Reduced */
-          }
-
-          .header-left h1 {
-            font-size: 24px;
-            margin: 0;
-            letter-spacing: -0.5px;
-            color: #0f172a;
-          }
-
-          .job-id {
-            font-size: 20px;
-            font-weight: bold;
-            color: #4f46e5;
-            margin: 5px 0;
-          }
-
-          .badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 999px;
-            font-size: 13px;
-            font-weight: bold;
-            text-transform: uppercase;
-            border: 1px solid #e2e8f0;
-            background: #f1f5f9;
-            margin-right: 13px;
-          }
-
-          .badge-urgent {
-            background: #fef2f2;
-            color: #dc2626;
-            border-color: #fee2e2;
-          }
-
-          .qr-container {
-            text-align: right;
-          }
-
-          .qr-image {
-            width: 100px;
-            height: 100px;
-          }
-
-          /* Section Styles */
-          .section {
-            margin-bottom: 15px;
-          }
-
-          .section-title {
-            background-color: #f8fafc;
-            border-left: 4px solid #4f46e5;
-            padding: 4px 12px;
-            font-weight: 800;
-            font-size: 12px;
-            color: #0f172a;
-            margin-bottom: 13px;
-          }
-
-          .grid {
-            display: flex;
-            gap: 20px;
-          }
-
-          .col {
-            flex: 1;
-          }
-
-          .col-2 {
-            flex: 2;
-          }
-
-          /* Info Styles */
-          .label {
-            font-size: 11px; /* Reduced */
-            text-transform: uppercase;
-            color: #64748b;
-            font-weight: bold;
-            margin-bottom: 1px;
-          }
-
-          .value {
-            font-size: 12px; /* Reduced */
-            font-weight: bold;
-            margin-bottom: 8px; /* Reduced */
-          }
-
-          /* Table Styles */
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 13px;
-          }
-
-          th {
-            background-color: #0f172a;
-            color: white;
-            text-align: left;
-            padding: 4px 8px; /* Compact */
-            font-size: 11px;
-            text-transform: uppercase;
-          }
-
-          td {
-            padding: 4px 8px; /* Compact */
-            border-bottom: 1px solid #f1f5f9;
-            font-size: 11px;
-          }
-
+          @page { size: A4; margin: 0; }
+          body { margin: 0; padding: 0; background-color: white; color: #1e293b; }
+          .page-container { width: 210mm; min-height: 297mm; padding: 5mm 8mm; margin: auto; position: relative; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; border-bottom: 2px solid #0f172a; padding-bottom: 8px; }
+          .header-left h1 { font-size: 24px; margin: 0; letter-spacing: -0.5px; color: #0f172a; }
+          .job-id { font-size: 20px; font-weight: bold; color: #4f46e5; margin: 5px 0; }
+          .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: bold; text-transform: uppercase; border: 1px solid #e2e8f0; background: #f1f5f9; margin-right: 13px; }
+          .badge-urgent { background: #fef2f2; color: #dc2626; border-color: #fee2e2; }
+          .qr-container { text-align: right; }
+          .qr-image { width: 100px; height: 100px; }
+          .section { margin-bottom: 15px; }
+          .section-title { background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 4px 12px; font-weight: 800; font-size: 12px; color: #0f172a; margin-bottom: 13px; }
+          .grid { display: flex; gap: 20px; }
+          .col { flex: 1; }
+          .col-2 { flex: 2; }
+          .label { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: bold; margin-bottom: 1px; }
+          .value { font-size: 12px; font-weight: bold; margin-bottom: 8px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 13px; }
+          th { background-color: #0f172a; color: white; text-align: left; padding: 4px 8px; font-size: 11px; text-transform: uppercase; }
+          td { padding: 4px 8px; border-bottom: 1px solid #f1f5f9; font-size: 11px; }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
-
-          /* Spec Box */
-          .spec-box {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 12px;
-            margin-bottom: 13px;
-          }
-
-          .spec-pos {
-            font-size: 13px;
-            font-weight: 900;
-            color: #4f46e5;
-            margin-bottom: 4px;
-          }
-
-          .spec-dims {
-            display: flex;
-            gap: 13px;
-            margin-top: 5px;
-          }
-
-          .dim-pill {
-            background: white;
-            padding: 2px 8px;
-            border: 1px solid #e2e8f0;
-            border-radius: 4px;
-            font-size: 13px;
-          }
-
-          /* Artwork Area */
-          .artwork-container {
-            border: 1px dashed #cbd5e1;
-            border-radius: 8px;
-            background: transparent;
-            min-height: 200px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            overflow: hidden;
-          }
-
-          .artwork-img {
-            width: 100%;
-            height: auto;
-            border-radius: 0;
-            box-shadow: none;
-            display: block;
-          }
-
-          .signature-label {
-            font-size: 13px;
-            font-weight: bold;
-            color: #94a3b8;
-          }
-
-          .technical-card {
-            border: 2px solid #0f172a;
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 20px;
-            page-break-inside: avoid;
-          }
-
-          .technical-title {
-            font-size: 18px;
-            font-weight: 900;
-            background: #0f172a;
-            color: white;
-            padding: 5px 15px;
-            border-radius: 6px;
-            margin-bottom: 10px;
-            display: inline-block;
-          }
-
-          .thread-table {
-            width: 100%;
-            margin-top: 10px;
-          }
-
-          .thread-table th {
-            background: #475569;
-            color: white;
-            font-size: 10px;
-          }
-
-          .thread-table td {
-            font-size: 12px;
-            font-weight: bold;
-            border: 1px solid #e2e8f0;
-          }
-
-          .color-swatch {
-            width: 20px;
-            height: 20px;
-            border-radius: 4px;
-            border: 1px solid #cbd5e1;
-            display: inline-block;
-            vertical-align: middle;
-            margin-right: 8px;
-          }
+          .spec-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-bottom: 13px; }
+          .spec-pos { font-size: 13px; font-weight: 900; color: #4f46e5; margin-bottom: 4px; }
+          .artwork-container { border: 1px dashed #cbd5e1; border-radius: 8px; background: transparent; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; overflow: hidden; }
+          .artwork-img { width: 100%; height: auto; border-radius: 0; box-shadow: none; display: block; }
+          .signature-label { font-size: 13px; font-weight: bold; color: #94a3b8; }
         </style>
       </head>
       <body>
@@ -289,7 +160,6 @@ export const generateJobSheetPDF = async (order) => {
                 <b style="color: #4f46e5;">แอดมิน: ${order.sales?.name || order.sales?.username || "-"}</b>
               </div>
               <div>
-                ${/* NO SYSTEM STATUS AS REQUESTED */ ""}
                 ${order.isUrgent ? '<span class="badge badge-urgent">งานด่วนพิเศษ</span>' : ""}
               </div>
             </div>
@@ -344,34 +214,34 @@ export const generateJobSheetPDF = async (order) => {
               </thead>
               <tbody>
                 ${(() => {
-                  // 1. Split Items
-                  const standardItems = [];
-                  const preorderItems = [];
-                  order.items.forEach((item) => {
-                    const isPreorder = order.purchaseRequests?.some(
+                  const items = order.items || [];
+                  const standardItems = items.filter(
+                    (item) =>
+                      !order.purchaseRequests?.some(
+                        (pr) => pr.variantId === item.variantId,
+                      ),
+                  );
+                  const preorderItems = items.filter((item) =>
+                    order.purchaseRequests?.some(
                       (pr) => pr.variantId === item.variantId,
-                    );
-                    if (isPreorder) preorderItems.push(item);
-                    else standardItems.push(item);
-                  });
+                    ),
+                  );
 
-                  // Helper to grouping items
                   const renderGroupedRows = (items, isPre) => {
                     const groups = {};
                     items.forEach((item) => {
-                      const key = `${item.productName}-${item.variant.color}`;
+                      const key = `${item.productName}-${item.variant?.color}`;
                       if (!groups[key]) {
                         groups[key] = {
                           name: item.productName,
-                          color: item.variant.color,
-                          sku: item.variant.sku.split("-")[0],
+                          color: item.variant?.color,
                           sizes: {},
                           total: 0,
                           price: item.price,
                         };
                       }
-                      groups[key].sizes[item.variant.size] =
-                        (groups[key].sizes[item.variant.size] || 0) +
+                      groups[key].sizes[item.variant?.size] =
+                        (groups[key].sizes[item.variant?.size] || 0) +
                         item.quantity;
                       groups[key].total += item.quantity;
                     });
@@ -390,241 +260,117 @@ export const generateJobSheetPDF = async (order) => {
                         </td>
                         <td class="text-right" style="font-size: 16px; font-weight: 900;">${g.total}</td>
                         <td class="text-right">${parseFloat(g.price).toLocaleString()} ฿</td>
-                      </tr>
-                    `,
+                      </tr>`,
                       )
                       .join("");
                   };
 
-                  let html = "";
-
-                  // 2. Render Standard Items
-                  if (standardItems.length > 0) {
-                    html += renderGroupedRows(standardItems, false);
-                  }
-
-                  // 3. Render Pre-order Items Section (if exists)
+                  let html = renderGroupedRows(standardItems, false);
                   if (preorderItems.length > 0) {
-                    html += `
-                      <tr style="background: #fffbeb; border-top: 1px dashed #cbd5e1;">
-                        <td colspan="3" style="font-weight: 900; color: #64748b; padding: 6px 12px; font-size: 11px;">
-                          รายการสั่งผลิตเพิ่มเติม (ADDITIONAL ITEMS)
-                        </td>
-                      </tr>
-                    `;
+                    html += `<tr style="background: #fffbeb;"><td colspan="3" style="font-weight: 900; color: #64748b; padding: 6px 12px;">สั่งผลิตเพิ่ม</td></tr>`;
                     html += renderGroupedRows(preorderItems, true);
                   }
-
                   return html;
                 })()}
-                ${
-                  parseFloat(order.blockPrice || 0) > 0
-                    ? `
-                  <tr style="background: #f8fafc; font-weight: bold; border-top: 1px solid #e2e8f0;">
-                    <td colspan="2" class="text-right" style="padding: 6px 15px; font-size: 13px;">ค่าบล็อก (EMBROIDERY BLOCK)</td>
-                    <td class="text-right" style="padding: 6px 15px; color: #059669;">${parseFloat(order.blockPrice).toLocaleString()} ฿</td>
-                  </tr>
-                `
-                    : ""
-                }
+                <tr style="border-top: 2px solid #0f172a;">
+                  <td colspan="2" class="text-right" style="font-size: 12px; font-weight: bold;">รวมเป็นเงิน (Subtotal)</td>
+                  <td class="text-right" style="font-size: 12px; font-weight: bold;">${parseFloat(order.totalPrice || 0).toLocaleString()} ฿</td>
+                </tr>
+                <tr>
+                  <td colspan="2" class="text-right" style="font-size: 12px; font-weight: bold;">ชำระแล้ว (Paid)</td>
+                  <td class="text-right" style="font-size: 12px; font-weight: bold; color: #10b981;">${parseFloat(order.paidAmount || 0).toLocaleString()} ฿</td>
+                </tr>
+                <tr style="background: #f8fafc;">
+                  <td colspan="2" class="text-right" style="font-size: 14px; font-weight: 900;">ยอดค้างชำระ (Balance Due)</td>
+                  <td class="text-right" style="font-size: 14px; font-weight: 900; color: #dc2626;">${parseFloat(order.balanceDue || 0).toLocaleString()} ฿</td>
+                </tr>
               </tbody>
             </table>
-              <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                <tr>
-                  <td style="width: 60%;"></td>
-                  <td style="width: 40%;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                      <tr>
-                        <td style="text-align: right; padding: 4px; font-size: 11px; color: #64748b;">รวมเป็นเงิน (Subtotal)</td>
-                        <td style="text-align: right; padding: 4px; font-size: 11px; font-weight: bold;">${(parseFloat(order.totalPrice || 0) - parseFloat(order.blockPrice || 0) - parseFloat(order.codSurcharge || 0)).toLocaleString()} ฿</td>
-                      </tr>
-                      ${
-                        parseFloat(order.blockPrice || 0) > 0
-                          ? `
-                      <tr>
-                        <td style="text-align: right; padding: 4px; font-size: 11px; color: #64748b;">ค่าบล็อก (Block)</td>
-                        <td style="text-align: right; padding: 4px; font-size: 11px; font-weight: bold;">${parseFloat(order.blockPrice).toLocaleString()} ฿</td>
-                      </tr>`
-                          : ""
-                      }
-                      ${
-                        parseFloat(order.codSurcharge || 0) > 0
-                          ? `
-                      <tr>
-                        <td style="text-align: right; padding: 4px; font-size: 11px; color: #64748b;">ค่าบริการ COD (3%)</td>
-                        <td style="text-align: right; padding: 4px; font-size: 11px; font-weight: bold;">${parseFloat(order.codSurcharge).toLocaleString()} ฿</td>
-                      </tr>`
-                          : ""
-                      }
-                      <tr style="border-top: 1px solid #e2e8f0; border-bottom: 2px solid #0f172a;">
-                        <td style="text-align: right; padding: 6px 4px; font-size: 12px; font-weight: 900; color: #0f172a;">ยอดรวมทั้งสิ้น</td>
-                        <td style="text-align: right; padding: 6px 4px; font-size: 14px; font-weight: 900; color: #0f172a;">${parseFloat(order.totalPrice || 0).toLocaleString()} ฿</td>
-                      </tr>
-                      <tr>
-                        <td style="text-align: right; padding: 4px; font-size: 11px; color: #059669;">ชำระแล้ว</td>
-                        <td style="text-align: right; padding: 4px; font-size: 11px; font-weight: bold; color: #059669;">- ${parseFloat(order.paidAmount || 0).toLocaleString()} ฿</td>
-                      </tr>
-                      <tr style="background: #fef2f2;">
-                        <td style="text-align: right; padding: 6px 4px; font-size: 12px; font-weight: 900; color: #be123c;">ยอดค้างชำระ</td>
-                        <td style="text-align: right; padding: 6px 4px; font-size: 14px; font-weight: 900; color: #be123c;">${(parseFloat(order.totalPrice || 0) - parseFloat(order.paidAmount || 0)).toLocaleString()} ฿</td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
           </div>
 
           <div class="grid section">
             <div class="col" style="flex: 1;">
               <div class="section-title">รูปภาพวางแบบให้ลูกค้า</div>
-              <div class="artwork-container" style="display: grid; grid-template-columns: repeat(${Math.min((order.draftImages || []).length || 1, 2)}, 1fr); gap: 20px; padding: 0; border: none;">
-                ${
-                  (order.draftImages || []).length > 0
-                    ? order.draftImages
-                        .map(
-                          (img) =>
-                            `<img src="${img}" class="artwork-img" style="width: 100%; height: auto; max-height: 520px; object-fit: contain; background: white; border: 1px solid #e2e8f0;" />`,
-                        )
-                        .join("")
-                    : '<div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #94a3b8; font-style: italic; border: 2px dashed #e2e8f0; border-radius: 12px; background: white;">ไม่มีภาพร่างจำลอง</div>'
-                }
+              <div class="artwork-container" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 10px; min-height: 200px;">
+                ${(() => {
+                  const imgs = [];
+                  if (order.artworkUrl) imgs.push({ url: order.artworkUrl, isFinal: true });
+                  if (order.block?.artworkUrl) imgs.push({ url: order.block.artworkUrl, isFinal: true });
+                  (order.draftImages || []).forEach((url) => imgs.push({ url, isFinal: false }));
+
+                  if (imgs.length === 0) {
+                    return '<div style="grid-column: 1/-1; color: #94a3b8; font-style: italic; text-align: center; padding: 20px;">ไม่มีภาพร่าง</div>';
+                  }
+
+                  return imgs
+                    .map((img, idx) => {
+                      const isSingle = imgs.length === 1;
+                      const border = img.isFinal ? "2px solid #4f46e5" : "1px solid #e2e8f0";
+                      const maxHeight = isSingle ? "480px" : "320px";
+                      const gridCol = isSingle ? "1 / -1" : "auto";
+                      return `<img src="${imageMap[img.url] || img.url}" class="artwork-img" style="border: ${border}; max-height: ${maxHeight}; grid-column: ${gridCol}; object-fit: contain;" />`;
+                    })
+                    .join("");
+                })()}
               </div>
             </div>
           </div>
 
-          <!-- PAGE 2: TECHNICAL SPECIFICATION -->
           <div style="page-break-before: always;"></div>
-          <div class="page-container" style="display: flex; flex-direction: column; height: auto; min-height: 287mm;">
-            <div class="header" style="border-bottom: 4px solid #4f46e5; flex-shrink: 0;">
+          <div class="page-container">
+            <div class="header" style="border-bottom: 4px solid #4f46e5;">
               <div class="header-left">
                 <h1 style="color: #4f46e5;">ข้อมูลฝ่ายผลิต (TECHNICAL SPEC)</h1>
                 <div class="job-id">เลขใบงาน: ${order.displayJobCode || order.jobId || "-"}</div>
-                <div style="font-size: 14px; font-weight: bold; color: #64748b;">
-                  อัปเดต specs โดย: ${order.graphic?.name || "-"} | จำนวนจุดปัก: ${((order.embroideryDetails || []).length > 0 ? order.embroideryDetails : order.positions || []).length} จุด
-                </div>
               </div>
               <div class="qr-container">
                 <img src="${qrCodeBase64}" style="width: 70px; height: 70px;" />
               </div>
             </div>
 
-            <div style="flex: 1; display: flex; flex-direction: column; gap: 10px; padding-top: 10px;">
-            ${(() => {
-              const tablePositions = order.positions || [];
-              const jsonPositions = (order.embroideryDetails || []).map((p) => {
-                // Resolve ID by name if missing (Ensures database-linked IDs)
-                let resolvedId = p.masterPositionId;
-                if (!resolvedId && p.position) {
-                  const match = masterPositions.find(
-                    (m) => m.name === p.position,
-                  );
-                  if (match) resolvedId = match.id;
-                }
-
-                return {
-                  position: p.position,
-                  masterPositionId: resolvedId,
-                  width: p.width,
-                  height: p.height,
-                  mockupUrl: p.mockupUrl,
-                  logoUrl: p.logoUrl,
-                  textToEmb: p.textToEmb,
-                  fileAddress: p.fileAddress,
-                  embroideryFileUrls: p.embroideryFileUrls || [],
-                  needlePattern: p.needlePattern,
-                  threadSequence: p.threadSequence || [],
-                  isFreeOption: p.isFreeOption,
-                  freeOptionName: p.freeOptionName,
-                };
-              });
-              const specs =
-                jsonPositions.length > 0 ? jsonPositions : tablePositions;
-
-              if (specs.length === 0) {
-                return `<div style="flex: 1; display: flex; align-items: center; justify-content: center; border: 2px dashed #cbd5e1; border-radius: 12px; color: #94a3b8; font-size: 20px; font-weight: bold;">ไม่มีข้อมูลจุดปัก</div>`;
-              }
-
-              return specs
-                .map(
-                  (spec, index) => `
+            <div style="padding-top: 10px;">
+              ${
+                specs.length === 0
+                  ? '<div style="text-align: center; padding: 40px; color: #94a3b8; font-weight: bold;">ไม่มีข้อมูลจุดปัก</div>'
+                  : specs
+                      .map((spec, index) => {
+                        const mockupBase64 =
+                          imageMap[spec.mockupUrl] || spec.mockupUrl;
+                        const logoBase64 =
+                          imageMap[spec.logoUrl] || spec.logoUrl;
+                        return `
                 <div style="border-bottom: 2px solid #0f172a; padding: 10px 0; display: flex; gap: 15px; page-break-inside: avoid;">
                   <div style="flex: 1.2;">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                      <div style="width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; background: #023abbff; color: white; font-weight: 900; font-size: 12px; border-radius: 6px;">
-                        ${spec.masterPositionId || "?"}
-                      </div>
-                      <div style="font-size: 14px; font-weight: 900; color: #0f172a;">
-                        ${spec.position} ${spec.isFreeOption ? '<span style="color: #64748b; font-size: 11px;">(ฟรี)</span>' : ""}
-                      </div>
-                      ${spec.isFreeOption ? `<div style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 10px;">OPTION: ${spec.freeOptionName}</div>` : ""}
+                      <div style="width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; background: #023abbff; color: white; font-weight: 900; font-size: 12px; border-radius: 6px;">${spec.masterPositionId || index + 1}</div>
+                      <div style="font-size: 14px; font-weight: 900; color: #0f172a;">${spec.position}</div>
                     </div>
-
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                      <div style="border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; background: white;">
-                        <div style="font-size: 9px; color: #64748b; font-weight: bold; text-transform: uppercase;">ข้อความปัก / หมายเหตุ</div>
-                        <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-top: 2px;">${spec.textToEmb || "-"}</div>
+                      <div style="border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px;">
+                        <div style="font-size: 9px; color: #64748b; font-weight: bold;">ข้อความปัก</div>
+                        <div style="font-size: 12px; font-weight: 800;">${spec.textToEmb || "-"}</div>
                       </div>
-                      <div style="border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; background: white; text-align: center;">
-                        <div style="font-size: 9px; color: #64748b; font-weight: bold; text-transform: uppercase;">ขนาด (Size)</div>
-                        <div style="font-size: 13px; font-weight: 900; color: #0f172a; margin-top: 2px;">
-                          ${spec.isFreeOption || (!spec.width && !spec.height) ? "-" : `${spec.width || 0} x ${spec.height || 0} cm`}
-                        </div>
+                      <div style="border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px;">
+                        <div style="font-size: 9px; color: #64748b; font-weight: bold;">ขนาด</div>
+                        <div style="font-size: 12px; font-weight: 800;">${spec.width || 0} x ${spec.height || 0} cm</div>
                       </div>
                     </div>
-
-                    <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; margin-bottom: 5px;">
-                      <div style="border: 1px dashed #94a3b8; padding: 6px 10px; border-radius: 6px;">
-                        <div style="font-size: 9px; color: #64748b; font-weight: bold;">ที่อยู่ไฟล์ / ไฟล์ปัก (.EMB)</div>
-                        <div style="font-size: 11px; font-weight: 900; color: #4f46e5; margin-top: 2px;">
-                          ${spec.fileAddress ? `<div>${spec.fileAddress}</div>` : ""}
-                          ${spec.embroideryFileUrls && spec.embroideryFileUrls.length > 0 ? `<div style="color: #059669; font-size: 10px; margin-top: 2px;">✅ ไฟล์ .EMB ในระบบ (${spec.embroideryFileUrls.length} ไฟล์)</div>` : !spec.fileAddress ? "-" : ""}
-                        </div>
-                      </div>
-                      <div style="border: 1px dashed #94a3b8; padding: 6px 10px; border-radius: 6px; text-align: center;">
-                        <div style="font-size: 9px; color: #64748b; font-weight: bold;">เข็ม (Pattern)</div>
-                        <div style="font-size: 11px; font-weight: 900; margin-top: 2px;">${spec.needlePattern || "-"}</div>
-                      </div>
+                    <div style="border: 1px dashed #94a3b8; padding: 6px 10px; border-radius: 6px; margin-bottom: 10px;">
+                      <div style="font-size: 9px; color: #64748b; font-weight: bold;">เข็ม (Pattern)</div>
+                      <div style="font-size: 11px; font-weight: 900;">${spec.needlePattern || "-"}</div>
                     </div>
-
-                    ${
-                      spec.threadSequence && spec.threadSequence.length > 0
-                        ? `
-                      <div style="border-top: 1px solid #e2e8f0; padding-top: 8px;">
-                        <div style="font-size: 9px; color: #64748b; font-weight: bold; margin-bottom: 4px;">ลำดับไหม (Thread Sequence)</div>
-                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                            ${spec.threadSequence
-                              .map((t, i) => {
-                                const code = t.code || t.threadCode || "-";
-                                const name =
-                                  t.name || t.color || t.colorName || "";
-                                return `
-                              <div style="font-size: 10px; padding: 2px 6px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; display: flex; align-items: center; gap: 4px;">
-                                  <span style="font-weight: 900; color: #94a3b8;">${i + 1}</span>
-                                  <span style="font-weight: 800; color: #0f172a;">${code}</span>
-                                  ${name ? `<span style="font-size: 9px; color: #64748b;"> ${name}</span>` : ""}
-                              </div>
-                            `;
-                              })
-                              .join("")}
-                        </div>
-                      </div>
-                    `
-                        : ""
-                    }
+                    <div style="border: 1px solid #0f172a; padding: 6px 10px; border-radius: 6px; background: #f1f5f9;">
+                      <div style="font-size: 9px; color: #0f172a; font-weight: bold;">📁 ที่อยู่ไฟล์ (File Address)</div>
+                      <div style="font-size: 13px; font-weight: 900; color: #4f46e5;">${spec.fileAddress || "-"}</div>
+                    </div>
                   </div>
-
-                  <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0;">
-                    ${
-                      spec.mockupUrl || spec.logoUrl
-                        ? `<img src="${spec.mockupUrl || spec.logoUrl}" style="width: 100%; height: auto; max-height: 120px; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 6px;" />`
-                        : '<div style="width: 100%; height: 100px; border: 1px dashed #cbd5e1; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-style: italic; font-size: 10px;">ไม่มีรูปภาพ</div>'
-                    }
+                  <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+                    ${mockupBase64 || logoBase64 ? `<img src="${mockupBase64 || logoBase64}" style="width: 100%; max-height: 150px; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 6px;" />` : '<div style="color: #94a3b8; font-style: italic;">ไม่มีรูป</div>'}
                   </div>
-                </div>
-              `,
-                )
-                .join("");
-            })()}
+                </div>`;
+                      })
+                      .join("")
+              }
             </div>
           </div>
         </div>
@@ -651,8 +397,8 @@ export const generateJobSheetPDF = async (order) => {
     const page = await browser.newPage();
     // console.log(`[PDF] Setting content...`);
 
-    // Faster wait condition
-    await page.setContent(htmlContent, { waitUntil: "domcontentloaded" });
+    // Wait for all network requests to finish (crucial for images)
+    await page.setContent(htmlContent, { waitUntil: "networkidle0" });
 
     // console.log(`[PDF] Running PDF export...`);
     const pdfBuffer = await page.pdf({
@@ -682,6 +428,38 @@ export const generateCustomerProofPDF = async (order) => {
   try {
     const masterPositions = await prisma.masterEmbroideryPosition.findMany();
 
+    // 1. Prepare Spec Data with Base64 Images
+    const tablePositions = order.positions || [];
+    const jsonPositions = (order.embroideryDetails || []).map((p) => {
+      let resolvedId = p.masterPositionId;
+      if (!resolvedId && p.position) {
+        const match = masterPositions.find((m) => m.name === p.position);
+        if (match) resolvedId = match.id;
+      }
+      return {
+        ...p,
+        masterPositionId: resolvedId,
+        position: p.position || "ตำแหน่งปัก",
+      };
+    });
+    const finalPositions =
+      jsonPositions.length > 0 ? jsonPositions : tablePositions;
+
+    // Collect all image URLs
+    const allUrls = [];
+    finalPositions.forEach((p) => {
+      if (p.mockupUrl) allUrls.push(p.mockupUrl);
+      if (p.logoUrl) allUrls.push(p.logoUrl);
+    });
+    const draftImages = order.draftImages || [];
+    draftImages.forEach((img) => allUrls.push(img));
+    if (order.artworkUrl) allUrls.push(order.artworkUrl);
+    if (order.block?.artworkUrl) allUrls.push(order.block.artworkUrl);
+
+    // Batch convert to Base64
+    const imageMap = await batchImageToBase64(allUrls);
+
+    // 2. Prepare HTML Template
     const htmlContent = `
       <!DOCTYPE html>
       <html lang="th">
@@ -711,9 +489,8 @@ export const generateCustomerProofPDF = async (order) => {
 
           .pos-grid { 
             display: grid; 
-            /* แก้เป็น 3 คอลัมน์ (ขนาด 5cm เท่าเดิม) */
-            grid-template-columns: repeat(3, 5cm); 
-            gap: 13px; /* ลดช่องว่างลงนิดนึงจะได้ไม่เบียดขอบ */
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 13px; 
             justify-content: start;
           }
           
@@ -724,7 +501,7 @@ export const generateCustomerProofPDF = async (order) => {
             background: transparent; 
             text-align: center; 
           }
-            .mockup-img { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; background: white; border-radius: 0; margin: 5px 0; border: 1px solid #e2e8f0; }
+          .mockup-img { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; background: white; border-radius: 0; margin: 5px 0; border: 1px solid #e2e8f0; }
 
           .finance-summary { background: #0f172a; color: white; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; margin-top: 15px; }
           .summary-item .label { color: #64748b; font-size: 9px; }
@@ -767,18 +544,19 @@ export const generateCustomerProofPDF = async (order) => {
                   </tr>
                 </thead>
                 <tbody>
-                <tbody>
                   ${(() => {
-                    // SPLIT ITEMS FOR PROOF SHEET AS WELL
-                    const standardItems = [];
-                    const preorderItems = [];
-                    (order.items || []).forEach((item) => {
-                      const isPreorder = order.purchaseRequests?.some(
+                    const items = order.items || [];
+                    const standardItems = items.filter(
+                      (item) =>
+                        !order.purchaseRequests?.some(
+                          (pr) => pr.variantId === item.variantId,
+                        ),
+                    );
+                    const preorderItems = items.filter((item) =>
+                      order.purchaseRequests?.some(
                         (pr) => pr.variantId === item.variantId,
-                      );
-                      if (isPreorder) preorderItems.push(item);
-                      else standardItems.push(item);
-                    });
+                      ),
+                    );
 
                     const renderRows = (items, isPre) =>
                       items
@@ -796,23 +574,17 @@ export const generateCustomerProofPDF = async (order) => {
                         )
                         .join("");
 
-                    let html = "";
-                    if (standardItems.length > 0)
-                      html += renderRows(standardItems, false);
-
+                    let html = renderRows(standardItems, false);
                     if (preorderItems.length > 0) {
                       html += `
-                          <tr style="background: #f8fafc; border-top: 1px dashed #cbd5e1;">
-                            <td colspan="3" style="font-weight: 900; color: #64748b; font-size: 10px; padding: 6px;">
-                              รายการสั่งผลิตเพิ่มเติม
-                            </td>
-                          </tr>
-                        `;
+                        <tr style="background: #f8fafc; border-top: 1px dashed #cbd5e1;">
+                          <td colspan="3" style="font-weight: 900; color: #64748b; font-size: 10px; padding: 6px;">รายการสั่งผลิตเพิ่มเติม</td>
+                        </tr>
+                      `;
                       html += renderRows(preorderItems, true);
                     }
                     return html;
                   })()}
-                </tbody>
                 </tbody>
               </table>
             </div>
@@ -828,93 +600,80 @@ export const generateCustomerProofPDF = async (order) => {
             <div style="flex: 0.85;">
               <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>🪡 ตำแหน่งปัก</span>
-                <span style="font-size: 10px; background: #4f46e5; color: white; padding: 2px 8px; border-radius: 4px;">รวม ${((order.embroideryDetails || []).length > 0 ? order.embroideryDetails : order.positions || []).length} จุด</span>
+                <span style="font-size: 10px; background: #4f46e5; color: white; padding: 2px 8px; border-radius: 4px;">รวม ${finalPositions.length} จุด</span>
               </div>
               <div class="pos-grid" style="grid-template-columns: repeat(2, 1fr);">
-                ${(() => {
-                  const tablePositions = order.positions || [];
-                  const jsonPositions = (order.embroideryDetails || []).map(
-                    (p) => {
-                      // Resolve ID by name if missing
-                      let resolvedId = p.masterPositionId;
-                      if (!resolvedId && p.position) {
-                        const match = masterPositions.find(
-                          (m) => m.name === p.position,
-                        );
-                        if (match) resolvedId = match.id;
-                      }
+                ${
+                  finalPositions.length === 0
+                    ? '<div style="grid-column: 1/-1; padding: 13px; text-align: center; color: #94a3b8; font-size: 13px;">ไม่มีข้อมูลตำแหน่งปัก</div>'
+                    : finalPositions
+                        .map((pos, idx) => {
+                          const mockupBase64 =
+                            imageMap[pos.mockupUrl] || pos.mockupUrl;
+                          const logoBase64 =
+                            imageMap[pos.logoUrl] || pos.logoUrl;
 
-                      return {
-                        positionNo: p.positionNo,
-                        position: p.position,
-                        masterPositionId: resolvedId,
-                        mockupUrl: p.mockupUrl,
-                        logoUrl: p.logoUrl,
-                        note: p.note,
-                        textToEmb: p.textToEmb,
-                        isFreeOption: p.isFreeOption,
-                        freeOptionName: p.freeOptionName,
-                      };
-                    },
-                  );
+                          let initialContent = "";
+                          if (pos.isFreeOption) {
+                            initialContent = `<div class="mockup-img" style="display:flex;align-items:center;justify-content:center;color:#4f46e5;font-size:14px;font-weight:900;background:#f0f9ff;border:1px solid #bae6fd;">${pos.freeOptionName || "OPTION"}</div>`;
+                          } else if (mockupBase64 || logoBase64) {
+                            initialContent = `<img src="${mockupBase64 || logoBase64}" class="mockup-img"/>`;
+                          } else {
+                            initialContent = `<div class="mockup-img" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:8px;font-style:italic;">No Image</div>`;
+                          }
 
-                  // Prioritize JSON if available because it contains complete spec data (options, notes) updated by Graphic
-                  // The 'positions' table might be stale or lack new schema fields
-                  const finalPositions =
-                    jsonPositions.length > 0 ? jsonPositions : tablePositions;
-
-                  if (finalPositions.length === 0) {
-                    return '<div style="grid-column: 1/-1; padding: 13px; text-align: center; color: #94a3b8; font-size: 13px;">ไม่มีข้อมูลตำแหน่งปัก</div>';
-                  }
-
-                  return finalPositions
-                    .map((pos, idx) => {
-                      let initialContent = "";
-                      if (pos.isFreeOption) {
-                        initialContent = `<div class="mockup-img" style="display:flex;align-items:center;justify-content:center;color:#4f46e5;font-size:14px;font-weight:900;background:#f0f9ff;border:1px solid #bae6fd;">${pos.freeOptionName || "OPTION"}</div>`;
-                      } else if (pos.mockupUrl || pos.logoUrl) {
-                        initialContent = `<img src="${pos.mockupUrl || pos.logoUrl}" class="mockup-img"/>`;
-                      } else {
-                        initialContent = `<div class="mockup-img" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:8px;font-style:italic;">No Image</div>`;
-                      }
-
-                      return `
-                    <div style="margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; background: white; page-break-inside: avoid;">
-                      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                        <div style="width: 24px; height: 24px; background: #023abbff; color: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px;">
-                          ${pos.masterPositionId || "?"}
+                          return `
+                      <div style="margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; background: white; page-break-inside: avoid;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                          <div style="width: 24px; height: 24px; background: #023abbff; color: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px;">
+                            ${pos.masterPositionId || "?"}
+                          </div>
+                          <div style="font-size: 12px; font-weight: 800; color: #0f172a;">${pos.position || "ตำแหน่งปัก"}</div>
                         </div>
-                        <div style="font-size: 12px; font-weight: 800; color: #0f172a;">${pos.position || "ตำแหน่งปัก"}</div>
+                        ${initialContent}
+                        ${pos.textToEmb ? `<div style="font-size: 10px; margin-top: 5px; color: #0f172a; border-top: 1px dashed #e2e8f0; padding-top: 4px;"><b>โน้ต:</b> ${pos.textToEmb}</div>` : ""}
                       </div>
-                      ${initialContent}
-                      ${pos.textToEmb ? `<div style="font-size: 10px; margin-top: 5px; color: #0f172a; border-top: 1px dashed #e2e8f0; padding-top: 4px;"><b>โน้ต:</b> ${pos.textToEmb}</div>` : ""}
-                    </div>
-                  `;
-                    })
-                    .join("");
-                })()}
+                    `;
+                        })
+                        .join("")
+                }
               </div>
             </div>
 
             <div style="flex: 1.15;">
               <div class="section-title">รูปภาพวางแบบให้ลูกค้า</div>
-              <div class="pos-grid" style="grid-template-columns: repeat(2, 1fr);">
-                ${(() => {
-                  const draftImages = order.draftImages || [];
-                  if (draftImages.length === 0) {
-                    return '<div style="grid-column: 1/-1; padding: 13px; text-align: center; color: #94a3b8; font-size: 13px;">ไม่มีภาพร่างจำลองจากแชท</div>';
-                  }
-
-                  return draftImages
-                    .map(
-                      (img) => `
+              <div class="pos-grid" style="grid-template-columns: 1fr; gap: 15px;">
+                ${
+                  order.artworkUrl
+                    ? `
+                    <div style="border: 2px solid #4f46e5; border-radius: 8px; overflow: hidden; background: white; margin-bottom: 10px;">
+                      <img src="${imageMap[order.artworkUrl] || order.artworkUrl}" style="width: 100%; height: auto; display: block;"/>
+                      <div style="background: #4f46e5; color: white; font-size: 10px; text-align: center; padding: 2px;">แบบสรุปสุดท้าย (Final Artwork)</div>
+                    </div>`
+                    : ""
+                }
+                ${
+                  order.block?.artworkUrl
+                    ? `
+                    <div style="border: 2px solid #4f46e5; border-radius: 8px; overflow: hidden; background: white; margin-bottom: 10px;">
+                      <img src="${imageMap[order.block.artworkUrl] || order.block.artworkUrl}" style="width: 100%; height: auto; display: block;"/>
+                      <div style="background: #4f46e5; color: white; font-size: 10px; text-align: center; padding: 2px;">แบบจากบล็อกเดิม</div>
+                    </div>`
+                    : ""
+                }
+                ${
+                  draftImages.length === 0 && !order.artworkUrl && !order.block?.artworkUrl
+                    ? '<div style="grid-column: 1/-1; padding: 13px; text-align: center; color: #94a3b8; font-size: 13px;">ไม่มีภาพร่างจากแชท</div>'
+                    : draftImages
+                        .map(
+                          (img) => `
                     <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: white; margin-bottom: 10px;">
-                      <img src="${img}" style="width: 100%; height: auto; display: block;"/>
+                      <img src="${imageMap[img] || img}" style="width: 100%; height: auto; display: block;"/>
                     </div>
                   `,
-                    )
-                    .join("");
-                })()}
+                        )
+                        .join("")
+                }
               </div>
             </div>
           </div>
@@ -953,37 +712,20 @@ export const generateCustomerProofPDF = async (order) => {
       </html>
     `;
 
-    const getExecutablePath = () => {
-      const commonPaths = [
-        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-      ];
-      for (const p of commonPaths) {
-        if (fs.existsSync(p)) return p;
-      }
-      return undefined; // Let Puppeteer use its bundled Chromium
-    };
-
-    const execPath = getExecutablePath();
-    console.log(
-      "[PDF] Launching Puppeteer with executablePath:",
-      execPath || "Bundled Chromium",
-    );
-
+    // 3. Launch Puppeteer
     browser = await puppeteer.launch({
-      headless: "new",
-      executablePath: execPath,
+      headless: true,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
         "--font-render-hinting=none",
+        "--disable-extensions",
       ],
     });
 
     const page = await browser.newPage();
-    await page.setContent(htmlContent, { waitUntil: "domcontentloaded" });
+    await page.setContent(htmlContent, { waitUntil: "networkidle0" });
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,

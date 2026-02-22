@@ -83,8 +83,16 @@ export default function OrderList() {
 
       setOrders(filteredByTab);
     } catch (err) {
-      console.error(err);
-      setError("Unable to load orders. Please try again.");
+      console.error("Order Fetch Error:", err);
+      // If we get an error, we reset orders to empty so the UI doesn't show stale data
+      setOrders([]);
+
+      // Only show error message if it's a real failure, not just an empty connection
+      if (err.response?.status !== 404) {
+        setError(
+          "ไม่สามารถโหลดข้อมูลออเดอร์ได้ชั่วคราว กรุณารีเฟรชหน้าจออีกครั้ง",
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -642,7 +650,8 @@ export default function OrderList() {
             </div>
           </div>
         ) : (
-          !loading && (
+          !loading &&
+          !error && (
             <div className="bg-white rounded-xl border border-slate-200 border-dashed p-10 text-center animate-in zoom-in duration-300">
               <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
                 <HiOutlineMagnifyingGlass className="w-6 h-6 text-slate-300" />

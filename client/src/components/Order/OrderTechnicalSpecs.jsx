@@ -371,7 +371,7 @@ const OrderTechnicalSpecs = ({
                       emb.embroideryFileUrls.length > 0)) && (
                     <div className="border-t border-slate-50 pt-2 pb-2">
                       <label className="text-[12px] font-black text-rose-500 uppercase flex items-center gap-1 mb-2">
-                        <HiOutlineBolt className="w-3.5 h-3.5" /> ไฟล์ปัก (.EMB){" "}
+                        <HiOutlineBolt className="w-3.5 h-3.5" /> ไฟล์ปัก (.DST){" "}
                         {emb.embroideryFileUrls?.length || 0}/10
                       </label>
 

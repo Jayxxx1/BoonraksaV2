@@ -104,6 +104,7 @@ export default function GraphicTaskBoard() {
                 {[
                   { id: "me", label: "งานของฉัน" },
                   { id: "available", label: "งานรอรับ" },
+                  { id: "history", label: "ประวัติงาน" },
                   { id: "all", label: "ทั้งหมด" },
                 ].map((tab) => (
                   <button
