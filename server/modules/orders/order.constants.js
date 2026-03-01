@@ -17,18 +17,18 @@ export const OrderStatus = {
 };
 
 /**
- * Order Status Labels (Thai)
+ * Order Status Labels
  */
 export const StatusLabels = {
   PENDING_DIGITIZING: "รอตีลาย",
-  PENDING_ARTWORK: "รอวางแบบ",
+  PENDING_ARTWORK: "รอออกแบบ",
   DESIGNING: "กำลังออกแบบ",
-  PENDING_STOCK_CHECK: "รอเช็คสต็อก",
-  STOCK_ISSUE: "สต็อกมีปัญหา",
-  STOCK_RECHECKED: "สต็อกครบ/เตรียมผลิต",
+  PENDING_STOCK_CHECK: "กำลังเช็คสต็อค",
+  STOCK_ISSUE: "สต็อคมีปัญหา",
+  STOCK_RECHECKED: "รอผลิต",
   IN_PRODUCTION: "กำลังผลิต",
-  PRODUCTION_FINISHED: "ผลิตเสร็จ/รอ QC",
-  QC_PASSED: "รอจัดส่ง",
+  PRODUCTION_FINISHED: "ผลิตเสร็จสิ้น",
+  QC_PASSED: "ผ่าน QC",
   READY_TO_SHIP: "พร้อมจัดส่ง",
   COMPLETED: "เสร็จสิ้น",
   CANCELLED: "ยกเลิก",
@@ -53,22 +53,35 @@ export const BlockType = {
 };
 
 /**
- * Role Labels (Thai) for Privacy
+ * Order Flow Type
+ */
+export const OrderFlowType = {
+  EMBROIDERY: "EMBROIDERY",
+  DIRECT_SALE: "DIRECT_SALE",
+};
+
+export const OrderFlowTypeLabels = {
+  EMBROIDERY: "Embroidery flow",
+  DIRECT_SALE: "Direct sale flow",
+};
+
+/**
+ * Role Labels
  */
 export const RoleLabels = {
-  SALES: "ฝ่ายขาย",
-  GRAPHIC: "ฝ่ายกราฟิก",
-  STOCK: "ฝ่ายสต็อก",
-  PRODUCTION: "ฝ่ายผลิต",
-  SEWING_QC: "ฝ่ายตัดเย็บ/QC",
-  DELIVERY: "ฝ่ายจัดส่ง",
-  PURCHASING: "ฝ่ายจัดซื้อ",
-  MARKETING: "ฝ่ายการตลาด",
-  FINANCE: "ฝ่ายบัญชี",
-  DIGITIZER: "ฝ่ายตีลาย",
-  ADMIN: "ผู้ดูแลระบบ",
-  SUPER_ADMIN: "ผู้ดูแลสูงสุด",
-  EXECUTIVE: "ผู้บริหาร",
+  SALES: "Sales",
+  GRAPHIC: "Graphic",
+  STOCK: "Stock",
+  PRODUCTION: "Production",
+  SEWING_QC: "QC",
+  DELIVERY: "Delivery",
+  PURCHASING: "Purchasing",
+  MARKETING: "Marketing",
+  FINANCE: "Finance",
+  DIGITIZER: "Digitizer",
+  ADMIN: "Admin",
+  SUPER_ADMIN: "Super Admin",
+  EXECUTIVE: "Executive",
 };
 
 /**
@@ -94,7 +107,9 @@ export const UserRole = {
  * Sub Status Labels
  */
 export const SubStatus = {
-  PURCHASING: "กำลังสั่งซื้อ",
+  PURCHASING: "PURCHASING_IN_PROGRESS",
+  QA_PENDING: "QA_PENDING",
+  QA_APPROVED: "QA_APPROVED",
 };
 
 /**
@@ -102,25 +117,25 @@ export const SubStatus = {
  */
 export const PreorderStatus = {
   NONE: "NONE",
-  WAITING_PURCHASE_INPUT: "WAITING_PURCHASE_INPUT", // รอจัดซื้อระบุวัน
-  WAITING_ARRIVAL: "WAITING_ARRIVAL", // รอสินค้าเข้า
-  PURCHASE_CONFIRMED: "PURCHASE_CONFIRMED", // ยืนยันการสั่งซื้อแล้ว
-  DELAYED_ROUND_1: "DELAYED_ROUND_1", // ล่าช้าครั้งที่ 1
-  DELAYED_ROUND_2: "DELAYED_ROUND_2", // ล่าช้าครั้งที่ 2 (แจังผู้บริหาร)
-  ARRIVED: "ARRIVED", // สินค้าเข้าแล้ว
+  WAITING_PURCHASE_INPUT: "WAITING_PURCHASE_INPUT",
+  WAITING_ARRIVAL: "WAITING_ARRIVAL",
+  PURCHASE_CONFIRMED: "PURCHASE_CONFIRMED",
+  DELAYED_ROUND_1: "DELAYED_ROUND_1",
+  DELAYED_ROUND_2: "DELAYED_ROUND_2",
+  ARRIVED: "ARRIVED",
 };
 
 /**
- * Pre-order Status Labels (Thai)
+ * Pre-order Status Labels
  */
 export const PreorderStatusLabels = {
   NONE: "-",
-  WAITING_PURCHASE_INPUT: "รอระบุวันเข้า",
-  WAITING_ARRIVAL: "ดำเนินการสั่งซื้อ",
-  PURCHASE_CONFIRMED: "ยืนยันสั่งซื้อแล้ว",
-  DELAYED_ROUND_1: "ล่าช้าครั้งที่ 1",
-  DELAYED_ROUND_2: "ล่าช้าครั้งที่ 2 (แจ้งผู้บริหาร)",
-  ARRIVED: "สินค้าเข้าแล้ว",
+  WAITING_PURCHASE_INPUT: "Waiting purchase input",
+  WAITING_ARRIVAL: "Waiting arrival",
+  PURCHASE_CONFIRMED: "Purchase confirmed",
+  DELAYED_ROUND_1: "Delayed round 1",
+  DELAYED_ROUND_2: "Delayed round 2",
+  ARRIVED: "Arrived",
 };
 
 /**

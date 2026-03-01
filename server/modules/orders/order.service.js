@@ -5,6 +5,7 @@ import {
   BlockType,
   UserRole,
   SubStatus,
+  OrderFlowType,
   StatusLabels,
   RoleLabels,
   PreorderStatus,
@@ -59,6 +60,59 @@ class OrderService {
   }
 
   /**
+   * Create low-stock notifications (per size/variant) for purchasing team.
+   * This runs after stock-changing operations.
+   */
+  async notifyLowStockVariants(tx, variantIds = [], orderId = null) {
+    const uniqueIds = [...new Set((variantIds || []).map((v) => parseInt(v)))];
+    if (uniqueIds.length === 0) return;
+
+    const variants = await tx.productVariant.findMany({
+      where: { id: { in: uniqueIds } },
+      select: {
+        id: true,
+        sku: true,
+        color: true,
+        size: true,
+        stock: true,
+        minStock: true,
+        product: { select: { name: true } },
+      },
+    });
+
+    const lowVariants = variants.filter(
+      (variant) => parseInt(variant.stock || 0) <= 10,
+    );
+    if (lowVariants.length === 0) return;
+
+    const recipients = await tx.user.findMany({
+      where: {
+        isActive: true,
+        role: { in: [UserRole.PURCHASING, UserRole.ADMIN, UserRole.SUPER_ADMIN] },
+      },
+      select: { id: true },
+    });
+    if (recipients.length === 0) return;
+
+    const notifications = [];
+    for (const recipient of recipients) {
+      for (const variant of lowVariants) {
+        const remaining = parseInt(variant.stock || 0);
+        notifications.push({
+          userId: recipient.id,
+          orderId: orderId ? parseInt(orderId) : null,
+          type: "LOW_STOCK_ALERT",
+          message: `Low stock: ${variant.product?.name || "-"} ${variant.color}/${variant.size} (${variant.sku}) remaining ${remaining} units`,
+        });
+      }
+    }
+
+    if (notifications.length > 0) {
+      await tx.notification.createMany({ data: notifications });
+    }
+  }
+
+  /**
    * Helper: Normalize Order Data (Computed Fields)
    */
   normalize(order, user) {
@@ -101,6 +155,13 @@ class OrderService {
           new Date(order.dueDate).getTime(),
       isReadyForProduction,
       productionStatus: getProductionStatus(order),
+      // UI compatibility: keep array shape while persisting singular text field.
+      assignedWorkerNames: order.assignedWorkerName
+        ? order.assignedWorkerName
+            .split(",")
+            .map((name) => name.trim())
+            .filter(Boolean)
+        : [],
     };
 
     // --- 🕒 Dynamic SLA & Alert Engine (Phase 5) ---
@@ -175,7 +236,11 @@ class OrderService {
         } else if (user.role === UserRole.PRODUCTION) {
           isRoleCompleted = !!order.productionCompletedAt;
         } else if (user.role === UserRole.SEWING_QC) {
-          isRoleCompleted = !!order.qcCompletedAt;
+          isRoleCompleted = [
+            OrderStatus.QC_PASSED,
+            OrderStatus.READY_TO_SHIP,
+            OrderStatus.COMPLETED,
+          ].includes(order.status);
         } else if (user.role === UserRole.STOCK) {
           isRoleCompleted = order.stockRechecked === true;
         } else if (user.role === UserRole.GRAPHIC) {
@@ -203,16 +268,47 @@ class OrderService {
       };
     }
 
-    // Dynamic Status Label & Sub-status for QC_PASSED & READY_TO_SHIP
+    // Dynamic status label helpers
     if (normalized.status === OrderStatus.QC_PASSED) {
       if (balance > 0) {
         normalized.displayStatusLabel = "รอจัดส่ง";
-        normalized.subStatusLabel = "ยังไม่ชำระคงเหลือ";
+        normalized.subStatusLabel = "ยังไม่ชำระส่วนที่เหลือ";
       } else {
         normalized.displayStatusLabel = "พร้อมจัดส่ง";
       }
     } else if (normalized.status === OrderStatus.READY_TO_SHIP) {
       normalized.displayStatusLabel = "พร้อมจัดส่ง";
+    }
+
+    if (
+      normalized.flowType === OrderFlowType.DIRECT_SALE &&
+      normalized.status === OrderStatus.STOCK_RECHECKED
+    ) {
+      normalized.displayStatusLabel = "รอรับเข้าจัดส่ง";
+    }
+
+    if (
+      normalized.qaRequired &&
+      !normalized.qaApprovedAt &&
+      [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(
+        normalized.status,
+      )
+    ) {
+      normalized.subStatusLabel = "Pending QA approval";
+    }
+
+    if (
+      (normalized.requireInvoice ||
+        normalized.requireReceipt ||
+        normalized.requireQuotation) &&
+      !normalized.billingCompletedAt &&
+      [
+        OrderStatus.STOCK_RECHECKED,
+        OrderStatus.QC_PASSED,
+        OrderStatus.READY_TO_SHIP,
+      ].includes(normalized.status)
+    ) {
+      normalized.subStatusLabel = "Billing documents are required before ship";
     }
 
     // Role-based privacy & Sanitization
@@ -396,60 +492,118 @@ class OrderService {
       salesChannelId,
       isUrgent,
       blockType,
+      flowType,
       dueDate,
       notes,
       items,
       totalPrice,
       paidAmount,
+      paymentMethod,
       embroideryDetails,
       depositSlipUrl,
       draftImages,
+      requireInvoice,
+      requireReceipt,
+      requireQuotation,
+      reservationSessionId,
     } = data;
 
     if (!items || items.length === 0)
       throw new Error("Order must have at least one item");
 
     return await prisma.$transaction(async (tx) => {
-      // Logic for legacy import
+      const now = new Date();
+      const itemRows = items.map((item) => ({
+        variantId: parseInt(item.variantId),
+        requestedQty: Math.max(0, parseInt(item.quantity) || 0),
+      }));
+      const variantIds = [...new Set(itemRows.map((item) => item.variantId))];
+
+      // Respect active reservations from other sessions.
+      const reservationWhere = {
+        variantId: { in: variantIds },
+        expiresAt: { gt: now },
+      };
+      if (reservationSessionId) {
+        reservationWhere.NOT = { sessionId: reservationSessionId };
+      }
+
+      const reservedByOthers = await tx.stockReservation.groupBy({
+        by: ["variantId"],
+        where: reservationWhere,
+        _sum: { quantity: true },
+      });
+      const reservedByOthersMap = Object.fromEntries(
+        reservedByOthers.map((row) => [
+          row.variantId,
+          parseInt(row._sum.quantity || 0),
+        ]),
+      );
+
       // Pre-order Detection Logic (HARD RULE)
       let needsPurchasing = false;
       const purchaseRequestsData = [];
+      const stockPlanByVariant = {};
 
-      for (const item of items) {
+      for (const item of itemRows) {
         const variant = await tx.productVariant.findUnique({
-          where: { id: parseInt(item.variantId) },
+          where: { id: item.variantId },
           select: { id: true, stock: true },
         });
-        if (!variant)
-          throw new Error(`Product variant ${item.variantId} not found`);
+        if (!variant) throw new Error(`Product variant ${item.variantId} not found`);
 
-        const requestedQty = Math.max(0, parseInt(item.quantity) || 0);
-        if (variant.stock < requestedQty) {
+        const blockedQty = parseInt(reservedByOthersMap[item.variantId] || 0);
+        const effectiveAvailable = Math.max(0, parseInt(variant.stock || 0) - blockedQty);
+        const shortageQty = Math.max(0, item.requestedQty - effectiveAvailable);
+        const deductQty = Math.min(item.requestedQty, effectiveAvailable);
+
+        stockPlanByVariant[item.variantId] = {
+          deductQty,
+          shortageQty,
+        };
+
+        if (shortageQty > 0) {
           needsPurchasing = true;
           purchaseRequestsData.push({
-            variantId: variant.id,
-            quantity: requestedQty - variant.stock,
+            variantId: item.variantId,
+            quantity: shortageQty,
           });
         }
       }
 
       const total = safeNumber(totalPrice);
-      const paid = safeNumber(paidAmount);
-      const balance = total - paid;
-      const paymentStatus =
-        paid >= total
+      const mappedFlowType =
+        flowType === OrderFlowType.DIRECT_SALE
+          ? OrderFlowType.DIRECT_SALE
+          : OrderFlowType.EMBROIDERY;
+      const isDirectSale = mappedFlowType === OrderFlowType.DIRECT_SALE;
+
+      const paid = isDirectSale ? total : safeNumber(paidAmount);
+      if (isDirectSale && paid < total) {
+        throw new Error("DIRECT_SALE_REQUIRES_FULL_PAYMENT");
+      }
+
+      const balance = Math.max(0, total - paid);
+      const paymentStatus = isDirectSale
+        ? PaymentStatus.PAID
+        : paid >= total
           ? PaymentStatus.PAID
           : paid > 0
             ? PaymentStatus.PARTIALLY_PAID
             : PaymentStatus.UNPAID;
 
       const bTypeMap = {
-        บล็อคเดิม: "OLD",
-        บล็อคเดิมเปลี่ยนข้อความ: "EDIT",
-        บล็อคใหม่: "NEW",
+        OLD: "OLD",
+        EDIT: "EDIT",
+        NEW: "NEW",
+        "\u0e1a\u0e25\u0e47\u0e2d\u0e01\u0e40\u0e14\u0e34\u0e21": "OLD",
+        "\u0e1a\u0e25\u0e47\u0e2d\u0e01\u0e40\u0e14\u0e34\u0e21\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19\u0e02\u0e49\u0e2d\u0e04\u0e27\u0e32\u0e21":
+          "EDIT",
+        "\u0e1a\u0e25\u0e47\u0e2d\u0e01\u0e43\u0e2b\u0e21\u0e48": "NEW",
       };
       const mappedBlockType =
         BlockType[blockType] || bTypeMap[blockType] || BlockType.OLD;
+      const finalBlockType = isDirectSale ? BlockType.OLD : mappedBlockType;
 
       // Use temporary unique placeholder (Transaction will update this immediately)
       const initialDisplayCode = `TEMP-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -463,13 +617,21 @@ class OrderService {
           customerFb: customerFb || "",
           salesChannelId: salesChannelId ? parseInt(salesChannelId) : null,
           isUrgent: !!isUrgent,
-          blockType: mappedBlockType,
+          blockType: finalBlockType,
+          flowType: mappedFlowType,
           totalPrice: total,
           paidAmount: paid,
           balanceDue: balance,
           paymentStatus,
-          status:
-            mappedBlockType === BlockType.NEW
+          paymentMethod: paymentMethod || "TRANSFER",
+          requireInvoice: !!requireInvoice,
+          requireReceipt: !!requireReceipt,
+          requireQuotation: !!requireQuotation,
+          qaRequired: !isDirectSale,
+          qaApprovedAt: isDirectSale ? new Date() : null,
+          status: isDirectSale
+            ? OrderStatus.PENDING_STOCK_CHECK
+            : finalBlockType === BlockType.NEW
               ? OrderStatus.PENDING_DIGITIZING
               : OrderStatus.PENDING_ARTWORK,
           preorderSubStatus: needsPurchasing
@@ -482,8 +644,8 @@ class OrderService {
           draftImages: Array.isArray(draftImages) ? draftImages : [],
           logs: {
             create: {
-              action: "🆕 เปิดออเดอร์ใหม่",
-              details: `สร้างออเดอร์สำเร็จ โดย ${user.name}${needsPurchasing ? " (พบสินค้าต้องสั่งซื้อเพิ่ม)" : ""}`,
+              action: "Create order",
+              details: `Created by ${user.name} (${mappedFlowType})${needsPurchasing ? " + requires purchasing" : ""}`,
               userId: user.id,
             },
           },
@@ -497,16 +659,20 @@ class OrderService {
             })),
           },
           positions: {
-            create: (Array.isArray(embroideryDetails)
-              ? embroideryDetails
-              : []
+            create: (isDirectSale
+              ? []
+              : Array.isArray(embroideryDetails)
+                ? embroideryDetails
+                : []
             ).map((pos) => ({
               positionNo: pos.positionNo ? parseInt(pos.positionNo) : null,
               masterPositionId: pos.masterPositionId
                 ? parseInt(pos.masterPositionId)
                 : null,
               position:
-                pos.position === "อื่นๆ" ? pos.customPosition : pos.position,
+                pos.position === "อื่นๆ"
+                  ? pos.customPosition
+                  : pos.position,
               textToEmb: pos.textToEmb || null,
               logoUrl: pos.logoUrl || null,
               mockupUrl: pos.mockupUrl || null,
@@ -535,29 +701,28 @@ class OrderService {
             amount: paid,
             slipUrl: depositSlipUrl,
             uploadedBy: user.id,
-            note: "เงินมัดจำ",
+            note: isDirectSale ? "Full payment" : "Initial payment",
           },
         });
       }
 
-      // Deduct stock for available items
-      for (const item of items) {
-        const variant = await tx.productVariant.findUnique({
-          where: { id: parseInt(item.variantId) },
-          select: { stock: true },
-        });
-        if (variant) {
-          const qtyToDeduct = Math.min(
-            parseInt(item.quantity) || 0,
-            variant.stock,
-          );
-          if (qtyToDeduct > 0) {
-            await tx.productVariant.update({
-              where: { id: parseInt(item.variantId) },
-              data: { stock: { decrement: qtyToDeduct } },
-            });
-          }
+      // Deduct stock based on reservation-aware planning
+      for (const item of itemRows) {
+        const planned = stockPlanByVariant[item.variantId];
+        const qtyToDeduct = Math.max(0, parseInt(planned?.deductQty || 0));
+        if (qtyToDeduct > 0) {
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: { stock: { decrement: qtyToDeduct } },
+          });
         }
+      }
+
+      // Release reservation session after order is committed.
+      if (reservationSessionId) {
+        await tx.stockReservation.deleteMany({
+          where: { sessionId: reservationSessionId },
+        });
       }
 
       // Create Purchase Requests if needed
@@ -570,6 +735,13 @@ class OrderService {
           })),
         });
       }
+
+      // Alert purchasing/admin when any affected size is low (<= 10).
+      await this.notifyLowStockVariants(
+        tx,
+        variantIds,
+        order.id,
+      );
 
       return this.normalize(order, user);
     });
@@ -650,8 +822,20 @@ class OrderService {
    * List Orders with Filters
    */
   async getOrders(filters, user) {
-    const { view, search, status } = filters;
+    const { view, search, status, purchasingMode } = filters;
     const where = {};
+    const isPurchasingMode =
+      purchasingMode === true ||
+      purchasingMode === "true" ||
+      purchasingMode === 1 ||
+      purchasingMode === "1";
+    const activePreorderSubStatuses = [
+      PreorderStatus.WAITING_PURCHASE_INPUT,
+      PreorderStatus.WAITING_ARRIVAL,
+      PreorderStatus.PURCHASE_CONFIRMED,
+      PreorderStatus.DELAYED_ROUND_1,
+      PreorderStatus.DELAYED_ROUND_2,
+    ];
 
     // 1. Search Logic (Using AND to avoid collision with visibility OR)
     if (search) {
@@ -708,6 +892,11 @@ class OrderService {
       // Full visibility for Admin/Executive
     } else if (user.role === UserRole.SALES) {
       where.salesId = user.id;
+    } else if (user.role === UserRole.PURCHASING || isPurchasingMode) {
+      where.preorderSubStatus =
+        view === "history"
+          ? PreorderStatus.ARRIVED
+          : { in: activePreorderSubStatuses };
     } else if (view === "me") {
       if (roleField) {
         where[roleField] = user.id;
@@ -722,7 +911,7 @@ class OrderService {
         } else if (user.role === UserRole.PRODUCTION) {
           specificExclusions.productionCompletedAt = null;
         } else if (user.role === UserRole.SEWING_QC) {
-          specificExclusions.qcCompletedAt = null;
+          specificExclusions.status = OrderStatus.PRODUCTION_FINISHED;
         } else if (user.role === UserRole.STOCK) {
           specificExclusions.stockRechecked = false;
         } else if (user.role === UserRole.GRAPHIC) {
@@ -735,6 +924,7 @@ class OrderService {
         }
 
         where.AND = [
+          ...(where.AND || []),
           { status: { notIn: notInStatus } },
           { ...specificExclusions },
         ];
@@ -749,7 +939,13 @@ class OrderService {
         } else if (user.role === UserRole.PRODUCTION) {
           where.productionCompletedAt = { not: null };
         } else if (user.role === UserRole.SEWING_QC) {
-          where.qcCompletedAt = { not: null };
+          where.status = {
+            in: [
+              OrderStatus.QC_PASSED,
+              OrderStatus.READY_TO_SHIP,
+              OrderStatus.COMPLETED,
+            ],
+          };
         } else if (user.role === UserRole.STOCK) {
           where.stockRechecked = true;
         } else if (user.role === UserRole.GRAPHIC) {
@@ -806,8 +1002,6 @@ class OrderService {
         where.digitizingCompletedAt = { not: null };
       } else if (user.role === UserRole.PRODUCTION) {
         where.productionCompletedAt = { not: null };
-      } else if (user.role === UserRole.SEWING_QC) {
-        where.qcCompletedAt = { not: null };
       } else {
         where.status = status;
       }
@@ -834,6 +1028,160 @@ class OrderService {
   }
 
   /**
+   * Reserve stock while Sales is preparing an order.
+   * Soft-lock only: real stock deduction occurs when order is created/updated.
+   */
+  async upsertStockReservation(data, user) {
+    const sessionId = String(data?.sessionId || "").trim();
+    const items = Array.isArray(data?.items) ? data.items : [];
+    if (!sessionId) throw new Error("RESERVATION_SESSION_REQUIRED");
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+    const normalizedItems = items
+      .map((item) => ({
+        variantId: parseInt(item.variantId),
+        quantity: Math.max(0, parseInt(item.quantity) || 0),
+      }))
+      .filter((item) => item.variantId && item.quantity > 0);
+
+    return await prisma.$transaction(async (tx) => {
+      // Clear expired rows and replace current session rows atomically.
+      await tx.stockReservation.deleteMany({
+        where: { expiresAt: { lte: now } },
+      });
+      await tx.stockReservation.deleteMany({
+        where: { sessionId, userId: user.id },
+      });
+
+      if (normalizedItems.length > 0) {
+        await tx.stockReservation.createMany({
+          data: normalizedItems.map((item) => ({
+            sessionId,
+            userId: user.id,
+            variantId: item.variantId,
+            quantity: item.quantity,
+            expiresAt,
+          })),
+        });
+      }
+
+      const variantIds = [...new Set(normalizedItems.map((item) => item.variantId))];
+      if (variantIds.length === 0) {
+        return {
+          sessionId,
+          expiresAt,
+          items: [],
+          lowStockWarnings: [],
+        };
+      }
+
+      const variants = await tx.productVariant.findMany({
+        where: { id: { in: variantIds } },
+        select: {
+          id: true,
+          sku: true,
+          color: true,
+          size: true,
+          stock: true,
+          product: { select: { name: true } },
+        },
+      });
+
+      const reservedByOthers = await tx.stockReservation.groupBy({
+        by: ["variantId"],
+        where: {
+          variantId: { in: variantIds },
+          expiresAt: { gt: now },
+          NOT: { sessionId },
+        },
+        _sum: { quantity: true },
+      });
+      const reservedByOthersMap = Object.fromEntries(
+        reservedByOthers.map((row) => [
+          row.variantId,
+          parseInt(row._sum.quantity || 0),
+        ]),
+      );
+
+      const reservationMap = Object.fromEntries(
+        normalizedItems.map((item) => [item.variantId, item.quantity]),
+      );
+
+      const details = variants.map((variant) => {
+        const reserved = parseInt(reservationMap[variant.id] || 0);
+        const blockedByOthers = parseInt(reservedByOthersMap[variant.id] || 0);
+        const availableForSession = Math.max(
+          0,
+          parseInt(variant.stock || 0) - blockedByOthers,
+        );
+        return {
+          variantId: variant.id,
+          sku: variant.sku,
+          productName: variant.product?.name || "-",
+          color: variant.color,
+          size: variant.size,
+          stock: parseInt(variant.stock || 0),
+          reserved,
+          availableForSession,
+          enough: availableForSession >= reserved,
+        };
+      });
+
+      return {
+        sessionId,
+        expiresAt,
+        items: details,
+        lowStockWarnings: details.filter((row) => row.stock <= 10),
+      };
+    });
+  }
+
+  async getStockReservation(sessionId, user) {
+    const now = new Date();
+    const rows = await prisma.stockReservation.findMany({
+      where: {
+        sessionId: String(sessionId || "").trim(),
+        userId: user.id,
+        expiresAt: { gt: now },
+      },
+      include: {
+        variant: {
+          select: {
+            id: true,
+            sku: true,
+            color: true,
+            size: true,
+            stock: true,
+            product: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { id: "asc" },
+    });
+
+    return {
+      sessionId,
+      items: rows.map((row) => ({
+        id: row.id,
+        variantId: row.variantId,
+        quantity: row.quantity,
+        expiresAt: row.expiresAt,
+        variant: row.variant,
+      })),
+    };
+  }
+
+  async releaseStockReservation(sessionId, user) {
+    await prisma.stockReservation.deleteMany({
+      where: {
+        sessionId: String(sessionId || "").trim(),
+        userId: user.id,
+      },
+    });
+  }
+
+  /**
    * Search Order by Job ID
    */
   async searchOrderByJobId(jobId, user) {
@@ -852,7 +1200,9 @@ class OrderService {
   /**
    * Update Purchasing Info
    */
-  async updatePurchasingInfo(orderId, data, user) {
+  // Legacy implementation kept for migration reference only.
+  // Do not call this method; use updatePurchasingInfo below.
+  async updatePurchasingInfoLegacy(orderId, data, user) {
     const { purchasingEta, purchasingReason, status, preorderSubStatus } = data;
     const id = parseInt(orderId);
 
@@ -1159,7 +1509,8 @@ class OrderService {
         urgentNote: note,
         logs: {
           create: {
-            action: "⚡ เร่งด่วน (โดยฝ่ายขาย)",
+            action:
+              "⚡ เร่งด่วน (โดยฝ่ายขาย)",
             details: note || "",
             userId: user.id,
           },
@@ -1179,7 +1530,8 @@ class OrderService {
         readyForProductionAt: new Date(), // Potential ready point if other flags are also true
         logs: {
           create: {
-            action: "📄 พิมพ์ใบงาน/ส่งต่อสต็อก",
+            action:
+              "📄 พิมพ์ใบงาน/ส่งต่อสต็อก",
             details: `ฝ่ายกราฟิก ${user.name} พิมพ์ใบงาน (Job Sheet) และส่งต่อฝ่ายสต็อกแล้ว`,
             userId: user.id,
           },
@@ -1191,17 +1543,30 @@ class OrderService {
   }
 
   async confirmStockRecheck(orderId, user) {
+    const id = parseInt(orderId);
+    const currentOrder = await prisma.order.findUnique({
+      where: { id },
+      select: { flowType: true },
+    });
+
+    const isDirectSale =
+      currentOrder?.flowType === OrderFlowType.DIRECT_SALE;
+
     const result = await prisma.order.update({
-      where: { id: parseInt(orderId) },
+      where: { id },
       data: {
-        status: OrderStatus.STOCK_RECHECKED,
+        status: isDirectSale
+          ? OrderStatus.READY_TO_SHIP
+          : OrderStatus.STOCK_RECHECKED,
         stockRechecked: true,
         physicalItemsReady: true,
         stockId: user.id,
         logs: {
           create: {
-            action: "✅ ยืนยันสต็อกครบถ้วน",
-            details: `สต็อก ${user.name} ยืนยันว่าพัสดุครบถ้วน พร้อมสำหรับการผลิต`,
+            action: "STOCK_CONFIRMED",
+            details: isDirectSale
+              ? `Stock ${user.name} confirmed and forwarded to delivery`
+              : `Stock ${user.name} confirmed and ready for production`,
             userId: user.id,
           },
         },
@@ -1213,10 +1578,17 @@ class OrderService {
 
   async startProduction(orderId, user, { workerNames = [] } = {}) {
     const id = parseInt(orderId);
-    const order = await prisma.order.findUnique({ where: { id } });
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: this.getStandardInclude(),
+    });
 
     // Idempotency: NEVER overwrite an existing timestamp
     if (order && order.productionStartedAt) return this.normalize(order, user);
+
+    const normalizedWorkers = (Array.isArray(workerNames) ? workerNames : [])
+      .map((name) => String(name).trim())
+      .filter(Boolean);
 
     const result = await prisma.order.update({
       where: { id },
@@ -1224,12 +1596,12 @@ class OrderService {
         status: OrderStatus.IN_PRODUCTION,
         productionId: user.id,
         productionStartedAt: new Date(),
-        assignedWorkerNames: workerNames,
+        assignedWorkerName: normalizedWorkers.join(", ") || null,
         logs: {
           create: {
             action: "🏭 เริ่มกระบวนการผลิต",
-            details: workerNames.length
-              ? `${user.name} มอบหมายงานให้: ${workerNames.join(", ")}`
+            details: normalizedWorkers.length
+              ? `${user.name} มอบหมายงานให้: ${normalizedWorkers.join(", ")}`
               : `${user.name} กดเริ่มงาน`,
             userId: user.id,
           },
@@ -1270,7 +1642,8 @@ class OrderService {
       await tx.activityLog.createMany({
         data: staleOrders.map((o) => ({
           orderId: o.id,
-          action: "⚠️ แจ้งเตือน: ออเดอร์ค้างเข้านานกว่า 3 วัน",
+          action:
+            "⚠️ แจ้งเตือน: ออเดอร์ค้างเข้านานกว่า 3 วัน",
           details: `ระบบปรับออเดอร์ ${o.displayJobCode} เป็นงานด่วนอัตโนมัติเนื่องจากไม่มีการเคลื่อนไหวเกิน 3 วัน`,
           userId: null, // System
         })),
@@ -1321,7 +1694,8 @@ class OrderService {
         await tx.activityLog.createMany({
           data: delayedOrders.map((o) => ({
             orderId: o.id,
-            action: "⚠️ แจ้งเตือน: ของเข้าล่าช้า (รอบที่ 1)",
+            action:
+              "⚠️ แจ้งเตือน: ของเข้าล่าช้า (รอบที่ 1)",
             details: `ระบบเปลี่ยนสถานะเป็น "ล่าช้าครั้งที่ 1" เนื่องจากเกินกำหนดวันที่ ${o.purchasingEta.toLocaleDateString("th-TH")}`,
             userId: null, // System
           })),
@@ -1338,7 +1712,8 @@ class OrderService {
         await tx.activityLog.createMany({
           data: delayedOrdersRound2.map((o) => ({
             orderId: o.id,
-            action: "🚨 แจ้งเตือนผู้บริหาร: สินค้าล่าช้าซ้ำซ้อน (รอบที่ 2)",
+            action:
+              "🚨 แจ้งเตือนผู้บริหาร: สินค้าล่าช้าซ้ำซ้อน (รอบที่ 2)",
             details: `CRITICAL: ออเดอร์ ${o.displayJobCode} ล่าช้าครั้งที่ 2 เกินกำหนด ${o.purchasingEta.toLocaleDateString("th-TH")} โปรดตรวจสอบเพื่อรักษาระดับการบริการ`,
             userId: null, // System
           })),
@@ -1362,7 +1737,12 @@ class OrderService {
       });
       const isPaid = parseFloat(order.balanceDue) <= 0;
       const isCOD = order.paymentMethod === "COD";
+      const requiresBillingDoc =
+        !!order.requireInvoice || !!order.requireReceipt || !!order.requireQuotation;
       if (!isPaid && !isCOD) throw new Error("PAYMENT_INCOMPLETE");
+      if (requiresBillingDoc && !order.billingCompletedAt) {
+        throw new Error("BILLING_INCOMPLETE");
+      }
       if (!data.trackingNo) throw new Error("TRACKING_REQUIRED");
     }
 
@@ -1429,7 +1809,7 @@ class OrderService {
   /**
    * Claim Task
    */
-  async claimTask(orderId, user) {
+  async claimTask(orderId, user, data = {}) {
     const roleField = {
       [UserRole.GRAPHIC]: "graphicId",
       [UserRole.STOCK]: "stockId",
@@ -1443,14 +1823,22 @@ class OrderService {
     // Auto-advance status for some roles
     if (user.role === UserRole.GRAPHIC)
       updateData.status = OrderStatus.DESIGNING;
-    if (user.role === UserRole.PRODUCTION)
+    if (user.role === UserRole.PRODUCTION) {
       updateData.status = OrderStatus.IN_PRODUCTION;
+      const assignedWorkerName = (data.assignedWorkerName || "").trim();
+      updateData.assignedWorkerName = assignedWorkerName || null;
+    }
 
     const result = await prisma.order.update({
       where: { id: parseInt(orderId) },
       data: {
         ...updateData,
-        logs: { create: { action: "✋ รับงาน/มอบหมายงาน", userId: user.id } },
+        logs: {
+          create: {
+            action: "✋ รับงาน/มอบหมายงาน",
+            userId: user.id,
+          },
+        },
       },
       include: this.getStandardInclude(),
     });
@@ -1534,7 +1922,8 @@ class OrderService {
       await prisma.activityLog.create({
         data: {
           orderId: orderIdInt,
-          action: "📥 สินค้าเข้าคลังแล้ว (ARRIVED)",
+          action:
+            "📥 สินค้าเข้าคลังแล้ว (ARRIVED)",
           details: `ยืนยันโดยฝ่ายขาย (${user.name}). ออเดอร์พร้อมผลิต`,
           userId: user.id,
         },
@@ -1592,6 +1981,26 @@ class OrderService {
     }
 
     return await prisma.$transaction(async (tx) => {
+      const mappedFlowType =
+        data.flowType === OrderFlowType.DIRECT_SALE
+          ? OrderFlowType.DIRECT_SALE
+          : data.flowType === OrderFlowType.EMBROIDERY
+            ? OrderFlowType.EMBROIDERY
+            : null;
+      const nextFlowType = mappedFlowType || currentOrder.flowType;
+      const isDirectSale = nextFlowType === OrderFlowType.DIRECT_SALE;
+      const bTypeMap = {
+        OLD: "OLD",
+        EDIT: "EDIT",
+        NEW: "NEW",
+        "\u0e1a\u0e25\u0e47\u0e2d\u0e01\u0e40\u0e14\u0e34\u0e21": "OLD",
+        "\u0e1a\u0e25\u0e47\u0e2d\u0e01\u0e40\u0e14\u0e34\u0e21\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19\u0e02\u0e49\u0e2d\u0e04\u0e27\u0e32\u0e21":
+          "EDIT",
+        "\u0e1a\u0e25\u0e47\u0e2d\u0e01\u0e43\u0e2b\u0e21\u0e48": "NEW",
+      };
+      const mappedBlockType =
+        BlockType[data.blockType] || bTypeMap[data.blockType] || undefined;
+
       // 2. Prepare Update Data for Basic Fields
       const updateData = {
         customerName: data.customerName,
@@ -1606,11 +2015,59 @@ class OrderService {
           : undefined,
         purchaseOrder: data.purchaseOrder, // PO No
         taxInbox: data.taxInbox, // Tax Info
+        requireInvoice:
+          data.requireInvoice !== undefined ? !!data.requireInvoice : undefined,
+        requireReceipt:
+          data.requireReceipt !== undefined ? !!data.requireReceipt : undefined,
+        requireQuotation:
+          data.requireQuotation !== undefined
+            ? !!data.requireQuotation
+            : undefined,
+        blockType: mappedBlockType,
         draftImages: data.draftImages, // Array of URLs
+        paymentMethod: data.paymentMethod || undefined,
+        flowType: mappedFlowType || undefined,
       };
 
-      // 3. Handle Specs/Embroidery (Reuse updateSpecs logic/fields)
-      if (data.embroideryDetails) {
+      if (data.paidAmount !== undefined) {
+        updateData.paidAmount = safeNumber(data.paidAmount);
+      }
+
+      if (isDirectSale) {
+        updateData.blockType = BlockType.OLD;
+        updateData.qaRequired = false;
+        updateData.qaApprovedAt = new Date();
+      } else if (
+        mappedFlowType === OrderFlowType.EMBROIDERY &&
+        currentOrder.flowType === OrderFlowType.DIRECT_SALE
+      ) {
+        updateData.qaRequired = true;
+        updateData.qaApprovedAt = null;
+      }
+
+      const nextRequireInvoice =
+        data.requireInvoice !== undefined
+          ? !!data.requireInvoice
+          : !!currentOrder.requireInvoice;
+      const nextRequireReceipt =
+        data.requireReceipt !== undefined
+          ? !!data.requireReceipt
+          : !!currentOrder.requireReceipt;
+      const nextRequireQuotation =
+        data.requireQuotation !== undefined
+          ? !!data.requireQuotation
+          : !!currentOrder.requireQuotation;
+      if (!nextRequireInvoice && !nextRequireReceipt && !nextRequireQuotation) {
+        updateData.billingCompletedAt = null;
+      }
+
+      // 3. Handle Specs/Embroidery
+      if (isDirectSale && mappedFlowType === OrderFlowType.DIRECT_SALE) {
+        await tx.orderEmbroideryPosition.deleteMany({
+          where: { orderId: orderIdInt },
+        });
+        updateData.embroideryDetails = [];
+      } else if (data.embroideryDetails) {
         // Clear old positions
         await tx.orderEmbroideryPosition.deleteMany({
           where: { orderId: orderIdInt },
@@ -1659,6 +2116,7 @@ class OrderService {
         // C. Process New Items (Copy logic from createOrder)
         let needsPurchasing = false;
         const purchaseRequestsData = [];
+        const touchedVariantIds = [];
 
         for (const item of data.items) {
           const variant = await tx.productVariant.findUnique({
@@ -1668,6 +2126,7 @@ class OrderService {
 
           if (!variant)
             throw new Error(`Product variant ${item.variantId} not found`);
+          touchedVariantIds.push(variant.id);
 
           const requestedQty = Math.max(0, parseInt(item.quantity) || 0);
 
@@ -1722,6 +2181,43 @@ class OrderService {
         updateData.totalPrice = safeNumber(data.totalPrice);
         updateData.balanceDue =
           safeNumber(data.totalPrice) - safeNumber(currentOrder.paidAmount);
+
+        await this.notifyLowStockVariants(tx, touchedVariantIds, orderIdInt);
+      }
+
+      const finalTotal = safeNumber(
+        updateData.totalPrice !== undefined
+          ? updateData.totalPrice
+          : currentOrder.totalPrice,
+      );
+      const finalPaid = safeNumber(
+        updateData.paidAmount !== undefined
+          ? updateData.paidAmount
+          : currentOrder.paidAmount,
+      );
+
+      if (isDirectSale && finalPaid < finalTotal) {
+        throw new Error("DIRECT_SALE_REQUIRES_FULL_PAYMENT");
+      }
+
+      updateData.totalPrice = finalTotal;
+      updateData.paidAmount = finalPaid;
+      updateData.balanceDue = Math.max(0, finalTotal - finalPaid);
+      updateData.paymentStatus = isDirectSale
+        ? PaymentStatus.PAID
+        : finalPaid >= finalTotal
+          ? PaymentStatus.PAID
+          : finalPaid > 0
+            ? PaymentStatus.PARTIALLY_PAID
+            : PaymentStatus.UNPAID;
+
+      if (
+        isDirectSale &&
+        [OrderStatus.PENDING_DIGITIZING, OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(
+          currentOrder.status,
+        )
+      ) {
+        updateData.status = OrderStatus.PENDING_STOCK_CHECK;
       }
 
       // 5. Commit Update
@@ -1744,6 +2240,112 @@ class OrderService {
     });
   }
 
+  async approveQA(orderId, user) {
+    const id = parseInt(orderId);
+    const order = await prisma.order.findUnique({ where: { id } });
+    if (!order) throw new Error("Order not found");
+    if (order.flowType === OrderFlowType.DIRECT_SALE) {
+      throw new Error("DIRECT_SALE_DOES_NOT_REQUIRE_QA");
+    }
+    if (![OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(order.status)) {
+      throw new Error("QA_APPROVAL_INVALID_STATUS");
+    }
+    if (!order.qaRequired) {
+      throw new Error("QA_NOT_REQUIRED");
+    }
+
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        qaApprovedAt: new Date(),
+        logs: {
+          create: {
+            action: "QA_APPROVED",
+            details: `QA approved by ${user.name}`,
+            userId: user.id,
+          },
+        },
+      },
+      include: this.getStandardInclude(),
+    });
+
+    return this.normalize(updated, user);
+  }
+
+  async markBillingCompleted(orderId, user, { reset = false } = {}) {
+    const id = parseInt(orderId);
+    const order = await prisma.order.findUnique({ where: { id } });
+    if (!order) throw new Error("Order not found");
+
+    const requiresBillingDoc =
+      !!order.requireInvoice || !!order.requireReceipt || !!order.requireQuotation;
+    if (!requiresBillingDoc && !reset) {
+      throw new Error("BILLING_DOCUMENT_NOT_REQUIRED");
+    }
+
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        billingCompletedAt: reset ? null : new Date(),
+        logs: {
+          create: {
+            action: reset ? "BILLING_MARK_RESET" : "BILLING_MARK_COMPLETED",
+            details: reset
+              ? `Billing mark reset by ${user.name}`
+              : `Billing documents completed by ${user.name}`,
+            userId: user.id,
+          },
+        },
+      },
+      include: this.getStandardInclude(),
+    });
+
+    return this.normalize(updated, user);
+  }
+
+  async updateStockSubstitution(orderId, note, user) {
+    const id = parseInt(orderId);
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        stockSubstitutionNote: note ? String(note).trim() : null,
+        logs: {
+          create: {
+            action: "STOCK_SUBSTITUTION_NOTE",
+            details: note
+              ? `Substitution note updated by ${user.name}: ${String(note).trim()}`
+              : `Substitution note cleared by ${user.name}`,
+            userId: user.id,
+          },
+        },
+      },
+      include: this.getStandardInclude(),
+    });
+    return this.normalize(updated, user);
+  }
+
+  async getProductionQueue(user) {
+    const orders = await prisma.order.findMany({
+      where: {
+        flowType: OrderFlowType.EMBROIDERY,
+        status: {
+          in: [
+            OrderStatus.STOCK_RECHECKED,
+            OrderStatus.IN_PRODUCTION,
+            OrderStatus.PRODUCTION_FINISHED,
+          ],
+        },
+      },
+      include: this.getStandardInclude(),
+      orderBy: [{ isUrgent: "desc" }, { createdAt: "asc" }],
+    });
+
+    return orders.map((order, index) => ({
+      ...this.normalize(order, user),
+      queueNo: index + 1,
+    }));
+  }
+
   async updateSpecs(orderId, specs, user) {
     const orderIdInt = parseInt(orderId);
 
@@ -1757,18 +2359,38 @@ class OrderService {
 
       if (!currentOrder) throw new Error("Order not found");
 
-      // 1. Update the Order model (for artworkUrl, productionFileUrl, etc.)
-      const { embroideryDetails, positions, ...otherSpecs } = specs;
+      // 1. Update the Order model.
+      // NOTE: productionFileUrl is intentionally ignored because it is not part
+      // of the current Prisma Order schema in this deployment line.
+      const {
+        embroideryDetails,
+        positions,
+        productionFileUrl,
+        embroideryFileUrls,
+        ...otherSpecs
+      } = specs;
+
+      // Backward-compatible support for clients that still send
+      // `embroideryFileUrls` at order-level. Persist latest file to legacy
+      // `embroideryFileUrl` field in Order model.
+      if (Array.isArray(embroideryFileUrls) && embroideryFileUrls.length > 0) {
+        otherSpecs.embroideryFileUrl =
+          embroideryFileUrls[embroideryFileUrls.length - 1];
+      }
 
       // --- S3 Cleanup (Main Order Files) ---
       if (otherSpecs.artworkUrl !== undefined) {
         await this.cleanupFile(currentOrder.artworkUrl, otherSpecs.artworkUrl);
       }
-      if (otherSpecs.productionFileUrl !== undefined) {
+      if (otherSpecs.embroideryFileUrl !== undefined) {
         await this.cleanupFile(
-          currentOrder.productionFileUrl,
-          otherSpecs.productionFileUrl,
+          currentOrder.embroideryFileUrl,
+          otherSpecs.embroideryFileUrl,
         );
+      }
+      // Keep backward-compatible input handling without writing unknown fields.
+      if (productionFileUrl !== undefined) {
+        void productionFileUrl;
       }
 
       const detailsToSync = embroideryDetails || positions;
@@ -1807,7 +2429,8 @@ class OrderService {
         // Validation: Mandatory Detail for "อื่นๆ"
         for (const pos of detailsToSync) {
           if (
-            (pos.position === "อื่นๆ" || pos.position === "อื่นๆ (Other)") &&
+            (pos.position === "อื่นๆ" ||
+              pos.position === "อื่นๆ (Other)") &&
             !(pos.details || pos.note || "").trim()
           ) {
             throw new Error(
@@ -1895,7 +2518,8 @@ class OrderService {
         digitizingCompletedAt: new Date(),
         logs: {
           create: {
-            action: "🧵 อัปโหลดไฟล์ตีลาย (.EMB)",
+            action:
+              "🧵 อัปโหลดไฟล์ตีลาย (.EMB)",
             details: `อัปโหลดไฟล์เรียบร้อยโดย ${user.name}. ส่งต่อให้ฝ่ายกราฟิก`,
             userId: user.id,
           },
@@ -2033,3 +2657,4 @@ class OrderService {
 }
 
 export default new OrderService();
+

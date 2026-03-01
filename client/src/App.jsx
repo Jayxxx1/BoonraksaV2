@@ -31,6 +31,8 @@ import ProductionSearch from "./pages/production/ProductionSearch";
 import ThreadColorReference from "./pages/production/ThreadColorReference";
 import ShiftReport from "./pages/production/ShiftReport";
 import QCMobileView from "./pages/production/QCMobileView";
+import ProductionTVDashboard from "./pages/production/ProductionTVDashboard";
+import MobileScanFlow from "./pages/production/MobileScanFlow";
 import DeliveryOrderDetail from "./pages/delivery/DeliveryOrderDetail";
 import DeliveryDashboard from "./pages/delivery/DeliveryDashboard";
 import FinanceMonitor from "./pages/executive/FinanceMonitor";
@@ -264,7 +266,29 @@ function App() {
                         path="/production/threads"
                         element={
                           <ProtectedRoute
-                            allowedRoles={["PRODUCTION", "GRAPHIC", "ADMIN"]}
+                            allowedRoles={[
+                              "PRODUCTION",
+                              "GRAPHIC",
+                              "DIGITIZER",
+                              "SEWING_QC",
+                              "ADMIN",
+                            ]}
+                          >
+                            <ThreadColorReference />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/threads"
+                        element={
+                          <ProtectedRoute
+                            allowedRoles={[
+                              "PRODUCTION",
+                              "GRAPHIC",
+                              "DIGITIZER",
+                              "SEWING_QC",
+                              "ADMIN",
+                            ]}
                           >
                             <ThreadColorReference />
                           </ProtectedRoute>
@@ -277,6 +301,37 @@ function App() {
                             allowedRoles={["ADMIN", "EXECUTIVE", "PRODUCTION"]}
                           >
                             <ShiftReport />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/production/tv"
+                        element={
+                          <ProtectedRoute
+                            allowedRoles={[
+                              "ADMIN",
+                              "EXECUTIVE",
+                              "PRODUCTION",
+                              "SEWING_QC",
+                            ]}
+                          >
+                            <ProductionTVDashboard />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/scan"
+                        element={
+                          <ProtectedRoute
+                            allowedRoles={[
+                              "ADMIN",
+                              "PRODUCTION",
+                              "SEWING_QC",
+                              "STOCK",
+                              "DELIVERY",
+                            ]}
+                          >
+                            <MobileScanFlow />
                           </ProtectedRoute>
                         }
                       />

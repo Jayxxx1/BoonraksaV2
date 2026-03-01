@@ -11,7 +11,23 @@ const router = express.Router();
  */
 router.post(
   "/",
-  upload.single("file"),
+  (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (!err) return next();
+
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({
+          success: false,
+          message: "File too large. Maximum size is 15MB.",
+        });
+      }
+
+      return res.status(err.statusCode || 400).json({
+        success: false,
+        message: err.message || "File upload failed",
+      });
+    });
+  },
   asyncHandler(async (req, res) => {
     if (!req.file) {
       return res

@@ -4,6 +4,8 @@ import SearchableSelect from "../../../../components/SearchableSelect"; // Adjus
 import DateInput from "../../../../components/Common/DateInput";
 
 const OrderInfoSection = ({ orderInfo, setOrderInfo, facebookPages }) => {
+  const flowType = orderInfo.flowType || "EMBROIDERY";
+
   return (
     <div className="erp-card shadow-sm">
       <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center gap-2">
@@ -11,6 +13,43 @@ const OrderInfoSection = ({ orderInfo, setOrderInfo, facebookPages }) => {
         <h3 className="font-bold text-slate-800 text-sm">ข้อมูลคำสั่งซื้อ</h3>
       </div>
       <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="md:col-span-2">
+          <label className="erp-label mb-2 block">Flow Type</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setOrderInfo({
+                  ...orderInfo,
+                  flowType: "EMBROIDERY",
+                })
+              }
+              className={`text-left rounded-xl border px-3 py-2 transition-all ${flowType === "EMBROIDERY" ? "border-indigo-500 bg-indigo-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+            >
+              <p className="text-sm font-black text-slate-900">งานปัก</p>
+              <p className="text-[11px] font-semibold text-slate-500">
+                เช่นเสื้อช็อปงานปัก
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setOrderInfo({
+                  ...orderInfo,
+                  flowType: "DIRECT_SALE",
+                  blockType: "OLD",
+                })
+              }
+              className={`text-left rounded-xl border px-3 py-2 transition-all ${flowType === "DIRECT_SALE" ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+            >
+              <p className="text-sm font-black text-slate-900">งานซื้อมาขายไป</p>
+              <p className="text-[11px] font-semibold text-slate-500">
+               เช่นงานพิมพ์ลาย อสม. หรืองานพิมพ์ลายอื่น ๆ ที่ไม่มีการปัก
+              </p>
+            </button>
+          </div>
+        </div>
+
         {/* Sales Channel */}
         <div className="space-y-1">
           <label className="erp-label">ช่องทางขาย / เพจ Facebook</label>

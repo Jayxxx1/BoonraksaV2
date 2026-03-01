@@ -92,6 +92,9 @@ export const upload = multer({
       "image/webp",
       "application/pdf",
       "application/octet-stream", // Common for binary files like DST
+      "binary/octet-stream",
+      "application/x-msdownload",
+      "application/x-embroidery",
     ];
 
     const allowedExtensions = [
@@ -113,11 +116,11 @@ export const upload = multer({
     ) {
       cb(null, true);
     } else {
-      cb(
-        new Error(
-          `Invalid file type. Only images, PDFs, and production files (.dst, .pes) are allowed.`,
-        ),
+      const err = new Error(
+        "Invalid file type. Allowed: images, PDF, and embroidery files (.dst, .pes, .emb).",
       );
+      err.statusCode = 400;
+      cb(err);
     }
   },
 });

@@ -54,6 +54,12 @@ const OrderDetail = () => {
   const [urgentNote, setUrgentNote] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [trackingNo, setTrackingNo] = useState("");
+  const [billingForm, setBillingForm] = useState({
+    requireInvoice: false,
+    requireReceipt: false,
+    requireQuotation: false,
+  });
+  const [stockSubstitutionNote, setStockSubstitutionNote] = useState("");
 
   // Rejection/Fail states
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -111,6 +117,12 @@ const OrderDetail = () => {
         const fetchedOrder = res.data.data.order;
         setOrder(fetchedOrder);
         setEditSpecs(fetchedOrder.positions || []);
+        setBillingForm({
+          requireInvoice: !!fetchedOrder.requireInvoice,
+          requireReceipt: !!fetchedOrder.requireReceipt,
+          requireQuotation: !!fetchedOrder.requireQuotation,
+        });
+        setStockSubstitutionNote(fetchedOrder.stockSubstitutionNote || "");
       }
     } catch (err) {
       console.error(err);
@@ -187,6 +199,7 @@ const OrderDetail = () => {
   const executeStatusUpdate = async (endpoint, payload = {}) => {
     try {
       setIsUpdating(true);
+      const requestPayload = { ...(payload || {}) };
 
       let mappedEndpoint = endpoint;
       if (endpoint === "PENDING_STOCK_CHECK") mappedEndpoint = "print-signal";
@@ -196,11 +209,19 @@ const OrderDetail = () => {
         else mappedEndpoint = "production-finish";
       } else if (endpoint === "READY_TO_SHIP") mappedEndpoint = "ready-to-ship";
       else if (endpoint === "COMPLETED") mappedEndpoint = "complete";
-      else if (endpoint === "DIGITIZING_FINISHED")
+      else if (endpoint === "DIGITIZING_FINISHED") {
         mappedEndpoint = "embroidery";
+        if (!requestPayload.embroideryFileUrl && order?.embroideryFileUrl) {
+          requestPayload.embroideryFileUrl = order.embroideryFileUrl;
+        }
+        if (!requestPayload.embroideryFileUrl) {
+          alert("กรุณาอัปโหลดไฟล์ .emb ก่อนส่งมอบงาน");
+          return;
+        }
+      }
       // cancel and urgent already match backend routes
 
-      await api.patch(`/orders/${orderId}/${mappedEndpoint}`, payload);
+      await api.patch(`/orders/${orderId}/${mappedEndpoint}`, requestPayload);
       await fetchOrder();
     } catch (err) {
       alert(err.response?.data?.message || "Update failed");
@@ -326,6 +347,63 @@ const OrderDetail = () => {
     }
   };
 
+  const handleQaApprove = async () => {
+    try {
+      setIsUpdating(true);
+      await api.patch(`/orders/${orderId}/qa-approve`);
+      await fetchOrder();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to approve QA");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleMarkBillingCompleted = async (reset = false) => {
+    try {
+      setIsUpdating(true);
+      await api.patch(`/orders/${orderId}/billing-complete`, { reset });
+      await fetchOrder();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to update billing status");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleSaveBillingIndicator = async () => {
+    try {
+      setIsUpdating(true);
+      await api.put(`/orders/${orderId}`, {
+        requireInvoice: !!billingForm.requireInvoice,
+        requireReceipt: !!billingForm.requireReceipt,
+        requireQuotation: !!billingForm.requireQuotation,
+      });
+
+      await fetchOrder();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to update billing indicator");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleSaveStockSubstitutionNote = async () => {
+    try {
+      setIsUpdating(true);
+      await api.patch(`/orders/${orderId}/stock-substitution`, {
+        note: stockSubstitutionNote,
+      });
+      await fetchOrder();
+    } catch (err) {
+      alert(
+        err.response?.data?.message || "Failed to update stock substitution note",
+      );
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleUpdateBuffer = async () => {
     try {
       setIsUpdating(true);
@@ -446,35 +524,31 @@ const OrderDetail = () => {
   };
 
   const handleFileUpload = async (e, type) => {
-    // 1. Multiple files for global embroidery
+    // 1. Single global EMB file (Digitizer flow)
     if (type === "embroideryGlobal") {
-      const files = Array.from(e.target.files);
-      if (!files.length) return;
+      const file = e.target.files?.[0];
+      if (!file) return;
       try {
         setUploadingField(type);
-        const uploadedUrls = [];
-        for (const file of files) {
-          const formData = new FormData();
-          formData.append("file", file);
-          const uploadRes = await api.post(
-            `/upload?folder=embroidery`,
-            formData,
-            {
-              headers: { "Content-Type": "multipart/form-data" },
-            },
-          );
-          uploadedUrls.push(uploadRes.data.data.url);
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const uploadRes = await api.post(`/upload?folder=embroidery`, formData);
+        const uploadedUrl = uploadRes?.data?.data?.url;
+        if (!uploadedUrl) {
+          throw new Error("ไม่พบ URL ไฟล์ที่อัปโหลด");
         }
-        const currentUrls = order.embroideryFileUrls || [];
-        const payload = {
-          embroideryFileUrls: [...currentUrls, ...uploadedUrls],
-        };
-        await api.patch(`/orders/${orderId}/specs`, payload);
+
+        // Save file URL first without changing order status yet.
+        await api.patch(`/orders/${orderId}/specs`, {
+          embroideryFileUrl: uploadedUrl,
+        });
         await fetchOrder();
-      } catch {
-        alert("File upload failed");
+      } catch (err) {
+        alert(err.response?.data?.message || "อัปโหลดไฟล์ .emb ไม่สำเร็จ");
       } finally {
         setUploadingField(null);
+        if (e?.target) e.target.value = "";
       }
       return;
     }
@@ -948,6 +1022,8 @@ const OrderDetail = () => {
           isUpdating={isUpdating}
           handleUpdateStatus={handleUpdateStatus}
           handleClaim={handleClaim}
+          handleQaApprove={handleQaApprove}
+          handleMarkBillingCompleted={handleMarkBillingCompleted}
           setShowUrgentModal={setShowUrgentModal}
           setShowCancelModal={setShowCancelModal}
           setShowStockIssueModal={setShowStockIssueModal}
@@ -972,6 +1048,110 @@ const OrderDetail = () => {
       <div className="max-w-7xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <OrderInfoCards order={order} />
+
+          {(order.actionMap?.canEditBillingIndicator ||
+            order.requireInvoice ||
+            order.requireReceipt ||
+            order.requireQuotation) && (
+            <div className="erp-card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                  Billing Indicator / เอกสารบัญชี
+                </h3>
+                {order.billingCompletedAt ? (
+                  <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-1 rounded">
+                    Completed
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-1 rounded">
+                    Pending
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={!!billingForm.requireInvoice}
+                    disabled={!order.actionMap?.canEditBillingIndicator}
+                    onChange={(e) =>
+                      setBillingForm((prev) => ({
+                        ...prev,
+                        requireInvoice: e.target.checked,
+                      }))
+                    }
+                  />
+                  ใบกำกับภาษี (Tax Invoice)
+                </label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={!!billingForm.requireReceipt}
+                    disabled={!order.actionMap?.canEditBillingIndicator}
+                    onChange={(e) =>
+                      setBillingForm((prev) => ({
+                        ...prev,
+                        requireReceipt: e.target.checked,
+                      }))
+                    }
+                  />
+                  ใบเสร็จรับเงิน (Receipt)
+                </label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={!!billingForm.requireQuotation}
+                    disabled={!order.actionMap?.canEditBillingIndicator}
+                    onChange={(e) =>
+                      setBillingForm((prev) => ({
+                        ...prev,
+                        requireQuotation: e.target.checked,
+                      }))
+                    }
+                  />
+                  ใบเสนอราคา (Quotation)
+                </label>
+              </div>
+
+              {order.actionMap?.canEditBillingIndicator && (
+                <button
+                  onClick={handleSaveBillingIndicator}
+                  disabled={isUpdating}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  Save Billing Indicator
+                </button>
+              )}
+            </div>
+          )}
+
+          {(isStockRole || isAdmin || !!order.stockSubstitutionNote) && (
+            <div className="erp-card p-5">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-3">
+                Stock Substitution Note
+              </h3>
+              <textarea
+                value={stockSubstitutionNote}
+                onChange={(e) => setStockSubstitutionNote(e.target.value)}
+                disabled={!(isStockRole || isAdmin)}
+                className="w-full min-h-[90px] rounded-xl border border-slate-200 p-3 text-sm font-medium text-slate-700 bg-white disabled:bg-slate-50"
+                placeholder="Optional note: substitute XL for L, reason and source."
+              />
+              {(isStockRole || isAdmin) && (
+                <button
+                  onClick={handleSaveStockSubstitutionNote}
+                  disabled={isUpdating}
+                  className="mt-3 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black hover:bg-slate-800 disabled:opacity-60"
+                >
+                  Save Substitution Note
+                </button>
+              )}
+            </div>
+          )}
 
           {order.actionMap?.canViewPreorder && order.hasPreorder && (
             <div

@@ -57,11 +57,11 @@ const EmbroiderySection = ({
               }
               className="erp-input py-1 px-2 text-[11px] font-bold bg-amber-50 border-amber-200 text-amber-900"
             >
-              <option value="บล็อคเดิม">บล็อคเดิม (Old)</option>
-              <option value="บล็อคเดิมเปลี่ยนข้อความ">
+              <option value="OLD">บล็อคเดิม (Old)</option>
+              <option value="EDIT">
                 บล็อคเดิมเปลี่ยนชื่อ (Edit)
               </option>
-              <option value="บล็อคใหม่">บล็อคใหม่ (+250฿)</option>
+              <option value="NEW">บล็อคใหม่ (+250฿)</option>
             </select>
           </div>
         </div>
@@ -161,7 +161,7 @@ const EmbroiderySection = ({
                   <>
                     <div className="space-y-3">
                       {/* Block Logic */}
-                      {orderInfo.blockType === "บล็อคใหม่" ? (
+                      {orderInfo.blockType === "NEW" ? (
                         <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
                           <div className="text-[10px] text-slate-500">
                             ระบุรายละเอียดหรืออัปโหลดไฟล์โลโก้
@@ -186,7 +186,7 @@ const EmbroiderySection = ({
                               setEmbroidery(n);
                             }}
                             placeholder={
-                              orderInfo.blockType === "บล็อคเดิมเปลี่ยนข้อความ"
+                              orderInfo.blockType === "EDIT"
                                 ? "ค้นหาบล็อคเดิมที่ต้องการแก้..."
                                 : "ค้นหาบล็อคเดิม..."
                             }
@@ -196,7 +196,8 @@ const EmbroiderySection = ({
                             className="!py-1.5"
                           />
                           <div className="flex justify-between items-start">
-                            {orderInfo.blockType?.includes("บล็อคเดิม") && (
+                            {(orderInfo.blockType === "OLD" ||
+                              orderInfo.blockType === "EDIT") && (
                               <button
                                 type="button"
                                 onClick={() => fetchCustomerBlocks()}
@@ -205,7 +206,7 @@ const EmbroiderySection = ({
                                 ดึงประวัติบล็อคเก่า (จากเบอร์/ชื่อ)
                               </button>
                             )}
-                            {orderInfo.blockType === "บล็อคเดิม" && (
+                            {orderInfo.blockType === "OLD" && (
                               <button
                                 type="button"
                                 onClick={() => {

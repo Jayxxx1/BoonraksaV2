@@ -3,6 +3,7 @@ import {
   StatusLabels,
   RoleLabels,
   PreorderStatusLabels,
+  OrderFlowTypeLabels,
 } from "../orders/order.constants.js";
 
 export const getMasterPositions = async (req, res) => {
@@ -42,6 +43,7 @@ export const getMasterConstants = async (req, res) => {
         statusLabels: StatusLabels,
         roleLabels: RoleLabels,
         preorderLabels: PreorderStatusLabels,
+        flowTypeLabels: OrderFlowTypeLabels,
       },
     });
   } catch (error) {

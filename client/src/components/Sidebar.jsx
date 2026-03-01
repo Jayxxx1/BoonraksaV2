@@ -14,7 +14,9 @@ import {
   HiOutlineChevronLeft,
   HiOutlineChevronRight,
   HiOutlineMagnifyingGlass,
+  HiOutlineQrCode,
   HiOutlineSwatch,
+  HiOutlineTv,
   HiOutlineDocumentText,
 } from "react-icons/hi2";
 import { useState } from "react";
@@ -170,18 +172,36 @@ export default function Sidebar({
           icon: HiOutlineMagnifyingGlass,
           roles: ["PRODUCTION", "ADMIN", "FOREMAN"],
         },
+        {
+          to: "/production/tv",
+          label: "Production TV",
+          icon: HiOutlineTv,
+          roles: ["PRODUCTION", "SEWING_QC", "ADMIN", "EXECUTIVE"],
+        },
+        {
+          to: "/scan",
+          label: "Scan Flow",
+          icon: HiOutlineQrCode,
+          roles: ["PRODUCTION", "SEWING_QC", "STOCK", "DELIVERY", "ADMIN"],
+        },
+        {
+          to: "/threads",
+          label: "Thread Colors",
+          icon: HiOutlineSwatch,
+          roles: ["PRODUCTION", "ADMIN", "GRAPHIC", "DIGITIZER", "SEWING_QC"],
+        },
         // {
         //   to: "/production/threads",
         //   label: "ค้นหาสีด้าย",
         //   icon: HiOutlineSwatch,
         //   roles: ["PRODUCTION", "ADMIN", "GRAPHIC"],
         // },
-        // {
-        //   to: "/production/shift-report",
-        //   label: "สรุปยอดการผลิต (Shift)",
-        //   icon: HiOutlineDocumentText,
-        //   roles: ["ADMIN", "EXECUTIVE", "PRODUCTION"],
-        // },
+        {
+          to: "/production/shift-report",
+          label: "สรุปยอดการผลิต (Shift)",
+          icon: HiOutlineDocumentText,
+          roles: ["ADMIN", "EXECUTIVE", "PRODUCTION"],
+        },
         {
           to: "/qc",
           label: "งานตรวจสอบ (QC)",

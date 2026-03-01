@@ -18,6 +18,7 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import masterRoutes from "./modules/master/master.routes.js";
 import { getCategories } from "./controllers/productController.js";
+import { protect } from "./src/middleware/auth.middleware.js";
 
 console.log("🎬 Booting server...");
 
@@ -93,7 +94,7 @@ if (config.NODE_ENV === "development") {
   app.use("/uploads", express.static("uploads"));
 }
 
-app.get("/api/categories", getCategories);
+app.get("/api/categories", protect, getCategories);
 
 // --- 404 & Error Handling ---
 

@@ -1,4 +1,10 @@
-import { OrderStatus, UserRole, PaymentStatus } from "./order.constants.js";
+import {
+  OrderStatus,
+  UserRole,
+  PaymentStatus,
+  PreorderStatus,
+  OrderFlowType,
+} from "./order.constants.js";
 
 /**
  * Centralized Permission Engine for Orders
@@ -26,13 +32,21 @@ export const getOrderActionMap = (order, user) => {
 
   // Pre-order restrictions for Sales (HARD RULE)
   const isPreorderPending =
-    order.hasPreorder && order.preorderSubStatus !== PreorderStatus.ARRIVED;
+    order.preorderSubStatus &&
+    order.preorderSubStatus !== PreorderStatus.NONE &&
+    order.preorderSubStatus !== PreorderStatus.ARRIVED;
   const isRestrictiveSales = role === UserRole.SALES && isPreorderPending;
+  const isDirectSale = order.flowType === OrderFlowType.DIRECT_SALE;
+  const requiresBillingDoc =
+    !!order.requireInvoice || !!order.requireReceipt || !!order.requireQuotation;
+  const billingReady = !requiresBillingDoc || !!order.billingCompletedAt;
+  const qaBlocked = !!order.qaRequired && !order.qaApprovedAt;
 
   return {
     // General Actions
     canView: true,
     canEditSpecs:
+      !isDirectSale &&
       (isAdmin || role === UserRole.GRAPHIC) &&
       [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status),
     canCancel:
@@ -74,13 +88,22 @@ export const getOrderActionMap = (order, user) => {
 
     // Graphic Actions
     canUploadArtwork:
+      !isDirectSale &&
       (isAdmin ||
         (role === UserRole.GRAPHIC && (isClaimedByMe || !order.graphicId))) &&
       [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status),
 
-    canSendToStock:
+    canQaApprove:
+      !isDirectSale &&
       (isAdmin || (role === UserRole.GRAPHIC && isClaimedByMe)) &&
-      [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status),
+      [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status) &&
+      qaBlocked,
+
+    canSendToStock:
+      !isDirectSale &&
+      (isAdmin || (role === UserRole.GRAPHIC && isClaimedByMe)) &&
+      [OrderStatus.PENDING_ARTWORK, OrderStatus.DESIGNING].includes(status) &&
+      !qaBlocked,
 
     // Digitizer Actions
     canUploadEmbroidery:
@@ -106,10 +129,12 @@ export const getOrderActionMap = (order, user) => {
 
     // Production Actions
     canStartProduction:
+      !isDirectSale &&
       (isAdmin || (role === UserRole.PRODUCTION && isClaimedByMe)) &&
       status === OrderStatus.STOCK_RECHECKED,
 
     canFinishProduction:
+      !isDirectSale &&
       (isAdmin ||
         (role === UserRole.PRODUCTION &&
           (isClaimedByMe || order.productionId === user.id))) &&
@@ -117,21 +142,35 @@ export const getOrderActionMap = (order, user) => {
 
     // QC Actions
     canPassQC:
+      !isDirectSale &&
       (isAdmin || (role === UserRole.SEWING_QC && isClaimedByMe)) &&
       status === OrderStatus.PRODUCTION_FINISHED,
 
     canFailQC:
+      !isDirectSale &&
       (isAdmin || (role === UserRole.SEWING_QC && isClaimedByMe)) &&
       status === OrderStatus.PRODUCTION_FINISHED,
 
     // Delivery Actions
     canReceiveForShip:
       (isAdmin || role === UserRole.DELIVERY) &&
-      status === OrderStatus.QC_PASSED,
+      (status === OrderStatus.QC_PASSED ||
+        (isDirectSale && status === OrderStatus.STOCK_RECHECKED)),
     canShip:
       (isAdmin || role === UserRole.DELIVERY) &&
       status === OrderStatus.READY_TO_SHIP &&
-      order.paymentStatus === PaymentStatus.PAID,
+      order.paymentStatus === PaymentStatus.PAID &&
+      billingReady,
+    canEditBillingIndicator: isAdmin || role === UserRole.SALES,
+    canMarkBillingCompleted:
+      (isAdmin || role === UserRole.DELIVERY) &&
+      requiresBillingDoc &&
+      !order.billingCompletedAt &&
+      [
+        OrderStatus.STOCK_RECHECKED,
+        OrderStatus.QC_PASSED,
+        OrderStatus.READY_TO_SHIP,
+      ].includes(status),
 
     // Financial Actions
     canUploadSlip:

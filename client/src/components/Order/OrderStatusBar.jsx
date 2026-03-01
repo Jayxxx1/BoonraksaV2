@@ -16,6 +16,8 @@ const OrderStatusBar = ({
   isUpdating,
   handleUpdateStatus,
   handleClaim,
+  handleQaApprove,
+  handleMarkBillingCompleted,
   setShowUrgentModal,
   setShowCancelModal,
   setShowStockIssueModal,
@@ -32,6 +34,9 @@ const OrderStatusBar = ({
   const isStockRole = user?.role === "STOCK";
   const isProductionRole = user?.role === "PRODUCTION";
   const isQCRole = user?.role === "SEWING_QC";
+  const requiresBillingDoc =
+    !!order.requireInvoice || !!order.requireReceipt || !!order.requireQuotation;
+  const billingDone = !!order.billingCompletedAt;
 
   return (
     <div
@@ -96,6 +101,17 @@ const OrderStatusBar = ({
 
       <div className="flex flex-wrap gap-2 justify-center">
         {/* SALES ACTIONS */}
+        {order.actionMap?.canClaim && (
+          <button
+            onClick={handleClaim}
+            className="erp-button erp-button-primary flex items-center gap-1.5 py-2 px-4 shadow-sm"
+            disabled={isUpdating}
+          >
+            <HiOutlineArrowRightCircle className="w-4 h-4" />
+            Claim Task
+          </button>
+        )}
+
         {order.actionMap?.canMarkUrgent && (
           <button
             onClick={() => setShowUrgentModal(true)}
@@ -119,6 +135,17 @@ const OrderStatusBar = ({
         )}
 
         {/* GRAPHIC ACTIONS */}
+        {order.actionMap?.canQaApprove && (
+          <button
+            onClick={handleQaApprove}
+            className="erp-button bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 flex items-center gap-1.5 py-2 px-4 shadow-sm"
+            disabled={isUpdating}
+          >
+            <HiOutlineCheckCircle className="w-4 h-4" />
+            QA Approve
+          </button>
+        )}
+
         {order.actionMap?.canSendToStock && (
           <button
             onClick={() => handleUpdateStatus("PENDING_STOCK_CHECK")}
@@ -262,6 +289,17 @@ const OrderStatusBar = ({
         {/* DELIVERY ACTIONS */}
         {(order.actionMap?.canReceiveForShip || order.actionMap?.canShip) && (
           <div className="flex flex-col gap-3 items-center w-full">
+            {order.actionMap?.canMarkBillingCompleted && (
+              <button
+                onClick={() => handleMarkBillingCompleted()}
+                className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold border border-indigo-100 hover:bg-indigo-100 transition-all text-xs flex items-center gap-1.5"
+                disabled={isUpdating}
+              >
+                <HiOutlineCheckCircle className="w-4 h-4" />
+                Mark Billing Documents Completed
+              </button>
+            )}
+
             {order.actionMap?.canReceiveForShip && (
               <div className="flex flex-col gap-3 items-center w-full max-w-xs">
                 <button
@@ -315,6 +353,25 @@ const OrderStatusBar = ({
                     <p className="text-xs font-medium opacity-90">
                       ห้ามจัดส่งจนกว่าจะชำระครบ (ค้าง{" "}
                       {parseFloat(order.balanceDue).toLocaleString()}฿)
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {!order.actionMap?.canShip &&
+              order.status === "READY_TO_SHIP" &&
+              parseFloat(order.balanceDue || 0) <= 0 &&
+              requiresBillingDoc &&
+              !billingDone && (
+                <div className="bg-indigo-500/90 text-white p-4 rounded-2xl flex items-center gap-3 shadow-lg w-full max-w-md">
+                  <HiOutlineExclamationCircle className="w-8 h-8 shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-black text-sm uppercase">
+                      Billing documents are pending
+                    </p>
+                    <p className="text-xs font-medium opacity-90">
+                      Complete invoice/receipt/quotation documents before
+                      shipping.
                     </p>
                   </div>
                 </div>

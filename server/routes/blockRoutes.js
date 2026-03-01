@@ -1,12 +1,27 @@
-
-import express from 'express';
-import { searchCustomerBlocks } from '../controllers/blockController.js'; // Adjust based on where you put it
-import { protect } from '../src/middleware/auth.middleware.js';
+import express from "express";
+import {
+  searchCustomerBlocks,
+  listBlocks,
+  linkBlockToOrder,
+  updateBlock,
+} from "../controllers/blockController.js";
+import { protect, restrictTo } from "../src/middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// Search blocks used by a customer
-router.get('/customer-search', protect, searchCustomerBlocks);
+router.use(protect);
 
-// ... potentially other block routes if they exist, or just export this one
+router.get("/", listBlocks);
+router.get("/customer-search", searchCustomerBlocks);
+router.post(
+  "/link/:orderId/:blockId",
+  restrictTo("ADMIN", "SUPER_ADMIN", "SALES", "GRAPHIC"),
+  linkBlockToOrder,
+);
+router.patch(
+  "/:id",
+  restrictTo("ADMIN", "SUPER_ADMIN", "SALES", "GRAPHIC"),
+  updateBlock,
+);
+
 export default router;

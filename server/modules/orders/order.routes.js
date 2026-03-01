@@ -15,6 +15,28 @@ router
 router.route("/channels").get(orderController.getSalesChannels);
 
 router.route("/search/:jobId").get(orderController.searchOrderByJobId);
+router
+  .route("/production-queue")
+  .get(
+    restrictTo("ADMIN", "SUPER_ADMIN", "PRODUCTION", "SEWING_QC"),
+    orderController.getProductionQueue,
+  );
+router
+  .route("/stock-reservations/upsert")
+  .post(
+    restrictTo("ADMIN", "SUPER_ADMIN", "SALES", "MARKETING"),
+    orderController.upsertStockReservation,
+  );
+router
+  .route("/stock-reservations/:sessionId")
+  .get(
+    restrictTo("ADMIN", "SUPER_ADMIN", "SALES", "MARKETING"),
+    orderController.getStockReservation,
+  )
+  .delete(
+    restrictTo("ADMIN", "SUPER_ADMIN", "SALES", "MARKETING"),
+    orderController.releaseStockReservation,
+  );
 
 // Status-based Aliases (Compatibility with OrderStatusBar.jsx)
 router
@@ -40,9 +62,44 @@ router.route("/:id/production-finish").patch(orderController.finishProduction);
 router.route("/:id/qc-pass").patch(orderController.passQC);
 router.route("/:id/ready-to-ship").patch(orderController.readyToShip);
 router.route("/:id/complete").patch(orderController.completeOrder);
+router
+  .route("/:id/qa-approve")
+  .patch(restrictTo("ADMIN", "SUPER_ADMIN", "GRAPHIC"), orderController.approveQA);
+router
+  .route("/:id/billing-complete")
+  .patch(
+    restrictTo("ADMIN", "SUPER_ADMIN", "DELIVERY"),
+    orderController.markBillingCompleted,
+  );
+router
+  .route("/:id/stock-substitution")
+  .patch(
+    restrictTo("ADMIN", "SUPER_ADMIN", "STOCK"),
+    orderController.updateStockSubstitution,
+  );
 
 router.route("/:id/cancel").patch(orderController.cancelOrder);
 router.route("/:id/urgent").patch(orderController.bumpUrgent);
+router
+  .route("/:id/reject")
+  .patch(
+    restrictTo(
+      "ADMIN",
+      "SUPER_ADMIN",
+      "GRAPHIC",
+      "PRODUCTION",
+      "SEWING_QC",
+      "STOCK",
+      "DIGITIZER",
+    ),
+    orderController.rejectOrder,
+  );
+router
+  .route("/:id/sla-buffer")
+  .patch(
+    restrictTo("ADMIN", "SUPER_ADMIN", "EXECUTIVE"),
+    orderController.updateOrderSLABuffer,
+  );
 router.route("/:id/purchasing").patch(orderController.updatePurchasingInfo);
 router.route("/:id/embroidery").patch(orderController.uploadEmbroidery);
 router
@@ -78,6 +135,6 @@ router
 router
   .route("/:id")
   .get(orderController.getOrder)
-  .put(restrictTo("ADMIN", "SALES"), orderController.updateOrder);
+  .put(restrictTo("ADMIN", "SALES", "MARKETING"), orderController.updateOrder);
 
 export default router;

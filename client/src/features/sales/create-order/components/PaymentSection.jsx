@@ -19,6 +19,13 @@ const PaymentSection = ({
   isUploadingSlip,
   paymentMethod,
   setPaymentMethod,
+  isDirectSale = false,
+  requireInvoice,
+  setRequireInvoice,
+  requireReceipt,
+  setRequireReceipt,
+  requireQuotation,
+  setRequireQuotation,
 }) => {
   const handlePaste = (e, uploadType) => {
     const items = e.clipboardData.items;
@@ -116,6 +123,41 @@ const PaymentSection = ({
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-tighter mb-2">
+                เอกสารบัญชี (Billing Documents)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={!!requireInvoice}
+                    onChange={(e) => setRequireInvoice(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  ใบกำกับภาษี (Tax Invoice)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={!!requireReceipt}
+                    onChange={(e) => setRequireReceipt(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  ใบเสร็จรับเงิน (Receipt)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={!!requireQuotation}
+                    onChange={(e) => setRequireQuotation(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  ใบเสนอราคา (Quotation)
+                </label>
+              </div>
+            </div>
+
             {/* Payment Method Selector */}
             <div className="md:col-span-2 flex items-center justify-between bg-slate-100 p-3 rounded-lg border border-slate-200">
               <span className="text-xs font-bold text-slate-600 uppercase tracking-tighter">
@@ -167,7 +209,9 @@ const PaymentSection = ({
             )}
 
             <div className="space-y-1">
-              <label className="erp-label">มัดจำ *</label>
+              <label className="erp-label">
+                {isDirectSale ? "ยอดชำระรวม *" : "มัดจำ *"}
+              </label>
               <input
                 type="number"
                 value={paidAmount}
@@ -178,8 +222,10 @@ const PaymentSection = ({
                 className="erp-input py-2 text-lg font-black text-emerald-600 bg-emerald-50"
               />
               <p className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-tighter">
-                ขั้นต่ำที่แนะนำ (50%): ฿
-                {Math.round(totals.finalTotal * 0.5).toLocaleString()}
+                {isDirectSale ? "Direct sale requires full payment: ฿" : "ขั้นต่ำที่แนะนำ (50%): ฿"}
+                {Math.round(
+                  isDirectSale ? totals.finalTotal : totals.finalTotal * 0.5,
+                ).toLocaleString()}
               </p>
             </div>
             <div className="space-y-1">

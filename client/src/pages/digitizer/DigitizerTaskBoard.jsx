@@ -167,9 +167,9 @@ export default function DigitizerTaskBoard() {
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       สถานะ
                     </th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {/* <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       ผู้รับผิดชอบ
-                    </th>
+                    </th> */}
                     <th className="px-4 py-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       จัดการ
                     </th>
@@ -258,7 +258,7 @@ export default function DigitizerTaskBoard() {
                                     : "รับงาน"}
                                 </button>
                               )}
-                            {order.status === "DESIGNING" &&
+                            {order.status === "PENDING_DIGITIZING" &&
                               order.digitizer?.id === user?.id && (
                                 <button
                                   onClick={() => finishTask(order.id)}

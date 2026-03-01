@@ -53,7 +53,8 @@ const EditOrder = () => {
     dueDate: "",
     notes: "",
     purchaseOrder: "",
-    blockType: "บล็อคเดิม",
+    blockType: "OLD",
+    flowType: "EMBROIDERY",
   });
 
   const [products, setProducts] = useState([]);
@@ -62,6 +63,9 @@ const EditOrder = () => {
   const [paidAmount, setPaidAmount] = useState("");
   const [depositSlipUrl, setDepositSlipUrl] = useState("");
   const [isUploadingSlip, setIsUploadingSlip] = useState(false);
+  const [requireInvoice, setRequireInvoice] = useState(false);
+  const [requireReceipt, setRequireReceipt] = useState(false);
+  const [requireQuotation, setRequireQuotation] = useState(false);
 
   const [facebookPages, setFacebookPages] = useState([]);
 
@@ -146,14 +150,6 @@ const EditOrder = () => {
           customerFb: order.customerFb,
           taxInbox: order.taxInbox || "",
         });
-
-        // Map block type back
-        const revBlockMap = {
-          OLD: "บล็อคเดิม",
-          EDIT: "บล็อคเดิมเปลี่ยนข้อความ",
-          NEW: "บล็อคใหม่",
-        };
-
         setOrderInfo({
           salesChannelId: order.salesChannelId?.toString() || "",
           isUrgent: !!order.isUrgent,
@@ -162,7 +158,8 @@ const EditOrder = () => {
             : "",
           notes: order.notes,
           purchaseOrder: order.purchaseOrder || "",
-          blockType: revBlockMap[order.blockType] || "บล็อคเดิม",
+          blockType: order.blockType || "OLD",
+          flowType: order.flowType || "EMBROIDERY",
         });
 
         // Populate Embroidery
@@ -199,6 +196,10 @@ const EditOrder = () => {
           setDepositSlipUrl(order.paymentSlips[0].slipUrl);
         }
         setDraftImages(order.draftImages || []);
+        setRequireInvoice(!!order.requireInvoice);
+        setRequireReceipt(!!order.requireReceipt);
+        setRequireQuotation(!!order.requireQuotation);
+        setPaymentMethod(order.paymentMethod || "TRANSFER");
 
         // Populate Products/Matrix
         if (order.items && order.items.length > 0) {
@@ -418,7 +419,7 @@ const EditOrder = () => {
         position: "อกซ้าย",
         customPosition: "",
         blockId: "",
-        blockType: "บล็อคเดิม",
+        blockType: "OLD",
         width: "",
         height: "",
         note: "",
@@ -501,6 +502,7 @@ const EditOrder = () => {
     }
   };
   const [paymentMethod, setPaymentMethod] = useState("TRANSFER");
+  const isDirectSale = orderInfo.flowType === "DIRECT_SALE";
 
   const totals = useMemo(() => {
     let matrixQty = 0;
@@ -509,7 +511,7 @@ const EditOrder = () => {
     });
     const unitPrice = parseFloat(customUnitPrice) || 0;
     const subtotal = unitPrice * matrixQty;
-    const blockPrice = orderInfo.blockType === "บล็อคใหม่" ? 250 : 0;
+    const blockPrice = !isDirectSale && orderInfo.blockType === "NEW" ? 250 : 0;
 
     let codSurcharge = 0;
     if (paymentMethod === "COD" && subtotal + blockPrice > 0) {
@@ -530,6 +532,7 @@ const EditOrder = () => {
     matrixData,
     customUnitPrice,
     orderInfo.blockType,
+    isDirectSale,
     paidAmount,
     paymentMethod,
   ]);
@@ -558,6 +561,12 @@ const EditOrder = () => {
       return;
     }
 
+    if (isDirectSale && (parseFloat(paidAmount) || 0) < totals.finalTotal) {
+      setError("Direct sale requires full payment before saving.");
+      setLoading(false);
+      return;
+    }
+
     const payload = {
       customerName: customer.name,
       customerPhone: customer.phone,
@@ -565,22 +574,23 @@ const EditOrder = () => {
       customerFb: customer.customerFb,
       salesChannelId: orderInfo.salesChannelId || null,
       isUrgent: orderInfo.isUrgent,
-      blockType:
-        { บล็อคเดิม: "OLD", บล็อคเดิมเปลี่ยนข้อความ: "EDIT", บล็อคใหม่: "NEW" }[
-          orderInfo.blockType
-        ] || "OLD",
+      flowType: orderInfo.flowType || "EMBROIDERY",
+      blockType: isDirectSale ? "OLD" : orderInfo.blockType || "OLD",
       dueDate: orderInfo.dueDate || null,
       notes: orderInfo.notes,
       items,
       totalPrice: totals.finalTotal,
-      paidAmount: parseFloat(paidAmount) || 0,
+      paidAmount: isDirectSale ? totals.finalTotal : parseFloat(paidAmount) || 0,
       blockPrice: totals.blockPrice,
       unitPrice: parseFloat(customUnitPrice) || 0,
-      embroideryDetails: embroidery,
+      embroideryDetails: isDirectSale ? [] : embroidery,
       depositSlipUrl: depositSlipUrl,
       draftImages: draftImages,
       paymentMethod: paymentMethod,
       codSurcharge: totals.codSurcharge,
+      requireInvoice,
+      requireReceipt,
+      requireQuotation,
     };
 
     // Pre-order check logic (Optional for Edit, but safer to keep)
@@ -779,20 +789,22 @@ const EditOrder = () => {
               handleQuickFill={handleQuickFill}
               onOpenSpecModal={() => setShowSpecModal(true)}
             />
-            <EmbroiderySection
-              embroidery={embroidery}
-              setEmbroidery={setEmbroidery}
-              addEmbroidery={addEmbroidery}
-              removeEmbroidery={removeEmbroidery}
-              embroideryPositions={embroideryPositions}
-              blocks={blocks}
-              fetchCustomerBlocks={fetchCustomerBlocks}
-              orderInfo={orderInfo}
-              setOrderInfo={setOrderInfo}
-              user={user}
-              onUploadPositionImage={handleEmbroideryImageUpload}
-              isUploadingImage={isUploadingPositionImage}
-            />
+            {!isDirectSale && (
+              <EmbroiderySection
+                embroidery={embroidery}
+                setEmbroidery={setEmbroidery}
+                addEmbroidery={addEmbroidery}
+                removeEmbroidery={removeEmbroidery}
+                embroideryPositions={embroideryPositions}
+                blocks={blocks}
+                fetchCustomerBlocks={fetchCustomerBlocks}
+                orderInfo={orderInfo}
+                setOrderInfo={setOrderInfo}
+                user={user}
+                onUploadPositionImage={handleEmbroideryImageUpload}
+                isUploadingImage={isUploadingPositionImage}
+              />
+            )}
             <PaymentSection
               draftImages={draftImages}
               setDraftImages={setDraftImages}
@@ -807,6 +819,13 @@ const EditOrder = () => {
               isUploadingSlip={isUploadingSlip}
               paymentMethod={paymentMethod}
               setPaymentMethod={setPaymentMethod}
+              isDirectSale={isDirectSale}
+              requireInvoice={requireInvoice}
+              setRequireInvoice={setRequireInvoice}
+              requireReceipt={requireReceipt}
+              setRequireReceipt={setRequireReceipt}
+              requireQuotation={requireQuotation}
+              setRequireQuotation={setRequireQuotation}
             />
           </div>
 
@@ -871,3 +890,10 @@ const EditOrder = () => {
 };
 
 export default EditOrder;
+
+
+
+
+
+
+

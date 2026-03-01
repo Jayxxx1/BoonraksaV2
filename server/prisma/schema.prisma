@@ -44,13 +44,14 @@ model User {
   productionIdOrders Order[] @relation("ProductionOrders")
   digitizedOrders    Order[] @relation("DigitizerOrders")
 
-  activityLogs ActivityLog[]
-  pushSubs     PushSubscription[]
-  notifications Notification[]
+  activityLogs         ActivityLog[]
+  pushSubs             PushSubscription[]
+  notifications        Notification[]
   uploadedPaymentSlips PaymentSlip[]
-  productionLogs ProductionLog[]
-  foremanReports DailyProductionReport[]
-  rejections     RejectionLog[] // ประวัติการตีกลับงาน โดย User คนนี้
+  productionLogs       ProductionLog[]
+  foremanReports       DailyProductionReport[]
+  rejections           RejectionLog[]
+  stockReservations    StockReservation[]
 }
 
 // --------------------------------------------------------
@@ -103,8 +104,9 @@ model ProductVariant {
   productId Int
   product   Product @relation(fields: [productId], references: [id])
 
-  orderItems       OrderItem[]
-  purchaseRequests PurchaseRequest[]
+  orderItems        OrderItem[]
+  purchaseRequests  PurchaseRequest[]
+  stockReservations StockReservation[]
 }
 
 // --------------------------------------------------------
@@ -131,6 +133,11 @@ enum BlockType {
   OLD // 1. บล็อกเดิม
   EDIT // 2. บล็อกเดิมแก้ข้อความ
   NEW // 3. บล็อกใหม่ (+250)
+}
+
+enum OrderFlowType {
+  EMBROIDERY
+  DIRECT_SALE
 }
 
 enum PaymentStatus {
@@ -168,6 +175,7 @@ model Order {
   isUrgent   Boolean   @default(false) // งานด่วน (3 วัน)
   slaBufferLevel Int   @default(0)     // ระดับการอลุ่มอล่วยเวลา (0-3)
   blockType  BlockType @default(OLD)
+  flowType   OrderFlowType @default(EMBROIDERY)
   customerFb String? // ชื่อ Facebook ลูกค้า
 
   salesChannelId  Int?
@@ -201,6 +209,12 @@ model Order {
   paymentStatus PaymentStatus @default(UNPAID)
   paymentMethod PaymentMethod @default(TRANSFER)
   depositSlipUrl String?    // URL รูปสลิปเงินโอนจาก S3
+  requireInvoice Boolean @default(false)
+  requireReceipt Boolean @default(false)
+  requireQuotation Boolean @default(false)
+  billingCompletedAt DateTime?
+  purchaseOrder String?
+  taxInbox String?
   draftImages    String[]   // รูปจำลอง/ร่างแบบจากแชท (Mockups)
 
   status     OrderStatus @default(PENDING_ARTWORK)
@@ -212,6 +226,9 @@ model Order {
   stockRechecked           Boolean   @default(false)
   physicalItemsReady       Boolean   @default(false)
   graphicJobSheetAttached  Boolean   @default(false)
+  qaRequired               Boolean   @default(false)
+  qaApprovedAt             DateTime?
+  stockSubstitutionNote    String?
 
   // --- Production Timestamps ---
   readyForProductionAt    DateTime?
@@ -242,8 +259,8 @@ model Order {
   rejectionCount     Int     @default(0) // จำนวนครั้งที่งานถูกตีกลับ
   damagedCount       Int     @default(0) // จำนวนของเสียจากการผลิต/การแก้
 
-  items OrderItem[]
-  logs  ActivityLog[]
+  items      OrderItem[]
+  logs       ActivityLog[]
   rejections RejectionLog[] // ประวัติการตีกลับงาน
 
   notifications Notification[]  
@@ -428,9 +445,28 @@ model ThreadColor {
   code      String  @unique // เช่น P101
   name      String  // เช่น สีส้มมานะ
   imageUrl  String? // รูปถ่ายสีจริง
-  colorCode String? // Hex code สำหรับแสดงผลเบื้องต้น
+  colorCode String  @default("#000000") // Hex code สำหรับแสดงผล
   
   createdAt DateTime @default(now())
+}
+
+model StockReservation {
+  id        Int      @id @default(autoincrement())
+  sessionId String
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+
+  variantId Int
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  quantity  Int
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([variantId, expiresAt])
+  @@index([userId, expiresAt])
 }
 
 model DailyProductionReport {
@@ -481,3 +517,6 @@ model Notification {
   
   createdAt DateTime @default(now())
 }
+
+
+

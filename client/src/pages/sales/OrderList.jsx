@@ -15,7 +15,6 @@ import {
   HiOutlineCalendarDays,
   HiOutlineCube,
 } from "react-icons/hi2";
-import { getDisplayName } from "../../utils/namePrivacy";
 import { useMaster } from "../../context/MasterContext";
 
 const statusGroups = {
@@ -308,9 +307,9 @@ export default function OrderList() {
                           สรุปยอดเงิน
                         </th>
                       )}
-                      <th className="px-4 py-3 text-[12px] font-black text-slate-400 uppercase tracking-widest">
+                      {/* <th className="px-4 py-3 text-[12px] font-black text-slate-400 uppercase tracking-widest">
                         ผู้รับผิดชอบ
-                      </th>
+                      </th> */}
                       <th className="px-4 py-3 text-right text-[12px] font-black text-slate-400 uppercase tracking-widest">
                         จัดการ
                       </th>
@@ -484,7 +483,7 @@ export default function OrderList() {
                             </div>
                           </td>
                         )}
-                        <td className="px-4 py-3">
+                        {/* <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             {order.graphic && (
                               <div
@@ -503,7 +502,7 @@ export default function OrderList() {
                               </div>
                             )}
                           </div>
-                        </td>
+                        </td> */}
                         <td className="px-4 py-3 text-right">
                           <Link
                             to={`/order/${order.id}`}

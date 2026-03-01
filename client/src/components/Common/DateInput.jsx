@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { HiOutlineCalendar } from "react-icons/hi2";
 
 /**
@@ -17,26 +17,19 @@ const DateInput = ({ value, onChange, className = "" }) => {
     return `${day}/${month}/${year}`;
   };
 
-  // Internal state for the text input
-  const [displayValue, setDisplayValue] = useState(formatDateToDisplay(value));
+  // Internal draft state while user is typing.
+  const [draftValue, setDraftValue] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   const dateInputRef = useRef(null);
-
-  // Sync display value when prop changes
-  useEffect(() => {
-    const formatted = formatDateToDisplay(value);
-    if (formatted !== displayValue) {
-      setDisplayValue(formatted);
-    }
-  }, [value, displayValue]);
 
   const handleTextChange = (e) => {
     let text = e.target.value.replace(/[^0-9/]/g, "");
 
     // Auto-slash logic
-    if (text.length === 2 && displayValue.length === 1) text += "/";
-    if (text.length === 5 && displayValue.length === 4) text += "/";
+    if (text.length === 2 && draftValue.length === 1) text += "/";
+    if (text.length === 5 && draftValue.length === 4) text += "/";
 
-    setDisplayValue(text);
+    setDraftValue(text);
 
     // If complete dd/mm/yyyy, update the actual date value
     if (text.length === 10) {
@@ -50,6 +43,15 @@ const DateInput = ({ value, onChange, className = "" }) => {
     } else if (text === "") {
       onChange({ target: { value: "" } });
     }
+  };
+
+  const handleTextFocus = () => {
+    setIsEditing(true);
+    setDraftValue(formatDateToDisplay(value));
+  };
+
+  const handleTextBlur = () => {
+    setIsEditing(false);
   };
 
   const handleIconClick = () => {
@@ -74,8 +76,10 @@ const DateInput = ({ value, onChange, className = "" }) => {
       <div className="relative flex items-center">
         <input
           type="text"
-          value={displayValue}
+          value={isEditing ? draftValue : formatDateToDisplay(value)}
           onChange={handleTextChange}
+          onFocus={handleTextFocus}
+          onBlur={handleTextBlur}
           placeholder="dd/mm/yyyy"
           className={`${className} pr-10 tracking-widest`}
           maxLength={10}

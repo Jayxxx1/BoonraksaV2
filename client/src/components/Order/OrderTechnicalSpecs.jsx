@@ -15,6 +15,7 @@ const OrderTechnicalSpecs = ({
   isAdmin,
   isUpdating,
   displayHeader,
+  technicalHeader,
   editSpecs,
   setEditSpecs,
   uploadingField,
@@ -40,6 +41,7 @@ const OrderTechnicalSpecs = ({
 
   /* 🆕 Master Embroidery Positions */
   const [masterPositions, setMasterPositions] = useState([]);
+  const [threadPalette, setThreadPalette] = useState([]);
 
   useEffect(() => {
     const fetchMasterPositions = async () => {
@@ -53,6 +55,18 @@ const OrderTechnicalSpecs = ({
       }
     };
     fetchMasterPositions();
+  }, []);
+
+  useEffect(() => {
+    const fetchThreads = async () => {
+      try {
+        const res = await api.get("/threads");
+        setThreadPalette(res.data?.data?.threads || []);
+      } catch (err) {
+        console.error("Failed to fetch thread palette", err);
+      }
+    };
+    fetchThreads();
   }, []);
 
   if (!canViewTechnical) return null;
@@ -119,7 +133,7 @@ const OrderTechnicalSpecs = ({
           <div className="flex items-center gap-2">
             <HiOutlineAdjustmentsHorizontal className="w-5 h-5 text-indigo-500" />
             <h3 className="font-bold text-slate-800 text-sm">
-              {displayHeader}
+              {displayHeader || technicalHeader}
             </h3>
             <div className="ml-4 flex items-center gap-3">
               <span className="text-[14px] font-black text-slate-700">
@@ -529,19 +543,42 @@ const OrderTechnicalSpecs = ({
                             <span className="text-[9px] font-black text-slate-300 w-3">
                               {tIdx + 1}
                             </span>
-                            <input
-                              type="text"
-                              placeholder="รหัสสี"
-                              className="w-16 px-1.5 py-1 text-[10px] bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 outline-none font-bold"
-                              value={t.threadCode || ""}
-                              readOnly={!canEditSize}
-                              onChange={(e) => {
-                                const newSpecs = [...editSpecs];
-                                newSpecs[idx].threadSequence[tIdx].threadCode =
-                                  e.target.value;
-                                setEditSpecs(newSpecs);
-                              }}
-                            />
+                            {canEditSize ? (
+                              <select
+                                className="w-44 px-1.5 py-1 text-[10px] bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 outline-none font-bold"
+                                value={t.threadCode || ""}
+                                onChange={(e) => {
+                                  const code = e.target.value;
+                                  const selectedThread = threadPalette.find(
+                                    (item) => item.code === code,
+                                  );
+                                  const newSpecs = [...editSpecs];
+                                  newSpecs[idx].threadSequence[tIdx].threadCode =
+                                    code;
+                                  if (selectedThread) {
+                                    newSpecs[idx].threadSequence[tIdx].colorName =
+                                      selectedThread.name || "";
+                                    newSpecs[idx].threadSequence[tIdx].colorCode =
+                                      selectedThread.colorCode || "#000000";
+                                  }
+                                  setEditSpecs(newSpecs);
+                                }}
+                              >
+                                <option value="">Select thread chart</option>
+                                {threadPalette.map((item) => (
+                                  <option key={item.id} value={item.code}>
+                                    {item.code} - {item.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                className="w-44 px-1.5 py-1 text-[10px] bg-slate-50 border border-slate-200 rounded font-bold"
+                                value={t.threadCode || ""}
+                                readOnly
+                              />
+                            )}
                             <input
                               type="text"
                               placeholder="ชื่อสี"
@@ -696,21 +733,21 @@ const OrderTechnicalSpecs = ({
 
               {/* EMB File Section (Embroidery File) */}
               <div className="space-y-3">
-                <label className="text-[11px] font-black text-rose-400 uppercase tracking-[0.2em]">
+                <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">
                   ไฟล์ตีลาย (Embroidery File)
                 </label>
-                <div className="erp-card p-5 bg-slate-900 text-white min-h-[160px] flex flex-col justify-between">
-                  <div className="flex flex-col gap-3 max-h-[120px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="erp-card p-4 bg-white border border-slate-200 rounded-2xl aspect-[4/3] flex flex-col">
+                  <div className="flex-1 flex flex-col gap-2 overflow-y-auto pr-1 custom-scrollbar">
                     {order.embroideryFileUrls &&
                     order.embroideryFileUrls.length > 0 ? (
                       order.embroideryFileUrls.map((url, i) => (
                         <div
                           key={i}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-800 border border-slate-700"
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200"
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <HiOutlineBolt className="w-5 h-5 text-rose-400 shrink-0" />
-                            <span className="text-xs font-mono truncate text-rose-300">
+                            <HiOutlineBolt className="w-5 h-5 text-indigo-500 shrink-0" />
+                            <span className="text-xs font-mono truncate text-slate-700">
                               ไฟล์ที่ {i + 1} (.emb)
                             </span>
                           </div>
@@ -719,17 +756,17 @@ const OrderTechnicalSpecs = ({
                             download
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[10px] bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap shrink-0"
+                            className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap shrink-0"
                           >
                             DOWNLOAD
                           </a>
                         </div>
                       ))
                     ) : order.embroideryFileUrl ? (
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-800 border border-slate-700">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
                         <div className="flex items-center gap-2 min-w-0">
-                          <HiOutlineBolt className="w-5 h-5 text-rose-400 shrink-0" />
-                          <span className="text-xs font-mono truncate text-rose-300">
+                          <HiOutlineBolt className="w-5 h-5 text-indigo-500 shrink-0" />
+                          <span className="text-xs font-mono truncate text-slate-700">
                             ไฟล์เดิม (.emb)
                           </span>
                         </div>
@@ -738,13 +775,13 @@ const OrderTechnicalSpecs = ({
                           download
                           target="_blank"
                           rel="noreferrer"
-                          className="text-[10px] bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap shrink-0"
+                          className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap shrink-0"
                         >
                           DOWNLOAD
                         </a>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center p-4 h-full border border-dashed border-slate-700 rounded-xl bg-slate-800/50">
+                      <div className="flex flex-col items-center justify-center p-4 h-full border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest text-center mt-2">
                           ยังไม่ได้อัปโหลดไฟล์ตีลายหลัก
                         </p>
@@ -753,10 +790,9 @@ const OrderTechnicalSpecs = ({
                   </div>
 
                   {canUpload && (
-                    <label className="mt-4 flex items-center justify-center gap-2 py-2 border border-dashed border-slate-700 rounded-xl hover:bg-slate-800 cursor-pointer transition-all shrink-0">
+                    <label className="mt-3 flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-slate-50 cursor-pointer transition-all shrink-0">
                       <input
                         type="file"
-                        multiple
                         className="hidden"
                         accept=".emb"
                         onChange={(e) =>
@@ -765,12 +801,12 @@ const OrderTechnicalSpecs = ({
                         disabled={uploadingField === "embroideryGlobal"}
                       />
                       {uploadingField === "embroideryGlobal" ? (
-                        <div className="animate-spin w-4 h-4 border-2 border-rose-500 border-t-transparent rounded-full" />
+                        <div className="animate-spin w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full" />
                       ) : (
                         <>
-                          <HiOutlineCloudArrowUp className="w-4 h-4 text-slate-500" />
-                          <span className="text-[10px] font-black uppercase text-slate-400">
-                            อัปโหลดไฟล์ปักเพิ่ม
+                          <HiOutlineCloudArrowUp className="w-4 h-4 text-indigo-500" />
+                          <span className="text-[10px] font-black uppercase text-slate-500">
+                            อัปโหลดไฟล์ .emb หลัก
                           </span>
                         </>
                       )}
@@ -857,3 +893,6 @@ const OrderTechnicalSpecs = ({
 };
 
 export default OrderTechnicalSpecs;
+
+
+

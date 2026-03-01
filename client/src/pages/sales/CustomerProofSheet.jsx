@@ -3,7 +3,6 @@ import { useParams } from "react-router-dom";
 import api from "../../api/config";
 import { HiOutlineCheckBadge } from "react-icons/hi2";
 import { HiOutlinePrinter } from "react-icons/hi";
-import { useAuth } from "../../context/auth-store";
 
 const CustomerProofSheet = () => {
   const { orderId } = useParams();

@@ -33,7 +33,8 @@ const CreateOrder = () => {
     isUrgent: false,
     dueDate: "",
     notes: "",
-    blockType: "บล็อคเดิม",
+    blockType: "OLD",
+    flowType: "EMBROIDERY",
   });
 
   const [products, setProducts] = useState([]);
@@ -42,6 +43,9 @@ const CreateOrder = () => {
   const [paidAmount, setPaidAmount] = useState(""); // ยอดที่ลูกค้าชำระมา
   const [depositSlipFile, setDepositSlipFile] = useState(null); // Local File object
   const [depositSlipUrl, setDepositSlipUrl] = useState(""); // Preview URL (blob: or remote)
+  const [requireInvoice, setRequireInvoice] = useState(false);
+  const [requireReceipt, setRequireReceipt] = useState(false);
+  const [requireQuotation, setRequireQuotation] = useState(false);
 
   const [facebookPages, setFacebookPages] = useState([]);
 
@@ -89,6 +93,10 @@ const CreateOrder = () => {
   const [draftImages, setDraftImages] = useState([]); // This will hold the URLs for logic/summary
   const [showPreOrderConfirm, setShowPreOrderConfirm] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+  const [reservationSessionId] = useState(
+    () => "sales-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10),
+  );
+  const [reservationWarnings, setReservationWarnings] = useState([]);
 
   // --- Fetch Initial Data ---
   useEffect(() => {
@@ -292,7 +300,7 @@ const CreateOrder = () => {
         masterPositionId: 1,
         customPosition: "",
         blockId: "",
-        blockType: "บล็อคเดิม",
+        blockType: "OLD",
         width: "",
         height: "",
         note: "",
@@ -359,6 +367,8 @@ const CreateOrder = () => {
     fetchMasterPositions();
   }, []);
 
+  const isDirectSale = orderInfo.flowType === "DIRECT_SALE";
+
   const totals = useMemo(() => {
     let matrixQty = 0;
     Object.entries(matrixData).forEach(([, qty]) => {
@@ -366,7 +376,7 @@ const CreateOrder = () => {
     });
     const unitPrice = parseFloat(customUnitPrice) || 0;
     const subtotal = unitPrice * matrixQty;
-    const blockPrice = orderInfo.blockType === "บล็อคใหม่" ? 250 : 0;
+    const blockPrice = !isDirectSale && orderInfo.blockType === "NEW" ? 250 : 0;
 
     // COD Logic: Surcharge 3% on (Subtotal + BlockPrice)
     // Note: Only if paymentMethod is COD and there are items
@@ -396,10 +406,45 @@ const CreateOrder = () => {
   const [hasManualDeposit, setHasManualDeposit] = useState(false);
   useEffect(() => {
     if (!hasManualDeposit && totals.finalTotal > 0) {
-      // Suggest 50% deposit as requested
-      setPaidAmount(Math.round(totals.finalTotal * 0.5));
+      setPaidAmount(
+        isDirectSale
+          ? Math.round(totals.finalTotal)
+          : Math.round(totals.finalTotal * 0.5),
+      );
     }
-  }, [totals.finalTotal, hasManualDeposit]);
+  }, [totals.finalTotal, hasManualDeposit, isDirectSale]);
+
+  useEffect(() => {
+    if (!selectedProduct || !selectedProduct.variants) return;
+
+    const items = Object.entries(matrixData)
+      .filter(([, qty]) => Number(qty) > 0)
+      .map(([variantId, quantity]) => ({
+        variantId: parseInt(variantId),
+        quantity: parseInt(quantity),
+      }));
+
+    const sync = async () => {
+      try {
+        const res = await api.post("/orders/stock-reservations/upsert", {
+          sessionId: reservationSessionId,
+          items,
+        });
+        setReservationWarnings(res.data?.data?.reservation?.lowStockWarnings || []);
+      } catch (err) {
+        console.error("Stock reservation sync failed:", err);
+      }
+    };
+
+    const timer = setTimeout(sync, 300);
+    return () => clearTimeout(timer);
+  }, [matrixData, selectedProduct, reservationSessionId]);
+
+  useEffect(() => {
+    return () => {
+      api.delete("/orders/stock-reservations/" + reservationSessionId).catch(() => {});
+    };
+  }, [reservationSessionId]);
 
   // --- Helper to finish all uploads ---
   const performUploads = async () => {
@@ -482,6 +527,12 @@ const CreateOrder = () => {
       return;
     }
 
+    if (isDirectSale && (parseFloat(paidAmount) || 0) < totals.finalTotal) {
+      setError("Direct sale requires full payment before creating the order.");
+      setLoading(false);
+      return;
+    }
+
     let actualDepositSlipUrl = depositSlipUrl;
     let actualDraftImages = draftImages;
     let actualEmbroidery = embroidery;
@@ -506,22 +557,24 @@ const CreateOrder = () => {
       customerFb: customer.customerFb,
       salesChannelId: orderInfo.salesChannelId || null,
       isUrgent: orderInfo.isUrgent,
-      blockType:
-        { บล็อคเดิม: "OLD", บล็อคเดิมเปลี่ยนข้อความ: "EDIT", บล็อคใหม่: "NEW" }[
-          orderInfo.blockType
-        ] || "OLD",
+      flowType: orderInfo.flowType || "EMBROIDERY",
+      blockType: isDirectSale ? "OLD" : orderInfo.blockType || "OLD",
       dueDate: orderInfo.dueDate || null,
       notes: orderInfo.notes,
       items,
       totalPrice: totals.finalTotal,
-      paidAmount: parseFloat(paidAmount) || 0,
+      paidAmount: isDirectSale ? totals.finalTotal : parseFloat(paidAmount) || 0,
       blockPrice: totals.blockPrice,
       unitPrice: parseFloat(customUnitPrice) || 0,
-      embroideryDetails: actualEmbroidery,
+      embroideryDetails: isDirectSale ? [] : actualEmbroidery,
       depositSlipUrl: actualDepositSlipUrl,
       draftImages: actualDraftImages,
       paymentMethod: paymentMethod,
       codSurcharge: totals.codSurcharge,
+      requireInvoice,
+      requireReceipt,
+      requireQuotation,
+      reservationSessionId,
     };
 
     // Check for out-of-stock items for pre-order confirmation
@@ -698,6 +751,19 @@ const CreateOrder = () => {
         >
           {/* Main Content: 8 Columns */}
           <div className="lg:col-span-8 space-y-6">
+            {reservationWarnings.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-black text-amber-700 uppercase tracking-wider mb-1">
+                  Low Stock Alert
+                </p>
+                <div className="text-xs font-semibold text-amber-800">
+                  {reservationWarnings
+                    .slice(0, 3)
+                    .map((w) => w.productName + " " + w.color + "/" + w.size + " (" + w.stock + ")")
+                    .join(" | ")}
+                </div>
+              </div>
+            )}
             <CustomerSection customer={customer} setCustomer={setCustomer} />
             <OrderInfoSection
               orderInfo={orderInfo}
@@ -723,20 +789,22 @@ const CreateOrder = () => {
               handleQuickFill={handleQuickFill}
               onOpenSpecModal={() => setShowSpecModal(true)}
             />
-            <EmbroiderySection
-              embroidery={embroidery}
-              setEmbroidery={setEmbroidery}
-              addEmbroidery={addEmbroidery}
-              removeEmbroidery={removeEmbroidery}
-              masterPositions={masterPositions}
-              blocks={blocks}
-              fetchCustomerBlocks={fetchCustomerBlocks}
-              orderInfo={orderInfo}
-              setOrderInfo={setOrderInfo}
-              user={user}
-              onUploadPositionImage={handleEmbroideryImageUpload}
-              isUploadingImage={false} // Loading handled by global submit
-            />
+            {!isDirectSale && (
+              <EmbroiderySection
+                embroidery={embroidery}
+                setEmbroidery={setEmbroidery}
+                addEmbroidery={addEmbroidery}
+                removeEmbroidery={removeEmbroidery}
+                masterPositions={masterPositions}
+                blocks={blocks}
+                fetchCustomerBlocks={fetchCustomerBlocks}
+                orderInfo={orderInfo}
+                setOrderInfo={setOrderInfo}
+                user={user}
+                onUploadPositionImage={handleEmbroideryImageUpload}
+                isUploadingImage={false} // Loading handled by global submit
+              />
+            )}
             <PaymentSection
               draftImages={draftImages}
               setDraftImages={(newImages) => {
@@ -757,6 +825,13 @@ const CreateOrder = () => {
               isUploadingSlip={false}
               paymentMethod={paymentMethod}
               setPaymentMethod={setPaymentMethod}
+              isDirectSale={isDirectSale}
+              requireInvoice={requireInvoice}
+              setRequireInvoice={setRequireInvoice}
+              requireReceipt={requireReceipt}
+              setRequireReceipt={setRequireReceipt}
+              requireQuotation={requireQuotation}
+              setRequireQuotation={setRequireQuotation}
             />
           </div>
 

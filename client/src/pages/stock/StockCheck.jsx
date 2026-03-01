@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../context/auth-store";
 import { Link } from "react-router-dom";
 import api from "../../api/config";
@@ -20,9 +20,12 @@ export default function StockCheck() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  const getAuthHeader = () => ({ Authorization: `Bearer ${token}` });
+  const getAuthHeader = useCallback(
+    () => ({ Authorization: `Bearer ${token}` }),
+    [token],
+  );
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const params = {};
@@ -32,7 +35,7 @@ export default function StockCheck() {
       const [prodRes, catRes] = await Promise.all([
         api.get("/products", {
           headers: getAuthHeader(),
-          params,
+          params: { ...params, includeVariants: true },
         }),
         api.get("/categories", {
           headers: getAuthHeader(),
@@ -47,14 +50,14 @@ export default function StockCheck() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, selectedCategory, getAuthHeader]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchData();
     }, 400);
     return () => clearTimeout(timer);
-  }, [search, selectedCategory, token]);
+  }, [fetchData]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -62,7 +65,7 @@ export default function StockCheck() {
       fetchData();
     }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchData]);
 
   const getStockStatus = (stock, minStock) => {
     if (stock === 0) {

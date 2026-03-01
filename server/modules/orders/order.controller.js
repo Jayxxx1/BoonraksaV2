@@ -16,13 +16,35 @@ const sendError = (res, code, message = "An error occurred", status = 400) => {
 
 export const updateOrder = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const order = await orderService.updateOrder(id, req.body, req.user);
-  sendSuccess(res, { order }, "แก้ไขข้อมูลออเดอร์เรียบร้อยแล้ว");
+  try {
+    const order = await orderService.updateOrder(id, req.body, req.user);
+    sendSuccess(res, { order }, "Order updated");
+  } catch (error) {
+    if (error.message === "DIRECT_SALE_REQUIRES_FULL_PAYMENT") {
+      return sendError(
+        res,
+        "DIRECT_SALE_REQUIRES_FULL_PAYMENT",
+        "Direct sale orders require full payment.",
+      );
+    }
+    throw error;
+  }
 });
 
 export const createOrder = asyncHandler(async (req, res) => {
-  const order = await orderService.createOrder(req.body, req.user);
-  sendSuccess(res, { order }, "ออเดอร์ถูกสร้างเรียบร้อยแล้ว", 201);
+  try {
+    const order = await orderService.createOrder(req.body, req.user);
+    sendSuccess(res, { order }, "Order created", 201);
+  } catch (error) {
+    if (error.message === "DIRECT_SALE_REQUIRES_FULL_PAYMENT") {
+      return sendError(
+        res,
+        "DIRECT_SALE_REQUIRES_FULL_PAYMENT",
+        "Direct sale orders require full payment at creation time.",
+      );
+    }
+    throw error;
+  }
 });
 
 export const getOrder = asyncHandler(async (req, res) => {
@@ -41,6 +63,24 @@ export const getOrder = asyncHandler(async (req, res) => {
 export const getOrders = asyncHandler(async (req, res) => {
   const orders = await orderService.getOrders(req.query, req.user);
   sendSuccess(res, { orders });
+});
+export const getProductionQueue = asyncHandler(async (req, res) => {
+  const orders = await orderService.getProductionQueue(req.user);
+  sendSuccess(res, { orders });
+});
+export const upsertStockReservation = asyncHandler(async (req, res) => {
+  const reservation = await orderService.upsertStockReservation(req.body, req.user);
+  sendSuccess(res, { reservation }, "Stock reservation updated");
+});
+export const getStockReservation = asyncHandler(async (req, res) => {
+  const { sessionId } = req.params;
+  const reservation = await orderService.getStockReservation(sessionId, req.user);
+  sendSuccess(res, { reservation });
+});
+export const releaseStockReservation = asyncHandler(async (req, res) => {
+  const { sessionId } = req.params;
+  await orderService.releaseStockReservation(sessionId, req.user);
+  sendSuccess(res, null, "Stock reservation released");
 });
 
 export const getSalesChannels = asyncHandler(async (req, res) => {
@@ -78,6 +118,12 @@ export const updateStatus = asyncHandler(async (req, res) => {
         "PAYMENT_INCOMPLETE",
         "ยังชำระเงินไม่ครบ ไม่สามารถปิดงานได้",
       );
+    if (error.message === "BILLING_INCOMPLETE")
+      return sendError(
+        res,
+        "BILLING_INCOMPLETE",
+        "Billing documents are not completed yet.",
+      );
     if (error.message === "TRACKING_REQUIRED")
       return sendError(res, "TRACKING_REQUIRED", "กรุณาระบุเลขพัสดุ");
     throw error;
@@ -87,7 +133,7 @@ export const updateStatus = asyncHandler(async (req, res) => {
 export const claimTask = asyncHandler(async (req, res) => {
   const { id } = req.params;
   try {
-    const order = await orderService.claimTask(id, req.user);
+    const order = await orderService.claimTask(id, req.user, req.body);
     sendSuccess(res, { order }, "รับงานเรียบร้อยแล้ว");
   } catch (error) {
     if (error.message === "UNAUTHORIZED_ACTION")
@@ -247,6 +293,45 @@ export const getDailyReports = asyncHandler(async (req, res) => {
   sendSuccess(res, { reports });
 });
 
+export const approveQA = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const order = await orderService.approveQA(id, req.user);
+  sendSuccess(res, { order }, "QA approved");
+});
+
+export const markBillingCompleted = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const order = await orderService.markBillingCompleted(id, req.user, req.body);
+  sendSuccess(res, { order }, "Billing status updated");
+});
+
+export const updateStockSubstitution = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const order = await orderService.updateStockSubstitution(
+    id,
+    req.body?.note || "",
+    req.user,
+  );
+  sendSuccess(res, { order }, "Stock substitution note updated");
+});
+
+export const rejectOrder = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const order = await orderService.rejectOrder(id, req.body, req.user);
+  sendSuccess(res, { order }, "Reject recorded");
+});
+
+export const updateOrderSLABuffer = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { bufferLevel } = req.body;
+  const order = await orderService.updateOrderSLABuffer(
+    id,
+    bufferLevel,
+    req.user,
+  );
+  sendSuccess(res, { order }, "SLA buffer updated");
+});
+
 export const downloadEmbroideryFile = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -298,3 +383,6 @@ export const downloadEmbroideryFile = asyncHandler(async (req, res) => {
     fs.createReadStream(localPath).pipe(res);
   }
 });
+
+
+

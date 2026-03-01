@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
   useContext,
@@ -99,7 +100,10 @@ export const MasterProvider = ({ children }) => {
   }, [token]);
 
   useEffect(() => {
-    fetchConstants();
+    const timer = setTimeout(() => {
+      fetchConstants();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [fetchConstants]);
 
   const getStatusLabel = (status) => constants.statusLabels[status] || status;

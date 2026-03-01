@@ -43,7 +43,10 @@ const ShiftReport = () => {
   }, [getAuthHeader]);
 
   useEffect(() => {
-    fetchReports();
+    const timer = setTimeout(() => {
+      fetchReports();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [fetchReports]);
 
   const handleSubmit = async (e) => {
