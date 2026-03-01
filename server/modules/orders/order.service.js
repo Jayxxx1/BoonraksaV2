@@ -121,6 +121,12 @@ class OrderService {
     const total = parseFloat(order.totalPrice || 0);
     const paid = parseFloat(order.paidAmount || 0);
     const balance = total - paid;
+    const normalizedEmbroideryFileUrls = Array.isArray(order.embroideryFileUrls)
+      ? order.embroideryFileUrls.filter(Boolean)
+      : [];
+    if (normalizedEmbroideryFileUrls.length === 0 && order.embroideryFileUrl) {
+      normalizedEmbroideryFileUrls.push(order.embroideryFileUrl);
+    }
 
     // --- 🏭 Factory-Grade Production Derived State ---
     const isReadyForProduction = getIsReadyForProduction(order);
@@ -155,6 +161,7 @@ class OrderService {
           new Date(order.dueDate).getTime(),
       isReadyForProduction,
       productionStatus: getProductionStatus(order),
+      embroideryFileUrls: normalizedEmbroideryFileUrls,
       // UI compatibility: keep array shape while persisting singular text field.
       assignedWorkerNames: order.assignedWorkerName
         ? order.assignedWorkerName
@@ -2370,19 +2377,47 @@ class OrderService {
         ...otherSpecs
       } = specs;
 
-      // Backward-compatible support for clients that still send
-      // `embroideryFileUrls` at order-level. Persist latest file to legacy
-      // `embroideryFileUrl` field in Order model.
-      if (Array.isArray(embroideryFileUrls) && embroideryFileUrls.length > 0) {
+      // Order-level EMB files for Digitizer flow (max 15)
+      if (Array.isArray(embroideryFileUrls)) {
+        const normalizedGlobalEmbFiles = [
+          ...new Set(
+            embroideryFileUrls
+              .map((url) => String(url || "").trim())
+              .filter(Boolean),
+          ),
+        ];
+        if (normalizedGlobalEmbFiles.length > 15) {
+          throw new Error("EMBROIDERY_FILES_LIMIT_EXCEEDED");
+        }
+        otherSpecs.embroideryFileUrls = normalizedGlobalEmbFiles;
         otherSpecs.embroideryFileUrl =
-          embroideryFileUrls[embroideryFileUrls.length - 1];
+          normalizedGlobalEmbFiles.length > 0
+            ? normalizedGlobalEmbFiles[normalizedGlobalEmbFiles.length - 1]
+            : null;
       }
 
       // --- S3 Cleanup (Main Order Files) ---
       if (otherSpecs.artworkUrl !== undefined) {
         await this.cleanupFile(currentOrder.artworkUrl, otherSpecs.artworkUrl);
       }
-      if (otherSpecs.embroideryFileUrl !== undefined) {
+      if (otherSpecs.embroideryFileUrls !== undefined) {
+        const currentGlobalEmbFiles = [
+          ...new Set(
+            [
+              ...(Array.isArray(currentOrder.embroideryFileUrls)
+                ? currentOrder.embroideryFileUrls
+                : []),
+              ...(currentOrder.embroideryFileUrl
+                ? [currentOrder.embroideryFileUrl]
+                : []),
+            ].filter(Boolean),
+          ),
+        ];
+        await this.cleanupFiles(
+          currentGlobalEmbFiles,
+          otherSpecs.embroideryFileUrls,
+        );
+      } else if (otherSpecs.embroideryFileUrl !== undefined) {
         await this.cleanupFile(
           currentOrder.embroideryFileUrl,
           otherSpecs.embroideryFileUrl,
@@ -2497,22 +2532,57 @@ class OrderService {
    * Upload Embroidery File (.EMB) and advance status
    */
   async uploadEmbroidery(orderId, data, user) {
-    const { embroideryFileUrl } = data;
+    const { embroideryFileUrl, embroideryFileUrls } = data;
     const id = parseInt(orderId);
+    const normalizedEmbroideryFileUrls = [
+      ...new Set(
+        (Array.isArray(embroideryFileUrls) ? embroideryFileUrls : [])
+          .map((url) => String(url || "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    if (embroideryFileUrl) {
+      const singleEmbFile = String(embroideryFileUrl).trim();
+      if (singleEmbFile) {
+        normalizedEmbroideryFileUrls.push(singleEmbFile);
+      }
+    }
+    const dedupedEmbroideryFileUrls = [...new Set(normalizedEmbroideryFileUrls)];
+    if (dedupedEmbroideryFileUrls.length === 0) {
+      throw new Error("EMBROIDERY_FILE_REQUIRED");
+    }
+    if (dedupedEmbroideryFileUrls.length > 15) {
+      throw new Error("EMBROIDERY_FILES_LIMIT_EXCEEDED");
+    }
+    const latestEmbroideryFileUrl =
+      dedupedEmbroideryFileUrls[dedupedEmbroideryFileUrls.length - 1];
 
     // --- S3 Cleanup ---
     const currentOrder = await prisma.order.findUnique({
       where: { id },
-      select: { embroideryFileUrl: true },
+      select: { embroideryFileUrl: true, embroideryFileUrls: true },
     });
     if (currentOrder) {
-      await this.cleanupFile(currentOrder.embroideryFileUrl, embroideryFileUrl);
+      const currentGlobalEmbFiles = [
+        ...new Set(
+          [
+            ...(Array.isArray(currentOrder.embroideryFileUrls)
+              ? currentOrder.embroideryFileUrls
+              : []),
+            ...(currentOrder.embroideryFileUrl
+              ? [currentOrder.embroideryFileUrl]
+              : []),
+          ].filter(Boolean),
+        ),
+      ];
+      await this.cleanupFiles(currentGlobalEmbFiles, dedupedEmbroideryFileUrls);
     }
 
     const result = await prisma.order.update({
       where: { id },
       data: {
-        embroideryFileUrl,
+        embroideryFileUrl: latestEmbroideryFileUrl,
+        embroideryFileUrls: dedupedEmbroideryFileUrls,
         digitizerId: user.id, // Ensure digitizer is linked
         status: OrderStatus.PENDING_ARTWORK, // Once digitized, it goes to Graphic for mockup
         digitizingCompletedAt: new Date(),

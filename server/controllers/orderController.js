@@ -519,27 +519,32 @@ export const getOrders = asyncHandler(async (req, res) => {
     // Sales are strictly restricted to their own orders
     where.salesId = req.user.id;
   } else if (view === "me") {
+    // "งานของฉัน" — Only show orders where this role is CURRENTLY active
     switch (req.user.role) {
       case "GRAPHIC":
         where.graphicId = req.user.id;
+        where.status = { in: ["PENDING_ARTWORK", "DESIGNING"] };
         break;
       case "SEWING_QC":
         where.qcId = req.user.id;
+        where.status = "PRODUCTION_FINISHED";
         break;
       case "STOCK":
         where.stockId = req.user.id;
+        where.status = { in: ["PENDING_STOCK_CHECK", "STOCK_ISSUE"] };
         break;
       case "PRODUCTION":
         where.productionId = req.user.id;
+        where.status = { in: ["STOCK_RECHECKED", "IN_PRODUCTION"] };
         break;
       case "DIGITIZER":
         where.digitizerId = req.user.id;
+        where.status = "PENDING_DIGITIZING";
         break;
       default:
         where.salesId = req.user.id;
+        where.status = { notIn: ["COMPLETED", "CANCELLED"] };
     }
-    // "My Tasks" should only show active tasks (not completed or cancelled)
-    where.status = { notIn: ["COMPLETED", "CANCELLED"] };
   } else if (view === "available") {
     if (req.user.role === "GRAPHIC") {
       where.graphicId = null;
@@ -560,20 +565,23 @@ export const getOrders = asyncHandler(async (req, res) => {
       where.purchaseRequests = { some: { status: "PENDING" } };
     }
   } else if (view === "history") {
-    // History is ALWAYS restricted to own tasks for technical roles
+    // "ประวัติงาน" — Orders this user worked on, but their phase is done
     switch (req.user.role.trim()) {
       case "GRAPHIC":
         where.graphicId = req.user.id;
         where.status = { notIn: ["PENDING_ARTWORK", "DESIGNING"] };
         break;
+      case "DIGITIZER":
+        where.digitizerId = req.user.id;
+        where.status = { notIn: ["PENDING_DIGITIZING"] };
+        break;
       case "STOCK":
-        // Strict filtering for Stock History
         where.stockId = req.user.id;
-        where.status = { notIn: ["PENDING_STOCK_CHECK"] };
+        where.status = { notIn: ["PENDING_STOCK_CHECK", "STOCK_ISSUE"] };
         break;
       case "PRODUCTION":
         where.productionId = req.user.id;
-        where.status = { notIn: ["PENDING_STOCK_CHECK", "IN_PRODUCTION"] };
+        where.status = { notIn: ["STOCK_RECHECKED", "IN_PRODUCTION"] };
         break;
       case "SEWING_QC":
         where.qcId = req.user.id;

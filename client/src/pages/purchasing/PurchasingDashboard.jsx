@@ -42,7 +42,7 @@ export default function PurchasingDashboard() {
 
   const getSubStatusBadge = (subStatus) => {
     return (
-      <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-slate-100 text-slate-700 border border-current/20">
+      <span className="erp-status-badge bg-slate-100 text-slate-700 border-slate-200">
         {getPreorderLabel(subStatus)}
       </span>
     );
@@ -50,35 +50,34 @@ export default function PurchasingDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
-      <div className="p-8 max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-          <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              <div className="p-2 bg-indigo-600 rounded-2xl text-white">
-                <HiOutlineCalendarDays className="w-6 h-6" />
-              </div>
+      <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-5 animate-erp-in">
+        {/* ── Page Header ── */}
+        <div className="erp-page-header mb-6">
+          <div className="space-y-0.5">
+            <h1 className="erp-page-title">
+              <div className="erp-title-accent"></div>
               ฝ่ายจัดซื้อ (Purchasing)
             </h1>
-            <p className="text-slate-500 font-bold ml-14 mt-1">
+            <p className="erp-page-subtitle">
               จัดการรายการ Pre-order และติดตามวันเข้าพัสดุ
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={fetchWaitingOrders}
-              className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-slate-500 shadow-sm"
+              className="group p-2 bg-white border border-slate-200 rounded-md hover:border-indigo-300 hover:bg-indigo-50/30 transition-all shadow-sm"
             >
               <HiOutlineArrowPath
-                className={`w-5 h-5 ${loading ? "animate-spin" : ""}`}
+                className={`w-4 h-4 text-slate-500 group-hover:text-indigo-600 transition-colors ${loading ? "animate-spin text-indigo-600" : ""}`}
               />
             </button>
             <div className="relative group">
-              <HiOutlineMagnifyingGlass className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+              <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
               <input
                 type="text"
                 placeholder="ค้นหา เลขใบงาน หรือชื่อลูกค้า..."
-                className="pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-600/5 focus:border-indigo-600 transition-all w-80 text-sm font-bold shadow-sm"
+                className="erp-search-input w-64"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -86,18 +85,19 @@ export default function PurchasingDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {/* ── Cards Grid ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {loading && orders.length === 0 ? (
-            <div className="md:col-span-2 lg:col-span-3 bg-white p-12 rounded-[2rem] text-center border-2 border-dashed border-slate-100">
-              <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-3" />
-              <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">
+            <div className="md:col-span-2 lg:col-span-3 erp-empty-state">
+              <div className="erp-spinner mx-auto mb-3"></div>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
                 กำลังดึงข้อมูล...
               </p>
             </div>
           ) : orders.length === 0 ? (
-            <div className="md:col-span-2 lg:col-span-3 bg-white p-12 rounded-[2rem] text-center border-2 border-dashed border-slate-100">
-              <HiOutlineExclamationCircle className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-              <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">
+            <div className="md:col-span-2 lg:col-span-3 erp-empty-state">
+              <HiOutlineExclamationCircle className="w-8 h-8 text-slate-200 mx-auto mb-3" />
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
                 {search
                   ? "ไม่พบออเดอร์ที่ตรงกับเงื่อนไข"
                   : "ไม่มีออเดอร์ที่รอจัดซื้อ"}
@@ -108,7 +108,7 @@ export default function PurchasingDashboard() {
               <Link
                 key={order.id}
                 to={`/order/${order.id}`}
-                className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-indigo-300 transition-all border-l-4 border-l-indigo-600 group flex flex-col justify-between"
+                className="erp-mobile-card border-l-[3px] border-l-indigo-600 hover:shadow-md hover:border-indigo-300 group flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -118,11 +118,11 @@ export default function PurchasingDashboard() {
                     {getSubStatusBadge(order.preorderSubStatus)}
                   </div>
 
-                  <h3 className="text-sm font-black text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors truncate">
+                  <h3 className="text-[12.5px] font-black text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors truncate">
                     {order.customerName}
                   </h3>
 
-                  <div className="flex items-center gap-2 mb-3 text-[10px] font-bold text-slate-400">
+                  <div className="flex items-center gap-2 mb-2.5 text-[10px] font-bold text-slate-400">
                     <span className="flex items-center gap-1">
                       <HiOutlineClipboardDocumentList className="w-3 h-3" />
                       {order.items?.length || 0}
@@ -148,7 +148,7 @@ export default function PurchasingDashboard() {
                       </span>
                     </div>
                     {order.purchasingReason && (
-                      <div className="bg-slate-50 p-1.5 rounded-lg border border-slate-100/50">
+                      <div className="bg-slate-50 p-1.5 rounded border border-slate-100/50">
                         <p className="text-[9px] text-slate-500 font-medium italic line-clamp-1">
                           {order.purchasingReason}
                         </p>
@@ -157,7 +157,7 @@ export default function PurchasingDashboard() {
                   </div>
                 </div>
 
-                <div className="mt-3 pt-3 border-t border-slate-50 flex items-center justify-between">
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all">
                     จัดการออเดอร์ →
                   </span>

@@ -100,7 +100,7 @@ const OrderInfoSection = ({ orderInfo, setOrderInfo, facebookPages }) => {
         </div>
 
         {/* Notes */}
-        <div className="md:col-span-2 space-y-1">
+        {/* <div className="md:col-span-2 space-y-1">
           <label className="erp-label">หมายเหตุภายใน (ฝ่ายผลิต/QC)</label>
           <textarea
             value={orderInfo.notes}
@@ -110,7 +110,7 @@ const OrderInfoSection = ({ orderInfo, setOrderInfo, facebookPages }) => {
             className="erp-input p-3 text-sm leading-relaxed min-h-[80px] resize-none"
             placeholder="ระบุคำแนะนำพิเศษ..."
           />
-        </div>
+        </div> */}
       </div>
     </div>
   );

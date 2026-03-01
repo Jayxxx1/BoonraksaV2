@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   HiOutlineExclamationCircle,
@@ -39,6 +39,8 @@ const OrderDetail = () => {
   // Form states for Graphic specs
   const [editSpecs, setEditSpecs] = useState([]);
   const [uploadingField, setUploadingField] = useState(null); // 'artwork' or 'production'
+  const [autoSaveStatus, setAutoSaveStatus] = useState("idle"); // 'idle' | 'saving' | 'saved'
+  const isInitialSpecsLoad = useRef(true);
 
   // Library states
   const [blocks, setBlocks] = useState([]);
@@ -214,6 +216,14 @@ const OrderDetail = () => {
         if (!requestPayload.embroideryFileUrl && order?.embroideryFileUrl) {
           requestPayload.embroideryFileUrl = order.embroideryFileUrl;
         }
+        if (
+          !requestPayload.embroideryFileUrl &&
+          Array.isArray(order?.embroideryFileUrls) &&
+          order.embroideryFileUrls.length > 0
+        ) {
+          requestPayload.embroideryFileUrl =
+            order.embroideryFileUrls[order.embroideryFileUrls.length - 1];
+        }
         if (!requestPayload.embroideryFileUrl) {
           alert("กรุณาอัปโหลดไฟล์ .emb ก่อนส่งมอบงาน");
           return;
@@ -336,16 +346,36 @@ const OrderDetail = () => {
   const handleUpdateSpecs = async () => {
     try {
       setIsUpdating(true);
+      setAutoSaveStatus("saving");
       await api.patch(`/orders/${orderId}/specs`, {
         embroideryDetails: editSpecs,
       });
+      isInitialSpecsLoad.current = true; // prevent fetchOrder's setEditSpecs from re-triggering save
       await fetchOrder();
+      setAutoSaveStatus("saved");
+      setTimeout(() => setAutoSaveStatus("idle"), 2000);
     } catch {
       console.error("Failed to update specs");
+      setAutoSaveStatus("idle");
     } finally {
       setIsUpdating(false);
     }
   };
+
+  // Debounced autosave: saves editSpecs 1.5s after last change
+  useEffect(() => {
+    if (isInitialSpecsLoad.current) {
+      isInitialSpecsLoad.current = false;
+      return;
+    }
+    if (editSpecs.length === 0) return;
+
+    const timer = setTimeout(() => {
+      handleUpdateSpecs();
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSpecs]);
 
   const handleQaApprove = async () => {
     try {
@@ -382,7 +412,9 @@ const OrderDetail = () => {
 
       await fetchOrder();
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to update billing indicator");
+      alert(
+        err.response?.data?.message || "Failed to update billing indicator",
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -397,7 +429,8 @@ const OrderDetail = () => {
       await fetchOrder();
     } catch (err) {
       alert(
-        err.response?.data?.message || "Failed to update stock substitution note",
+        err.response?.data?.message ||
+          "Failed to update stock substitution note",
       );
     } finally {
       setIsUpdating(false);
@@ -524,24 +557,48 @@ const OrderDetail = () => {
   };
 
   const handleFileUpload = async (e, type) => {
-    // 1. Single global EMB file (Digitizer flow)
+    // 1. Global EMB files (Digitizer flow, max 15 files)
     if (type === "embroideryGlobal") {
-      const file = e.target.files?.[0];
-      if (!file) return;
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
       try {
         setUploadingField(type);
-        const formData = new FormData();
-        formData.append("file", file);
+        const currentUrls = Array.isArray(order?.embroideryFileUrls)
+          ? order.embroideryFileUrls.filter(Boolean)
+          : order?.embroideryFileUrl
+            ? [order.embroideryFileUrl]
+            : [];
 
-        const uploadRes = await api.post(`/upload?folder=embroidery`, formData);
-        const uploadedUrl = uploadRes?.data?.data?.url;
-        if (!uploadedUrl) {
+        if (currentUrls.length + files.length > 15) {
+          alert(
+            `อัปโหลดได้สูงสุด 15 ไฟล์ (ปัจจุบัน ${currentUrls.length} ไฟล์, เพิ่มได้อีก ${Math.max(0, 15 - currentUrls.length)} ไฟล์)`,
+          );
+          return;
+        }
+
+        const uploadedUrls = [];
+        for (const file of files) {
+          const formData = new FormData();
+          formData.append("file", file);
+          const uploadRes = await api.post(
+            `/upload?folder=embroidery`,
+            formData,
+          );
+          const uploadedUrl = uploadRes?.data?.data?.url;
+          if (uploadedUrl) {
+            uploadedUrls.push(uploadedUrl);
+          }
+        }
+
+        if (uploadedUrls.length === 0) {
           throw new Error("ไม่พบ URL ไฟล์ที่อัปโหลด");
         }
 
-        // Save file URL first without changing order status yet.
+        const nextUrls = [...currentUrls, ...uploadedUrls].slice(0, 15);
+
+        // Save files first without changing order status yet.
         await api.patch(`/orders/${orderId}/specs`, {
-          embroideryFileUrl: uploadedUrl,
+          embroideryFileUrls: nextUrls,
         });
         await fetchOrder();
       } catch (err) {
@@ -553,9 +610,9 @@ const OrderDetail = () => {
       return;
     }
 
-    // 2. Position-specific EMB file
-    if (type.startsWith("emb_")) {
-      const file = e.target.files[0];
+    // 2. Position-specific reference image (Graphic Specification)
+    if (type.startsWith("positionImage_") || type.startsWith("emb_")) {
+      const file = e.target.files?.[0];
       if (!file) return;
       const idx = e.positionIndex;
       try {
@@ -563,25 +620,35 @@ const OrderDetail = () => {
         const formData = new FormData();
         formData.append("file", file);
         const uploadRes = await api.post(
-          `/upload?folder=embroidery`,
+          `/upload?folder=position-mockups`,
           formData,
-          {
-            headers: { "Content-Type": "multipart/form-data" },
-          },
         );
+        const uploadedUrl = uploadRes?.data?.data?.url;
+        if (!uploadedUrl) {
+          throw new Error("UPLOAD_URL_MISSING");
+        }
         const newSpecs = [...editSpecs];
-        if (!newSpecs[idx].embroideryFileUrls)
+        if (!newSpecs[idx]) {
+          throw new Error("POSITION_NOT_FOUND");
+        }
+        newSpecs[idx].mockupUrl = uploadedUrl;
+        // Backward compatibility: per-position EMB is deprecated for this UI.
+        if (
+          Array.isArray(newSpecs[idx].embroideryFileUrls) &&
+          newSpecs[idx].embroideryFileUrls.length > 0
+        ) {
           newSpecs[idx].embroideryFileUrls = [];
-        newSpecs[idx].embroideryFileUrls.push(uploadRes.data.data.url);
+        }
         setEditSpecs(newSpecs);
 
         // Auto save positional specs
         await api.patch(`/orders/${orderId}/specs`, { positions: newSpecs });
         await fetchOrder();
-      } catch {
-        alert("Upload failed");
+      } catch (err) {
+        alert(err.response?.data?.message || "Upload failed");
       } finally {
         setUploadingField(null);
+        if (e?.target) e.target.value = "";
       }
       return;
     }
@@ -596,9 +663,7 @@ const OrderDetail = () => {
       formData.append("file", file);
 
       const folder = type === "artwork" ? "artworks" : "general";
-      const uploadRes = await api.post(`/upload?folder=${folder}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const uploadRes = await api.post(`/upload?folder=${folder}`, formData);
 
       const fileUrl = uploadRes.data.data.url;
       const payload = type === "artwork" ? { artworkUrl: fileUrl } : {};
@@ -613,6 +678,35 @@ const OrderDetail = () => {
       await fetchOrder();
     } catch {
       alert("File upload failed");
+    } finally {
+      setUploadingField(null);
+    }
+  };
+
+  const handleRemoveGlobalEmbroideryFile = async (fileIndex) => {
+    const currentUrls = Array.isArray(order?.embroideryFileUrls)
+      ? order.embroideryFileUrls.filter(Boolean)
+      : order?.embroideryFileUrl
+        ? [order.embroideryFileUrl]
+        : [];
+
+    if (
+      fileIndex < 0 ||
+      fileIndex >= currentUrls.length ||
+      !window.confirm("ยืนยันลบไฟล์ .emb นี้ใช่หรือไม่?")
+    ) {
+      return;
+    }
+
+    try {
+      setUploadingField(`embroideryGlobalRemove_${fileIndex}`);
+      const nextUrls = currentUrls.filter((_, idx) => idx !== fileIndex);
+      await api.patch(`/orders/${orderId}/specs`, {
+        embroideryFileUrls: nextUrls,
+      });
+      await fetchOrder();
+    } catch (err) {
+      alert(err.response?.data?.message || "ลบไฟล์ .emb ไม่สำเร็จ");
     } finally {
       setUploadingField(null);
     }
@@ -732,7 +826,7 @@ const OrderDetail = () => {
   if (error || !order) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl text-center max-w-md w-full">
+        <div className="bg-white p-8 rounded-lg shadow-xl text-center max-w-md w-full">
           <HiOutlineExclamationCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-black text-slate-800 mb-2">
             เกิดข้อผิดพลาด
@@ -801,7 +895,7 @@ const OrderDetail = () => {
     ? "รายละเอียดสเปคการผลิต (Production Specs)"
     : isQCRole
       ? "ข้อมูลประกอบการตรวจงาน (QC Specs)"
-      : "รายละเอียดทางเทคนิค (Graphic Specification)";
+    :""
 
   const latestRejection = order?.rejections?.[0];
   const isCurrentlyRejected =
@@ -837,8 +931,8 @@ const OrderDetail = () => {
 
       {isCurrentlyRejected && (
         <div className="max-w-7xl mx-auto px-4 mt-6">
-          <div className="bg-rose-50 border-2 border-rose-200 rounded-[2rem] p-6 flex flex-col md:flex-row items-center gap-6 shadow-lg animate-in slide-in-from-top-4 duration-500">
-            <div className="bg-rose-600 p-4 rounded-2xl shadow-xl shadow-rose-200 shrink-0">
+          <div className="bg-rose-50 border-2 border-rose-200 rounded-lg p-6 flex flex-col md:flex-row items-center gap-6 shadow-lg animate-in slide-in-from-top-4 duration-500">
+            <div className="bg-rose-600 p-4 rounded-md shadow-xl shadow-rose-200 shrink-0">
               <HiOutlineExclamationCircle className="w-8 h-8 text-white" />
             </div>
             <div className="flex-1 text-center md:text-left">
@@ -1123,7 +1217,7 @@ const OrderDetail = () => {
                   disabled={isUpdating}
                   className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700 disabled:opacity-60"
                 >
-                  Save Billing Indicator
+                  บันทึก
                 </button>
               )}
             </div>
@@ -1183,7 +1277,7 @@ const OrderDetail = () => {
 
               <div className="p-6">
                 <div
-                  className={`mb-6 rounded-2xl p-4 border ${order.preorderSubStatus === "ARRIVED" ? "bg-emerald-100/50 border-emerald-200" : "bg-amber-100/50 border-amber-200"}`}
+                  className={`mb-6 rounded-md p-4 border ${order.preorderSubStatus === "ARRIVED" ? "bg-emerald-100/50 border-emerald-200" : "bg-amber-100/50 border-amber-200"}`}
                 >
                   <p
                     className={`text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2 ${order.preorderSubStatus === "ARRIVED" ? "text-emerald-700" : "text-amber-700"}`}
@@ -1231,7 +1325,7 @@ const OrderDetail = () => {
                         </label>
                         <input
                           type="date"
-                          className="w-full bg-white border-2 border-slate-200 rounded-2xl px-5 py-4 font-black text-lg text-indigo-600 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all"
+                          className="w-full bg-white border-2 border-slate-200 rounded-md px-5 py-4 font-black text-lg text-indigo-600 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all"
                           value={order.purchasingEta?.split("T")[0] || ""}
                           min={new Date().toISOString().split("T")[0]}
                           onChange={(e) =>
@@ -1260,7 +1354,7 @@ const OrderDetail = () => {
                       </label>
                       <textarea
                         placeholder="ระบุความคืบหน้า..."
-                        className="w-full bg-white border-2 border-slate-200 rounded-2xl px-5 py-3 font-bold text-slate-700 h-[80px] focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all placeholder:text-slate-300 placeholder:font-normal text-sm"
+                        className="w-full bg-white border-2 border-slate-200 rounded-md px-5 py-3 font-bold text-slate-700 h-[80px] focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all placeholder:text-slate-300 placeholder:font-normal text-sm"
                         defaultValue={order.purchasingReason}
                         onBlur={(e) =>
                           handleUpdatePurchasingInfo(
@@ -1281,7 +1375,7 @@ const OrderDetail = () => {
                     <button
                       onClick={handleConfirmArrival}
                       disabled={isUpdating}
-                      className="w-full py-5 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white rounded-[2rem] font-black shadow-xl shadow-emerald-200 transition-all flex items-center justify-center gap-3 group"
+                      className="w-full py-5 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white rounded-lg font-black shadow-xl shadow-emerald-200 transition-all flex items-center justify-center gap-3 group"
                     >
                       <HiOutlineTruck className="w-6 h-6 animate-bounce" />
                       <span>ยืนยันว่าสินค้ามาส่งแล้ว (Confirm Delivery)</span>
@@ -1291,7 +1385,7 @@ const OrderDetail = () => {
                 {!order.actionMap?.canEditPreorder &&
                   !isAdmin &&
                   order.preorderSubStatus !== "ARRIVED" && (
-                    <div className="bg-slate-100 p-4 rounded-2xl text-center">
+                    <div className="bg-slate-100 p-4 rounded-md text-center">
                       <p className="text-xs font-bold text-slate-500 italic">
                         * รอฝ่ายจัดซื้อยืนยันการรับสินค้าเมื่อของมาถึงหน้างาน
                       </p>
@@ -1310,12 +1404,12 @@ const OrderDetail = () => {
             order={order}
             user={user}
             isAdmin={isAdmin}
-            isUpdating={isUpdating}
             editSpecs={editSpecs}
             setEditSpecs={setEditSpecs}
             uploadingField={uploadingField}
             handleFileUpload={handleFileUpload}
-            handleUpdateSpecs={handleUpdateSpecs}
+            handleRemoveGlobalEmbroideryFile={handleRemoveGlobalEmbroideryFile}
+            autoSaveStatus={autoSaveStatus}
             isLibraryOpen={isLibraryOpen}
             setIsLibraryOpen={setIsLibraryOpen}
             searchBlock={searchBlock}
@@ -1343,13 +1437,13 @@ const OrderDetail = () => {
 
       {/* MODALS */}
       {showCancelModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95 duration-200">
+        <div className="erp-modal-overlay">
+          <div className="erp-modal-content w-full max-w-md p-8">
             <h2 className="text-xl font-black text-slate-800 mb-4">
               ยกเลิกออเดอร์
             </h2>
             <textarea
-              className="w-full px-6 py-4 bg-slate-50 border rounded-3xl font-bold h-32 focus:ring-4 focus:ring-red-100 outline-none"
+              className="w-full px-6 py-4 bg-slate-50 border rounded-lg font-bold h-32 focus:ring-4 focus:ring-red-100 outline-none"
               placeholder="ระบุเหตุผลการยกเลิก..."
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
@@ -1357,13 +1451,13 @@ const OrderDetail = () => {
             <div className="flex gap-3 mt-8">
               <button
                 onClick={() => setShowCancelModal(false)}
-                className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-slate-600"
+                className="flex-1 py-4 bg-slate-100 rounded-md font-black text-slate-600"
               >
                 ปิด
               </button>
               <button
                 onClick={handleCancelOrder}
-                className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black shadow-lg"
+                className="flex-1 py-4 bg-red-600 text-white rounded-md font-black shadow-lg"
                 disabled={isUpdating}
               >
                 ยืนยันการยกเลิก
@@ -1384,13 +1478,13 @@ const OrderDetail = () => {
       )}
 
       {showUrgentModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95 duration-200">
+        <div className="erp-modal-overlay">
+          <div className="erp-modal-content w-full max-w-md p-8">
             <h2 className="text-xl font-black text-slate-800 mb-4">
               เร่งออเดอร์
             </h2>
             <textarea
-              className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-3xl font-bold h-32 focus:ring-4 focus:ring-amber-200 outline-none"
+              className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-lg font-bold h-32 focus:ring-4 focus:ring-amber-200 outline-none"
               placeholder="หมายเหตุเร่งด่วน...."
               value={urgentNote}
               onChange={(e) => setUrgentNote(e.target.value)}
@@ -1398,13 +1492,13 @@ const OrderDetail = () => {
             <div className="flex gap-3 mt-8">
               <button
                 onClick={() => setShowUrgentModal(false)}
-                className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-slate-600"
+                className="flex-1 py-4 bg-slate-100 rounded-md font-black text-slate-600"
               >
                 ปิด
               </button>
               <button
                 onClick={handleBumpUrgent}
-                className="flex-1 py-4 bg-amber-600 text-white rounded-2xl font-black shadow-lg"
+                className="flex-1 py-4 bg-amber-600 text-white rounded-md font-black shadow-lg"
                 disabled={isUpdating}
               >
                 ส่งสัญญาณเร่งด่วน
@@ -1414,10 +1508,10 @@ const OrderDetail = () => {
         </div>
       )}
       {showRejectModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-300">
+        <div className="erp-modal-overlay">
+          <div className="erp-modal-content p-8 max-w-lg w-full">
             <div className="flex items-center gap-4 mb-6">
-              <div className="p-3 bg-rose-100 text-rose-600 rounded-2xl">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-md">
                 <HiOutlineXMark className="w-8 h-8" />
               </div>
               <h3 className="text-2xl font-black text-slate-800">
@@ -1490,7 +1584,7 @@ const OrderDetail = () => {
                   2. ระบุเหตุผลการตีกลับ (Reasons)
                 </label>
                 <textarea
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-rose-50 focus:border-rose-400 outline-none transition-all min-h-[100px] font-medium text-slate-800 text-sm"
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-md focus:ring-4 focus:ring-rose-50 focus:border-rose-400 outline-none transition-all min-h-[100px] font-medium text-slate-800 text-sm"
                   placeholder="เช่น ตำแหน่งปักผิด, ไซส์ของไม่ครบ, อาร์ตเวิร์คคนละสี..."
                   value={rejectData.reason}
                   onChange={(e) =>
@@ -1511,7 +1605,7 @@ const OrderDetail = () => {
                     <input
                       type="number"
                       min="0"
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-400 outline-none text-xl font-black text-indigo-600"
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-md focus:ring-4 focus:ring-indigo-50 focus:border-indigo-400 outline-none text-xl font-black text-indigo-600"
                       value={rejectData.damagedCount}
                       onChange={(e) =>
                         setRejectData((prev) => ({
@@ -1529,7 +1623,7 @@ const OrderDetail = () => {
                           isSalesError: !prev.isSalesError,
                         }))
                       }
-                      className={`flex items-center gap-2 p-4 rounded-2xl font-black border-2 transition-all h-14 ${
+                      className={`flex items-center gap-2 p-4 rounded-md font-black border-2 transition-all h-14 ${
                         rejectData.isSalesError
                           ? "bg-rose-50 border-rose-200 text-rose-600"
                           : "bg-slate-50 border-slate-200 text-slate-400"
@@ -1560,7 +1654,7 @@ const OrderDetail = () => {
                     isSalesError: false,
                   });
                 }}
-                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all text-sm"
+                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-md font-black hover:bg-slate-200 transition-all text-sm"
               >
                 ยกเลิก
               </button>
@@ -1571,7 +1665,7 @@ const OrderDetail = () => {
                   !rejectData.targetRole ||
                   isUpdating
                 }
-                className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black shadow-xl shadow-rose-200 hover:bg-rose-700 disabled:opacity-50 transition-all text-sm"
+                className="flex-1 py-4 bg-rose-600 text-white rounded-md font-black shadow-xl shadow-rose-200 hover:bg-rose-700 disabled:opacity-50 transition-all text-sm"
               >
                 {isUpdating ? "กำลังส่ง..." : "ยืนยันส่งคืนงาน"}
               </button>
@@ -1581,10 +1675,10 @@ const OrderDetail = () => {
       )}
 
       {showStockIssueModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl animate-in zoom-in duration-300">
+        <div className="erp-modal-overlay">
+          <div className="erp-modal-content p-8 max-w-lg w-full">
             <div className="flex items-center gap-4 mb-6">
-              <div className="p-3 bg-red-100 text-red-600 rounded-2xl">
+              <div className="p-3 bg-red-100 text-red-600 rounded-md">
                 <HiOutlineExclamationCircle className="w-8 h-8" />
               </div>
               <h3 className="text-2xl font-black text-slate-800">
@@ -1599,7 +1693,7 @@ const OrderDetail = () => {
             </p>
 
             <textarea
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-red-50 focus:border-red-400 outline-none transition-all min-h-[120px] mb-6 font-medium text-slate-800"
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-md focus:ring-4 focus:ring-red-50 focus:border-red-400 outline-none transition-all min-h-[120px] mb-6 font-medium text-slate-800"
               placeholder="ตัวอย่าง: เช็คสินค้าแล้วสีนี้ไซส์ M สต็อกหมด จะให้สั่งเพิ่มหรือยกเลิก ถามลูกค้าเอา..."
               value={stockIssueReason}
               onChange={(e) => setStockIssueReason(e.target.value)}
@@ -1608,14 +1702,14 @@ const OrderDetail = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowStockIssueModal(false)}
-                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all"
+                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-md font-black hover:bg-slate-200 transition-all"
               >
                 ยกเลิก
               </button>
               <button
                 onClick={handleReportStockIssue}
                 disabled={!stockIssueReason.trim() || isUpdating}
-                className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black shadow-lg shadow-red-200 hover:bg-red-700 disabled:opacity-50 transition-all"
+                className="flex-1 py-4 bg-red-600 text-white rounded-md font-black shadow-lg shadow-red-200 hover:bg-red-700 disabled:opacity-50 transition-all"
               >
                 {isUpdating ? "กำลังส่ง..." : "แจ้งปัญหาไปยังฝ่ายขาย"}
               </button>
@@ -1624,10 +1718,10 @@ const OrderDetail = () => {
         </div>
       )}
       {showBufferModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in duration-300">
+        <div className="erp-modal-overlay">
+          <div className="erp-modal-content p-8 max-w-sm w-full">
             <div className="flex items-center gap-4 mb-6">
-              <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
+              <div className="p-3 bg-indigo-100 text-indigo-600 rounded-md">
                 <HiOutlineCalendarDays className="w-8 h-8" />
               </div>
               <h3 className="text-2xl font-black text-slate-800">
@@ -1644,7 +1738,7 @@ const OrderDetail = () => {
                   <button
                     key={val}
                     onClick={() => setBufferLevel(val)}
-                    className={`py-4 rounded-2xl font-black border-2 transition-all ${
+                    className={`py-4 rounded-md font-black border-2 transition-all ${
                       bufferLevel === val
                         ? "border-indigo-600 bg-indigo-50 text-indigo-600"
                         : "border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200"
@@ -1662,14 +1756,14 @@ const OrderDetail = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowBufferModal(false)}
-                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all text-sm"
+                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-md font-black hover:bg-slate-200 transition-all text-sm"
               >
                 ยกเลิก
               </button>
               <button
                 onClick={handleUpdateBuffer}
                 disabled={isUpdating}
-                className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-50 transition-all text-sm"
+                className="flex-1 py-4 bg-indigo-600 text-white rounded-md font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-50 transition-all text-sm"
               >
                 {isUpdating ? "กำลังบันทึก..." : "ยืนยันการตั้งค่า"}
               </button>
@@ -1691,7 +1785,7 @@ const OrderDetail = () => {
       {/* Production Worker Assignment Modal */}
       {showProductionWorkerModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-erp-fade-in">
-          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 sm:p-8 animate-erp-scale-in">
+          <div className="w-full max-w-lg bg-white rounded-lg shadow-2xl p-6 sm:p-8 animate-erp-scale-in">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                 <span className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">

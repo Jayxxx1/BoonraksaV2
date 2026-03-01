@@ -35,7 +35,9 @@ const OrderStatusBar = ({
   const isProductionRole = user?.role === "PRODUCTION";
   const isQCRole = user?.role === "SEWING_QC";
   const requiresBillingDoc =
-    !!order.requireInvoice || !!order.requireReceipt || !!order.requireQuotation;
+    !!order.requireInvoice ||
+    !!order.requireReceipt ||
+    !!order.requireQuotation;
   const billingDone = !!order.billingCompletedAt;
 
   return (
@@ -196,7 +198,7 @@ const OrderStatusBar = ({
             {!order.productionId ? (
               <button
                 onClick={() => handleClaim("productionId")}
-                className="w-full px-6 py-3 bg-emerald-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all text-sm"
+                className="w-full px-6 py-3 bg-emerald-500 text-white rounded-md font-black shadow-xl hover:scale-105 transition-all text-sm"
                 disabled={isUpdating}
               >
                 รับสิทธิ์ดูแลงาน (Claim)
@@ -268,7 +270,7 @@ const OrderStatusBar = ({
                 onClick={() =>
                   handleUpdateStatus("PRODUCTION_FINISHED", { pass: true })
                 }
-                className="px-6 py-3 bg-emerald-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50"
+                className="px-6 py-3 bg-emerald-500 text-white rounded-md font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50"
                 disabled={isUpdating}
               >
                 ผ่าน QC (Pass)
@@ -277,7 +279,7 @@ const OrderStatusBar = ({
             {order.actionMap?.canFailQC && (
               <button
                 onClick={() => setShowRejectModal(true)}
-                className="px-6 py-3 bg-rose-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50"
+                className="px-6 py-3 bg-rose-500 text-white rounded-md font-black shadow-xl hover:scale-105 transition-all disabled:opacity-50"
                 disabled={isUpdating}
               >
                 ไม่ผ่าน (Fail)
@@ -304,7 +306,7 @@ const OrderStatusBar = ({
               <div className="flex flex-col gap-3 items-center w-full max-w-xs">
                 <button
                   onClick={() => handleUpdateStatus("READY_TO_SHIP")}
-                  className="px-6 py-3 bg-blue-500 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition-all w-full"
+                  className="px-6 py-3 bg-blue-500 text-white rounded-md font-black shadow-xl hover:scale-105 transition-all w-full"
                   disabled={isUpdating}
                 >
                   รับงานเข้าฝ่ายจัดส่ง
@@ -313,7 +315,7 @@ const OrderStatusBar = ({
             )}
 
             {order.actionMap?.canShip && (
-              <div className="w-full max-w-md space-y-3 bg-white/20 p-4 rounded-3xl backdrop-blur-sm border border-white/30">
+              <div className="w-full max-w-md space-y-3 bg-white/20 p-4 rounded-lg backdrop-blur-sm border border-white/30">
                 <p className="text-sm font-bold text-white text-center mb-2 uppercase tracking-wide">
                   ขั้นตอนการจัดส่ง (Shipping)
                 </p>
@@ -344,7 +346,7 @@ const OrderStatusBar = ({
             {!order.actionMap?.canShip &&
               order.status === "READY_TO_SHIP" &&
               order.balanceDue > 0 && (
-                <div className="bg-red-500/90 text-white p-4 rounded-2xl flex items-center gap-3 shadow-lg animate-pulse w-full max-w-md">
+                <div className="bg-red-500/90 text-white p-4 rounded-md flex items-center gap-3 shadow-lg animate-pulse w-full max-w-md">
                   <HiOutlineExclamationCircle className="w-8 h-8 shrink-0" />
                   <div className="flex-1">
                     <p className="font-black text-sm uppercase">
@@ -363,7 +365,7 @@ const OrderStatusBar = ({
               parseFloat(order.balanceDue || 0) <= 0 &&
               requiresBillingDoc &&
               !billingDone && (
-                <div className="bg-indigo-500/90 text-white p-4 rounded-2xl flex items-center gap-3 shadow-lg w-full max-w-md">
+                <div className="bg-indigo-500/90 text-white p-4 rounded-md flex items-center gap-3 shadow-lg w-full max-w-md">
                   <HiOutlineExclamationCircle className="w-8 h-8 shrink-0" />
                   <div className="flex-1">
                     <p className="font-black text-sm uppercase">
@@ -418,7 +420,7 @@ const OrderStatusBar = ({
             !isClaimedByMe(order.qcId) &&
             order.status === "PRODUCTION_FINISHED")) &&
           !isAdmin && (
-            <div className="flex flex-col items-center gap-2 bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mt-4">
+            <div className="flex flex-col items-center gap-2 bg-indigo-50 p-4 rounded-md border border-indigo-100 mt-4">
               <HiOutlineExclamationCircle className="w-8 h-8 text-indigo-400 animate-pulse" />
               <p className="text-indigo-900 font-black text-xs uppercase tracking-wide">
                 กรุณากดรับงานก่อนเพื่อดำเนินการ

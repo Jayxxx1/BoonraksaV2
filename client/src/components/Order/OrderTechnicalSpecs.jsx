@@ -9,18 +9,21 @@ import {
   HiOutlineBolt,
 } from "react-icons/hi2";
 import api from "../../api/config";
+import ImagePreviewModal from "../Common/ImagePreviewModal";
 
 const OrderTechnicalSpecs = ({
   order,
   isAdmin,
-  isUpdating,
+
   displayHeader,
   technicalHeader,
   editSpecs,
   setEditSpecs,
   uploadingField,
   handleFileUpload,
-  handleUpdateSpecs,
+  handleRemoveGlobalEmbroideryFile,
+
+  autoSaveStatus,
   isLibraryOpen,
   setIsLibraryOpen,
   searchBlock,
@@ -38,6 +41,8 @@ const OrderTechnicalSpecs = ({
   const canUpload = order.actionMap?.canUploadArtwork || isDigitizerRole;
   const isSales = user?.role === "SALES";
   const isSalesOrAdmin = isAdmin || isSales;
+
+  const [previewImage, setPreviewImage] = useState(null);
 
   /* 🆕 Master Embroidery Positions */
   const [masterPositions, setMasterPositions] = useState([]);
@@ -81,6 +86,18 @@ const OrderTechnicalSpecs = ({
       ["NEW", "EDIT"].includes(order.blockType)) ||
     (isGraphicRole && canEditSize) ||
     isAdmin;
+  const globalEmbFiles = Array.isArray(order.embroideryFileUrls)
+    ? order.embroideryFileUrls.filter(Boolean)
+    : order.embroideryFileUrl
+      ? [order.embroideryFileUrl]
+      : [];
+  const hasGlobalEmbFiles = globalEmbFiles.length > 0;
+  const remainingGlobalEmbSlots = Math.max(0, 15 - globalEmbFiles.length);
+  const canDeleteGlobalEmbFiles =
+    (isDigitizerRole &&
+      order.status === "PENDING_DIGITIZING" &&
+      order.digitizer?.id === user?.id) ||
+    isAdmin;
 
   return (
     <div className="space-y-6">
@@ -107,7 +124,7 @@ const OrderTechnicalSpecs = ({
                       src={img}
                       alt={`Mockup ${idx + 1}`}
                       className="w-full h-full object-cover cursor-zoom-in hover:scale-110 transition-transform duration-500"
-                      onClick={() => window.open(img)}
+                      onClick={() => setPreviewImage(img)}
                     />
                     <div className="absolute top-2 right-2 px-2 py-0.5 bg-slate-900/40 backdrop-blur-md rounded-lg text-[8px] font-black text-white opacity-0 group-hover:opacity-100 transition-opacity">
                       #{idx + 1}
@@ -162,13 +179,41 @@ const OrderTechnicalSpecs = ({
             </div>
           </div>
           {canEdit && order.status !== "CANCELLED" ? (
-            <button
-              onClick={handleUpdateSpecs}
-              className="erp-button erp-button-primary py-1.5 px-3 text-xs"
-              disabled={isUpdating}
-            >
-              บันทึกอัตโนมัติ
-            </button>
+            <div className="flex items-center gap-2">
+              {autoSaveStatus === "saving" && (
+                <div className="flex items-center gap-1.5 text-indigo-500 animate-pulse">
+                  <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">
+                    {/* Saving... */}
+                  </span>
+                </div>
+              )}
+              {autoSaveStatus === "saved" && (
+                <div className="flex items-center gap-1 text-emerald-500">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={3}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  <span className="text-[10px] font-black uppercase tracking-wider">
+                    {/* Saved */}
+                  </span>
+                </div>
+              )}
+              {autoSaveStatus === "idle" && (
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                  {/* Autosave ON */}
+                </span>
+              )}
+            </div>
           ) : (
             isGraphicRole &&
             !isAdmin &&
@@ -379,84 +424,83 @@ const OrderTechnicalSpecs = ({
                     </div>
                   )}
 
-                  {/* 🆕 EMBROIDERY FILES UPLOAD PER POSITION (New for Digitizer and Graphic) */}
-                  {(canDigitize ||
-                    (emb.embroideryFileUrls &&
-                      emb.embroideryFileUrls.length > 0)) && (
+                  {/* Position Reference Image Upload */}
+                  {(canDigitize || emb.mockupUrl) && (
                     <div className="border-t border-slate-50 pt-2 pb-2">
-                      <label className="text-[12px] font-black text-rose-500 uppercase flex items-center gap-1 mb-2">
-                        <HiOutlineBolt className="w-3.5 h-3.5" /> ไฟล์ปัก (.DST){" "}
-                        {emb.embroideryFileUrls?.length || 0}/10
+                      <label className="text-[12px] font-black text-indigo-500 uppercase flex items-center gap-1 mb-2">
+                        <HiOutlinePhoto className="w-3.5 h-3.5" />{" "}
+                        รูปอ้างอิงจุดปัก
                       </label>
 
-                      <div className="flex flex-wrap gap-2">
-                        {/* List uploaded files */}
-                        {Array.isArray(emb.embroideryFileUrls) &&
-                          emb.embroideryFileUrls.map((url, urlIdx) => (
-                            <div
-                              key={urlIdx}
-                              className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-2 py-1 rounded-md text-xs group"
-                            >
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-bold text-rose-600 hover:text-rose-700 hover:underline max-w-[150px] truncate"
-                                title="ดาวน์โหลดไฟล์ .EMB"
-                              >
-                                ไฟล์ปัก {urlIdx + 1}
-                              </a>
-                              {canDigitize && (
-                                <button
-                                  onClick={() => {
-                                    const newSpecs = [...editSpecs];
-                                    newSpecs[idx].embroideryFileUrls.splice(
-                                      urlIdx,
-                                      1,
-                                    );
-                                    setEditSpecs(newSpecs);
-                                  }}
-                                  className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  <HiOutlineXMark className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-
-                        {/* Upload button for that specific position */}
-                        {canDigitize &&
-                          (!emb.embroideryFileUrls ||
-                            emb.embroideryFileUrls.length < 10) && (
-                            <label className="flex items-center gap-1.5 px-3 py-1 bg-white border border-dashed border-rose-300 text-rose-500 rounded-md cursor-pointer hover:bg-rose-50 transition-colors text-xs font-bold shadow-sm">
-                              {uploadingField === `emb_${idx}` ? (
-                                <div className="animate-spin w-3 h-3 border-2 border-rose-500 border-t-transparent rounded-full" />
-                              ) : (
-                                <>
-                                  <HiOutlineCloudArrowUp className="w-4 h-4" />{" "}
-                                  อัปโหลด .EMB
-                                  <input
-                                    type="file"
-                                    className="hidden"
-                                    accept=".emb"
-                                    onChange={(e) => {
-                                      const file = e.target.files[0];
-                                      if (!file) return;
-                                      const customEvent = {
-                                        target: { files: [file] },
-                                        positionIndex: idx,
-                                      };
-                                      handleFileUpload(
-                                        customEvent,
-                                        `emb_${idx}`,
-                                      );
-                                    }}
-                                  />
-                                </>
-                              )}
+                      {emb.mockupUrl ? (
+                        <div className="relative group rounded-md overflow-hidden border border-slate-200 bg-white">
+                          <img
+                            src={emb.mockupUrl}
+                            alt={`Position ${idx + 1}`}
+                            className="w-full h-40 object-contain cursor-zoom-in bg-slate-50"
+                            onClick={() => setPreviewImage(emb.mockupUrl)}
+                          />
+                          {canDigitize && (
+                            <label className="absolute inset-0 bg-slate-900/50 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer">
+                              <input
+                                type="file"
+                                className="hidden"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const customEvent = {
+                                    target: { files: [file] },
+                                    positionIndex: idx,
+                                  };
+                                  handleFileUpload(
+                                    customEvent,
+                                    `positionImage_${idx}`,
+                                  );
+                                }}
+                              />
+                              <div className="text-center text-white">
+                                <HiOutlineCloudArrowUp className="w-7 h-7 mx-auto mb-1" />
+                                <span className="text-[10px] font-black uppercase">
+                                  เปลี่ยนรูป
+                                </span>
+                              </div>
                             </label>
                           )}
-                      </div>
+                        </div>
+                      ) : (
+                        canDigitize && (
+                          <label className="flex flex-col items-center justify-center h-40 rounded-md border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-slate-50 transition-all cursor-pointer group bg-white">
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const customEvent = {
+                                  target: { files: [file] },
+                                  positionIndex: idx,
+                                };
+                                handleFileUpload(
+                                  customEvent,
+                                  `positionImage_${idx}`,
+                                );
+                              }}
+                            />
+                            {uploadingField === `positionImage_${idx}` ? (
+                              <div className="animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                            ) : (
+                              <>
+                                <HiOutlineCloudArrowUp className="w-8 h-8 text-slate-300 group-hover:text-indigo-500 mb-2" />
+                                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wide text-center px-3">
+                                  อัปโหลดรูปประจำจุด (PNG/JPG/WEBP)
+                                </span>
+                              </>
+                            )}
+                          </label>
+                        )
+                      )}
                     </div>
                   )}
 
@@ -480,13 +524,13 @@ const OrderTechnicalSpecs = ({
                     </div>
                   )}
 
-                  {/* Images Row (Logo / Mockup) */}
-                  {(emb.logoUrl || emb.mockupUrl) && (
+                  {/* Images Row (Logo) */}
+                  {emb.logoUrl && (
                     <div className="grid grid-cols-2 gap-3 mt-2">
                       {emb.logoUrl && (
                         <div
                           className="space-y-1 group cursor-zoom-in"
-                          onClick={() => window.open(emb.logoUrl)}
+                          onClick={() => setPreviewImage(emb.logoUrl)}
                         >
                           <label className="text-[9px] font-bold text-slate-400 uppercase">
                             ไฟล์โลโก้ (Logo)
@@ -553,12 +597,16 @@ const OrderTechnicalSpecs = ({
                                     (item) => item.code === code,
                                   );
                                   const newSpecs = [...editSpecs];
-                                  newSpecs[idx].threadSequence[tIdx].threadCode =
-                                    code;
+                                  newSpecs[idx].threadSequence[
+                                    tIdx
+                                  ].threadCode = code;
                                   if (selectedThread) {
-                                    newSpecs[idx].threadSequence[tIdx].colorName =
-                                      selectedThread.name || "";
-                                    newSpecs[idx].threadSequence[tIdx].colorCode =
+                                    newSpecs[idx].threadSequence[
+                                      tIdx
+                                    ].colorName = selectedThread.name || "";
+                                    newSpecs[idx].threadSequence[
+                                      tIdx
+                                    ].colorCode =
                                       selectedThread.colorCode || "#000000";
                                   }
                                   setEditSpecs(newSpecs);
@@ -689,7 +737,7 @@ const OrderTechnicalSpecs = ({
                       src={order.artworkUrl}
                       alt="Artwork"
                       className="w-full h-full object-contain cursor-zoom-in"
-                      onClick={() => window.open(order.artworkUrl)}
+                      onClick={() => setPreviewImage(order.artworkUrl)}
                     />
                     {canUpload && (
                       <label className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer">
@@ -732,15 +780,20 @@ const OrderTechnicalSpecs = ({
               </div>
 
               {/* EMB File Section (Embroidery File) */}
-              <div className="space-y-3">
+              <div
+                className={`space-y-3 ${hasGlobalEmbFiles ? "lg:col-span-2" : ""}`}
+              >
                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">
                   ไฟล์ตีลาย (Embroidery File)
                 </label>
-                <div className="erp-card p-4 bg-white border border-slate-200 rounded-2xl aspect-[4/3] flex flex-col">
-                  <div className="flex-1 flex flex-col gap-2 overflow-y-auto pr-1 custom-scrollbar">
-                    {order.embroideryFileUrls &&
-                    order.embroideryFileUrls.length > 0 ? (
-                      order.embroideryFileUrls.map((url, i) => (
+                <div
+                  className={`erp-card p-4 bg-white border border-slate-200 rounded-2xl flex flex-col ${hasGlobalEmbFiles ? "min-h-[340px]" : "aspect-[4/3]"}`}
+                >
+                  <div
+                    className={`flex-1 gap-2 overflow-y-auto pr-1 custom-scrollbar ${hasGlobalEmbFiles ? "grid grid-cols-1 xl:grid-cols-2 content-start" : "flex flex-col"}`}
+                  >
+                    {globalEmbFiles.length > 0 ? (
+                      globalEmbFiles.map((url, i) => (
                         <div
                           key={i}
                           className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200"
@@ -751,35 +804,37 @@ const OrderTechnicalSpecs = ({
                               ไฟล์ที่ {i + 1} (.emb)
                             </span>
                           </div>
-                          <a
-                            href={url}
-                            download
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap shrink-0"
-                          >
-                            DOWNLOAD
-                          </a>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a
+                              href={url}
+                              download
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap"
+                            >
+                              DOWNLOAD
+                            </a>
+                            {canDeleteGlobalEmbFiles && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRemoveGlobalEmbroideryFile?.(i)
+                                }
+                                disabled={
+                                  uploadingField ===
+                                  `embroideryGlobalRemove_${i}`
+                                }
+                                className="text-[10px] bg-rose-500 hover:bg-rose-600 disabled:opacity-60 text-white px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap"
+                              >
+                                {uploadingField ===
+                                `embroideryGlobalRemove_${i}`
+                                  ? "..."
+                                  : "DELETE"}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))
-                    ) : order.embroideryFileUrl ? (
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <HiOutlineBolt className="w-5 h-5 text-indigo-500 shrink-0" />
-                          <span className="text-xs font-mono truncate text-slate-700">
-                            ไฟล์เดิม (.emb)
-                          </span>
-                        </div>
-                        <a
-                          href={order.embroideryFileUrl}
-                          download
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-black transition-all text-center whitespace-nowrap shrink-0"
-                        >
-                          DOWNLOAD
-                        </a>
-                      </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center p-4 h-full border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest text-center mt-2">
@@ -790,27 +845,38 @@ const OrderTechnicalSpecs = ({
                   </div>
 
                   {canUpload && (
-                    <label className="mt-3 flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-slate-50 cursor-pointer transition-all shrink-0">
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept=".emb"
-                        onChange={(e) =>
-                          handleFileUpload(e, "embroideryGlobal")
-                        }
-                        disabled={uploadingField === "embroideryGlobal"}
-                      />
-                      {uploadingField === "embroideryGlobal" ? (
-                        <div className="animate-spin w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full" />
-                      ) : (
-                        <>
-                          <HiOutlineCloudArrowUp className="w-4 h-4 text-indigo-500" />
-                          <span className="text-[10px] font-black uppercase text-slate-500">
-                            อัปโหลดไฟล์ .emb หลัก
-                          </span>
-                        </>
+                    <>
+                      <label className="mt-3 flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-slate-50 cursor-pointer transition-all shrink-0">
+                        <input
+                          type="file"
+                          multiple
+                          className="hidden"
+                          accept=".emb"
+                          onChange={(e) =>
+                            handleFileUpload(e, "embroideryGlobal")
+                          }
+                          disabled={
+                            uploadingField === "embroideryGlobal" ||
+                            remainingGlobalEmbSlots <= 0
+                          }
+                        />
+                        {uploadingField === "embroideryGlobal" ? (
+                          <div className="animate-spin w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                        ) : (
+                          <>
+                            <HiOutlineCloudArrowUp className="w-4 h-4 text-indigo-500" />
+                            <span className="text-[10px] font-black uppercase text-slate-500">
+                              อัปโหลดไฟล์ .emb ({globalEmbFiles.length}/15)
+                            </span>
+                          </>
+                        )}
+                      </label>
+                      {remainingGlobalEmbSlots <= 0 && (
+                        <p className="text-[10px] font-bold text-amber-600 text-center">
+                          ครบจำนวนสูงสุด 15 ไฟล์แล้ว
+                        </p>
                       )}
-                    </label>
+                    </>
                   )}
                 </div>
               </div>
@@ -888,11 +954,15 @@ const OrderTechnicalSpecs = ({
           </div>
         </div>
       )}
+
+      {/* Image Preview Lightbox */}
+      <ImagePreviewModal
+        isOpen={!!previewImage}
+        onClose={() => setPreviewImage(null)}
+        imageUrl={previewImage}
+      />
     </div>
   );
 };
 
 export default OrderTechnicalSpecs;
-
-
-

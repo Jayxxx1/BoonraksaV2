@@ -386,6 +386,7 @@ const CreateOrder = () => {
     }
 
     const finalTotal = subtotal + blockPrice + codSurcharge;
+    const numericPaidAmount = Math.max(0, parseFloat(paidAmount) || 0);
 
     return {
       subtotal,
@@ -393,7 +394,7 @@ const CreateOrder = () => {
       blockPrice,
       codSurcharge,
       finalTotal,
-      balance: finalTotal - (parseFloat(paidAmount) || 0),
+      balance: Math.max(0, finalTotal - numericPaidAmount),
     };
   }, [
     matrixData,
@@ -401,9 +402,15 @@ const CreateOrder = () => {
     orderInfo.blockType,
     paidAmount,
     paymentMethod,
+    isDirectSale,
   ]);
 
   const [hasManualDeposit, setHasManualDeposit] = useState(false);
+  useEffect(() => {
+    // Re-enable auto suggested paid amount when switching flow type.
+    setHasManualDeposit(false);
+  }, [orderInfo.flowType]);
+
   useEffect(() => {
     if (!hasManualDeposit && totals.finalTotal > 0) {
       setPaidAmount(
@@ -430,7 +437,9 @@ const CreateOrder = () => {
           sessionId: reservationSessionId,
           items,
         });
-        setReservationWarnings(res.data?.data?.reservation?.lowStockWarnings || []);
+        setReservationWarnings(
+          res.data?.data?.reservation?.lowStockWarnings || [],
+        );
       } catch (err) {
         console.error("Stock reservation sync failed:", err);
       }
@@ -442,7 +451,9 @@ const CreateOrder = () => {
 
   useEffect(() => {
     return () => {
-      api.delete("/orders/stock-reservations/" + reservationSessionId).catch(() => {});
+      api
+        .delete("/orders/stock-reservations/" + reservationSessionId)
+        .catch(() => {});
     };
   }, [reservationSessionId]);
 
@@ -459,20 +470,22 @@ const CreateOrder = () => {
       finalSlipUrl = res.data.data.url;
     }
 
-    // 2. Upload Drafts
+    // 2. Upload Drafts (skip for direct-sale flow)
     const finalDraftUrls = [];
-    for (const item of draftFiles) {
-      const fd = new FormData();
-      fd.append("file", item.file);
-      const res = await api.post("/upload?folder=drafts", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      finalDraftUrls.push(res.data.data.url);
+    if (!isDirectSale) {
+      for (const item of draftFiles) {
+        const fd = new FormData();
+        fd.append("file", item.file);
+        const res = await api.post("/upload?folder=drafts", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        finalDraftUrls.push(res.data.data.url);
+      }
     }
 
-    // 3. Upload Embroidery Images
+    // 3. Upload Embroidery Images (skip for direct-sale flow)
     const finalEmbroidery = await Promise.all(
-      embroidery.map(async (item) => {
+      (isDirectSale ? [] : embroidery).map(async (item) => {
         let logo = item.logoUrl;
         let mockup = item.mockupUrl;
 
@@ -563,12 +576,14 @@ const CreateOrder = () => {
       notes: orderInfo.notes,
       items,
       totalPrice: totals.finalTotal,
-      paidAmount: isDirectSale ? totals.finalTotal : parseFloat(paidAmount) || 0,
+      paidAmount: isDirectSale
+        ? totals.finalTotal
+        : parseFloat(paidAmount) || 0,
       blockPrice: totals.blockPrice,
       unitPrice: parseFloat(customUnitPrice) || 0,
       embroideryDetails: isDirectSale ? [] : actualEmbroidery,
       depositSlipUrl: actualDepositSlipUrl,
-      draftImages: actualDraftImages,
+      draftImages: isDirectSale ? [] : actualDraftImages,
       paymentMethod: paymentMethod,
       codSurcharge: totals.codSurcharge,
       requireInvoice,
@@ -650,7 +665,7 @@ const CreateOrder = () => {
   if (successOrderId) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 text-slate-900">
-        <div className="bg-white rounded-[2rem] shadow-xl p-10 max-w-md w-full text-center animate-erp-in">
+        <div className="bg-white rounded-lg shadow-xl p-10 max-w-md w-full text-center animate-erp-in">
           <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <HiOutlineCheckCircle className="w-12 h-12 text-emerald-600" />
           </div>
@@ -705,8 +720,8 @@ const CreateOrder = () => {
 
       {/* Pre-order Confirmation Modal */}
       {showPreOrderConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+        <div className="erp-modal-overlay">
+          <div className="erp-modal-content max-w-md w-full p-6">
             <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <HiOutlineExclamationTriangle className="w-10 h-10 text-amber-600" />
             </div>
@@ -759,7 +774,17 @@ const CreateOrder = () => {
                 <div className="text-xs font-semibold text-amber-800">
                   {reservationWarnings
                     .slice(0, 3)
-                    .map((w) => w.productName + " " + w.color + "/" + w.size + " (" + w.stock + ")")
+                    .map(
+                      (w) =>
+                        w.productName +
+                        " " +
+                        w.color +
+                        "/" +
+                        w.size +
+                        " (" +
+                        w.stock +
+                        ")",
+                    )
                     .join(" | ")}
                 </div>
               </div>

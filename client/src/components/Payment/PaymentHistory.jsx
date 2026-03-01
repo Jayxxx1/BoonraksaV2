@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import api from "../../api/config";
 import { HiOutlineReceiptRefund, HiOutlineCalendar } from "react-icons/hi2";
 import { formatDateTime } from "../../utils/dateFormat";
+import ImagePreviewModal from "../Common/ImagePreviewModal";
 
 export default function PaymentHistory({ order, refreshTrigger }) {
+  const [previewImage, setPreviewImage] = useState(null);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,7 +35,7 @@ export default function PaymentHistory({ order, refreshTrigger }) {
 
   if (payments.length === 0) {
     return (
-      <div className="text-center py-8 rounded-2xl border-2 border-dashed border-slate-100 bg-slate-50/50">
+      <div className="text-center py-8 rounded-md border-2 border-dashed border-slate-100 bg-slate-50/50">
         <p className="text-xs font-bold text-slate-400">
           ยังไม่มีประวัติการชำระเงิน
         </p>
@@ -52,22 +54,21 @@ export default function PaymentHistory({ order, refreshTrigger }) {
       {payments.map((payment) => (
         <div
           key={payment.id || payment._id}
-          className="bg-white border border-slate-100 rounded-2xl p-4 flex gap-4 shadow-sm"
+          className="bg-white border border-slate-100 rounded-md p-4 flex gap-4 shadow-sm"
         >
           {/* Slip Thumbnail or COD Icon */}
           {payment.slipUrl ? (
-            <a
-              href={payment.slipUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="w-14 h-14 bg-slate-50 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0"
+            <button
+              onClick={() => setPreviewImage(payment.slipUrl)}
+              className="w-14 h-14 bg-slate-50 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 cursor-zoom-in group relative"
             >
               <img
                 src={payment.slipUrl}
                 alt="Slip"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
               />
-            </a>
+              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
           ) : (
             <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0 border border-emerald-100">
               <HiOutlineReceiptRefund className="w-6 h-6" />
@@ -98,6 +99,12 @@ export default function PaymentHistory({ order, refreshTrigger }) {
           </div>
         </div>
       ))}
+
+      <ImagePreviewModal
+        isOpen={!!previewImage}
+        onClose={() => setPreviewImage(null)}
+        imageUrl={previewImage}
+      />
     </div>
   );
 }

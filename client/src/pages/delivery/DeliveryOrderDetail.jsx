@@ -89,7 +89,7 @@ export default function DeliveryOrderDetail() {
         <HiOutlineArrowLeft className="w-5 h-5" /> กลับไปหน้ากระดาน
       </button>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         {/* Header Section */}
         <div className="bg-slate-50 p-6 md:p-8 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -129,7 +129,7 @@ export default function DeliveryOrderDetail() {
           {/* 1. FINANCIAL HIGHLIGHT (MAIN FOCUS) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Total Price */}
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-center">
+            <div className="bg-slate-50 p-6 rounded-md border border-slate-100 text-center">
               <p className="text-xs font-black text-slate-400 uppercase mb-2">
                 ยอดรวมทั้งหมด (Total)
               </p>
@@ -139,7 +139,7 @@ export default function DeliveryOrderDetail() {
             </div>
 
             {/* Paid Amount */}
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-center">
+            <div className="bg-slate-50 p-6 rounded-md border border-slate-100 text-center">
               <p className="text-xs font-black text-slate-400 uppercase mb-2">
                 จ่ายแล้ว (Paid)
               </p>
@@ -150,7 +150,7 @@ export default function DeliveryOrderDetail() {
 
             {/* Balance Due */}
             <div
-              className={`p-6 rounded-2xl border-2 text-center relative overflow-hidden ${isPaid ? "bg-emerald-50 border-emerald-100" : "bg-rose-50 border-rose-200"}`}
+              className={`p-6 rounded-md border-2 text-center relative overflow-hidden ${isPaid ? "bg-emerald-50 border-emerald-100" : "bg-rose-50 border-rose-200"}`}
             >
               <p
                 className={`text-xs font-black uppercase mb-2 ${isPaid ? "text-emerald-500" : "text-rose-500"}`}
@@ -236,7 +236,7 @@ export default function DeliveryOrderDetail() {
               </p>
             </div>
 
-            <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200 shadow-inner">
+            <div className="bg-slate-50 p-8 rounded-lg border border-slate-200 shadow-inner">
               <label className="block text-xs font-bold text-slate-500 uppercase mb-3 ml-1">
                 เลขพัสดุ (Tracking Number)
               </label>
@@ -250,14 +250,14 @@ export default function DeliveryOrderDetail() {
                     value={trackingNo}
                     onChange={(e) => setTrackingNo(e.target.value)}
                     placeholder="Scan or type tracking number..."
-                    className="block w-full pl-11 pr-4 py-4 bg-white border-2 border-slate-200 rounded-2xl text-lg font-bold placeholder-slate-300 focus:border-indigo-500 focus:ring-0 transition-all outline-none text-slate-800"
+                    className="block w-full pl-11 pr-4 py-4 bg-white border-2 border-slate-200 rounded-md text-lg font-bold placeholder-slate-300 focus:border-indigo-500 focus:ring-0 transition-all outline-none text-slate-800"
                     autoFocus
                   />
                 </div>
                 <button
                   onClick={handleCompleteOrder}
                   disabled={submitting || (!isPaid && !isCOD)}
-                  className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-4 rounded-2xl font-black text-lg shadow-lg shadow-emerald-200 transition-all active:scale-95 flex items-center gap-2"
+                  className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-4 rounded-md font-black text-lg shadow-lg shadow-emerald-200 transition-all active:scale-95 flex items-center gap-2"
                 >
                   {submitting ? (
                     "Creating..."
@@ -276,7 +276,7 @@ export default function DeliveryOrderDetail() {
             </div>
 
             {/* Address Info */}
-            <div className="border border-slate-200 rounded-2xl p-6">
+            <div className="border border-slate-200 rounded-md p-6">
               <p className="text-xs font-bold text-slate-400 uppercase mb-2">
                 ที่อยู่จัดส่ง (Shipping Address)
               </p>

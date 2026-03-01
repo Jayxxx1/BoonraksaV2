@@ -54,51 +54,43 @@ export default function StockRecheck() {
   }, [fetchReadyOrders, search]);
 
   return (
-    <div className="min-h-screen bg-slate-50/50 py-8 px-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-          <div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight">
+    <div className="min-h-screen bg-[#F8FAFC]">
+      <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-5 animate-erp-in">
+        {/* ── Page Header ── */}
+        <div className="erp-page-header">
+          <div className="space-y-0.5">
+            <h1 className="erp-page-title">
+              <div className="erp-title-accent"></div>
               จัดการสต็อกและคลังสินค้า
             </h1>
-            <p className="text-slate-500 font-medium mt-1">
+            <p className="erp-page-subtitle">
               หยิบของและสแกนยืนยันสินค้าก่อนเข้าไลน์ผลิต
             </p>
           </div>
 
-          <div className="flex flex-col md:flex-row items-center gap-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
             <div className="relative group">
-              <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+              <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
               <input
                 type="text"
                 placeholder="ค้นหา Job ID หรือชื่อลูกค้า..."
-                className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all w-64 text-xs font-bold shadow-sm"
+                className="erp-search-input w-56"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
 
-            <div className="flex bg-white border border-slate-200 rounded-2xl p-1 shadow-sm">
+            <div className="erp-tab-container">
               {[
-                {
-                  id: "available",
-                  label: "รอเช็คสต็อก",
-                  color: "bg-emerald-500",
-                },
-                { id: "me", label: "งานที่ฉันเช็ค", color: "bg-indigo-600" },
-                {
-                  id: "history",
-                  label: "ประวัติสำเร็จ",
-                  color: "bg-amber-500",
-                },
+                { id: "available", label: "รอเช็คสต็อก" },
+                { id: "me", label: "งานที่ฉันเช็ค" },
+                { id: "history", label: "ประวัติสำเร็จ" },
               ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setViewTab(tab.id)}
-                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                    viewTab === tab.id
-                      ? `${tab.color} text-white shadow-lg`
-                      : "text-slate-400 hover:text-slate-600"
+                  className={`erp-tab ${
+                    viewTab === tab.id ? "erp-tab-active" : "erp-tab-inactive"
                   }`}
                 >
                   {tab.label}
@@ -109,94 +101,100 @@ export default function StockRecheck() {
         </div>
 
         {loading && orders.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-400 font-medium">
-            กำลังโหลดข้อมูล...
+          <div className="flex flex-col items-center justify-center py-16 animate-erp-in">
+            <div className="erp-spinner"></div>
+            <p className="text-slate-500 text-[12px] font-bold mt-4">
+              กำลังโหลดข้อมูล...
+            </p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    <th className="px-6 py-4">รายละเอียดงาน</th>
-                    <th className="px-6 py-4">สถานะ</th>
-                    <th className="px-6 py-4">พนักงานคลัง</th>
-                    <th className="px-6 py-4 text-right">ดำเนินการ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {orders.length === 0 ? (
+          <>
+            {/* Desktop Table */}
+            <div className="hidden lg:block erp-table-container">
+              <div className="overflow-x-auto">
+                <table className="erp-table">
+                  <thead>
                     <tr>
-                      <td
-                        colSpan="4"
-                        className="px-6 py-12 text-center text-slate-300 italic font-medium"
-                      >
-                        ไม่มีรายการในส่วนนี้
-                      </td>
+                      <th>รายละเอียดงาน</th>
+                      <th>สถานะ</th>
+                      <th>พนักงานคลัง</th>
+                      <th className="text-right">ดำเนินการ</th>
                     </tr>
-                  ) : (
-                    orders.map((order) => (
-                      <tr
-                        key={order.id}
-                        className={`hover:bg-indigo-50/30 transition-colors group ${
-                          order.isUrgent
-                            ? "bg-rose-50/40 border-l-4 border-l-rose-500"
-                            : ""
-                        }`}
-                      >
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-black text-slate-800">
-                              {order.jobId}
-                            </span>
-                            <span className="text-[11px] font-bold text-slate-500">
-                              {order.customerName}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${statusColors[order.status]?.bg || "bg-slate-100"} ${statusColors[order.status]?.text || "text-slate-600"}`}
-                          >
-                            {getStatusLabel(order.status)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-[10px] font-bold text-slate-500">
-                          {order.stock?.name || "-"}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <Link
-                            to={`/order/${order.id}`}
-                            className="inline-flex items-center justify-center px-4 py-1.5 bg-slate-900 text-white rounded-lg text-[10px] font-black hover:bg-indigo-600 transition-all shadow-sm"
-                          >
-                            ตรวจสอบและยืนยัน
-                          </Link>
+                  </thead>
+                  <tbody>
+                    {orders.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan="4"
+                          className="px-3 py-10 text-center text-slate-400 text-[12px] font-bold italic"
+                        >
+                          ไม่มีรายการในส่วนนี้
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      orders.map((order) => (
+                        <tr
+                          key={order.id}
+                          className={`transition-colors group ${
+                            order.isUrgent
+                              ? "bg-rose-50/30 border-l-2 border-l-rose-500"
+                              : ""
+                          }`}
+                        >
+                          <td className="px-3 py-2.5">
+                            <div className="flex flex-col">
+                              <span className="text-[12.5px] font-black text-slate-800">
+                                {order.jobId}
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-500">
+                                {order.customerName}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span
+                              className={`erp-status-badge ${statusColors[order.status]?.bg || "bg-slate-100"} ${statusColors[order.status]?.text || "text-slate-600"} ${statusColors[order.status]?.border || "border-slate-200"}`}
+                            >
+                              {getStatusLabel(order.status)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-[11px] font-bold text-slate-500">
+                            {order.stock?.name || "-"}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <Link
+                              to={`/order/${order.id}`}
+                              className="erp-action-btn"
+                            >
+                              ตรวจสอบและยืนยัน
+                            </Link>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            {/* Mobile Cards for Stock Recheck */}
-            <div className="lg:hidden flex flex-col gap-3 p-3 bg-slate-50/50">
+            {/* Mobile Cards */}
+            <div className="lg:hidden grid grid-cols-1 gap-2.5 mt-3">
               {orders.length === 0 ? (
-                <div className="px-6 py-12 text-center text-slate-300 italic font-medium">
-                  ไม่มีรายการในส่วนนี้
+                <div className="erp-empty-state">
+                  <p className="text-slate-400 text-[12px] font-bold">
+                    ไม่มีรายการในส่วนนี้
+                  </p>
                 </div>
               ) : (
                 orders.map((order) => (
                   <div
                     key={order.id}
-                    className={`block bg-white p-3.5 rounded-xl border transition-all ${
-                      order.isUrgent
-                        ? "border-rose-200 bg-rose-50/30 shadow-sm shadow-rose-100/50 block border-l-4 border-l-rose-500"
-                        : "border-slate-200 shadow-sm block"
+                    className={`erp-mobile-card ${
+                      order.isUrgent ? "erp-mobile-card-urgent" : ""
                     }`}
                   >
-                    <div className="flex justify-between items-start mb-2.5">
-                      <div className="flex flex-col gap-1.5 w-full">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex flex-col gap-1 w-full">
                         <div className="flex justify-between items-start">
                           <div className="flex flex-col">
                             <span
@@ -209,7 +207,7 @@ export default function StockRecheck() {
                             </span>
                           </div>
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter flex-shrink-0 text-center ${statusColors[order.status]?.bg || "bg-slate-100"} ${statusColors[order.status]?.text || "text-slate-600"}`}
+                            className={`erp-status-badge flex-shrink-0 ${statusColors[order.status]?.bg || "bg-slate-100"} ${statusColors[order.status]?.text || "text-slate-600"} ${statusColors[order.status]?.border || "border-slate-200"}`}
                           >
                             {getStatusLabel(order.status)}
                           </span>
@@ -226,20 +224,18 @@ export default function StockRecheck() {
                           {order.stock?.name || "-"}
                         </span>
                       </div>
-                      <div className="flex items-center">
-                        <Link
-                          to={`/order/${order.id}`}
-                          className="px-4 py-1.5 bg-slate-900 text-white border border-transparent rounded-lg text-[10.5px] font-black hover:bg-indigo-600 transition-all shadow-sm active:scale-95"
-                        >
-                          ตรวจสอบและยืนยัน
-                        </Link>
-                      </div>
+                      <Link
+                        to={`/order/${order.id}`}
+                        className="erp-action-btn"
+                      >
+                        ตรวจสอบและยืนยัน
+                      </Link>
                     </div>
                   </div>
                 ))
               )}
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>

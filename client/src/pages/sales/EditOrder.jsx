@@ -580,7 +580,9 @@ const EditOrder = () => {
       notes: orderInfo.notes,
       items,
       totalPrice: totals.finalTotal,
-      paidAmount: isDirectSale ? totals.finalTotal : parseFloat(paidAmount) || 0,
+      paidAmount: isDirectSale
+        ? totals.finalTotal
+        : parseFloat(paidAmount) || 0,
       blockPrice: totals.blockPrice,
       unitPrice: parseFloat(customUnitPrice) || 0,
       embroideryDetails: isDirectSale ? [] : embroidery,
@@ -659,7 +661,7 @@ const EditOrder = () => {
   if (success) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 text-slate-900">
-        <div className="bg-white rounded-[2rem] shadow-xl p-10 max-w-md w-full text-center animate-erp-in">
+        <div className="bg-white rounded-lg shadow-xl p-10 max-w-md w-full text-center animate-erp-in">
           <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <HiOutlineCheckCircle className="w-12 h-12 text-emerald-600" />
           </div>
@@ -719,8 +721,8 @@ const EditOrder = () => {
 
       {/* Pre-order Confirmation Modal */}
       {showPreOrderConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+        <div className="erp-modal-overlay">
+          <div className="erp-modal-content max-w-md w-full p-6">
             <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <HiOutlineExclamationTriangle className="w-10 h-10 text-amber-600" />
             </div>
@@ -831,7 +833,7 @@ const EditOrder = () => {
 
           {/* Sidebar Area: 4 Columns */}
           <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sticky top-24">
+            <div className="bg-white rounded-md shadow-sm border border-slate-200 p-6 sticky top-24">
               <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
                 <span className="w-1 h-6 bg-indigo-600 rounded-full"></span>
                 สรุปยอดรวม
@@ -890,10 +892,3 @@ const EditOrder = () => {
 };
 
 export default EditOrder;
-
-
-
-
-
-
-

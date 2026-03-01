@@ -56,7 +56,7 @@ export default function ProductionTVDashboard() {
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs uppercase tracking-widest text-slate-400 font-bold">
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
               Last update
             </p>
             <p className="text-lg font-black text-emerald-300">
@@ -66,11 +66,11 @@ export default function ProductionTVDashboard() {
         </header>
 
         {loading && (
-          <div className="h-64 rounded-3xl border border-slate-700 bg-slate-800 animate-pulse" />
+          <div className="h-64 rounded-lg border border-slate-700 bg-slate-800 animate-pulse" />
         )}
 
         {!loading && orders.length === 0 && (
-          <div className="h-64 rounded-3xl border border-dashed border-slate-600 bg-slate-800/40 flex items-center justify-center">
+          <div className="h-64 rounded-lg border border-dashed border-slate-600 bg-slate-800/40 flex items-center justify-center">
             <p className="text-slate-300 font-bold">
               No queue items at the moment.
             </p>
@@ -116,7 +116,7 @@ export default function ProductionTVDashboard() {
 function QueueGrid({ orders, getStatusLabel, compact = false }) {
   if (!orders.length) {
     return (
-      <div className="rounded-2xl border border-slate-700 bg-slate-800/50 py-8 px-6 text-slate-400 font-bold">
+      <div className="rounded-lg border border-slate-700 bg-slate-800/50 py-8 px-6 text-slate-400 font-bold">
         No items
       </div>
     );
@@ -124,12 +124,12 @@ function QueueGrid({ orders, getStatusLabel, compact = false }) {
 
   return (
     <div
-      className={`grid gap-4 ${compact ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"}`}
+      className={`grid gap-3 ${compact ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"}`}
     >
       {orders.map((order) => (
         <article
           key={order.id}
-          className={`rounded-2xl border p-4 ${order.isUrgent ? "border-rose-400 bg-rose-900/20" : "border-slate-700 bg-slate-800/70"}`}
+          className={`rounded-lg border p-4 ${order.isUrgent ? "border-rose-400 bg-rose-900/20" : "border-slate-700 bg-slate-800/70"}`}
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -139,7 +139,7 @@ function QueueGrid({ orders, getStatusLabel, compact = false }) {
               </p>
             </div>
             {order.isUrgent && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500 text-white text-xs font-black uppercase">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-500 text-white text-xs font-black uppercase">
                 <HiOutlineExclamationTriangle className="w-4 h-4" />
                 Urgent
               </span>

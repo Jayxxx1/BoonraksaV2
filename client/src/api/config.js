@@ -20,6 +20,16 @@ const api = axios.create({
 // Add a request interceptor to include the token
 api.interceptors.request.use(
   (config) => {
+    // Let browser set multipart boundary automatically for FormData requests.
+    if (config.data instanceof FormData) {
+      if (config.headers && typeof config.headers.set === "function") {
+        config.headers.set("Content-Type", undefined);
+      } else if (config.headers) {
+        delete config.headers["Content-Type"];
+        delete config.headers["content-type"];
+      }
+    }
+
     // 🆕 Don't attach token to auth endpoints (login/register) to prevent conflation
     if (config.url.includes("/auth/")) {
       return config;

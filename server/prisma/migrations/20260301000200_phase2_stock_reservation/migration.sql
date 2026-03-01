@@ -1,4 +1,4 @@
-﻿-- Phase 2: stock reservation support (soft lock while sales prepare order)
+-- Phase 2: stock reservation support (soft lock while sales prepare order)
 CREATE TABLE IF NOT EXISTS "StockReservation" (
   "id" SERIAL PRIMARY KEY,
   "sessionId" TEXT NOT NULL,

@@ -10,56 +10,73 @@ if (config.NODE_ENV === "development" && !fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");
 }
 
-// S3 Client Setup
-const s3 = new S3Client({
-  endpoint: config.S3_ENDPOINT,
-  region: config.S3_REGION,
-  credentials: {
-    accessKeyId: config.S3_ACCESS_KEY,
-    secretAccessKey: config.S3_SECRET_KEY,
-  },
-  forcePathStyle: true,
-});
-
 /**
  * Storage Selection Logic
  * - Production: S3
  * - Development: Local Disk if S3 variables are not set or in local mode
  */
-const isS3Configured =
+const isValidHttpUrl = (value) => {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const isS3Configured = Boolean(
   config.S3_ACCESS_KEY &&
-  config.S3_SECRET_KEY &&
-  config.S3_ENDPOINT &&
-  !config.S3_ENDPOINT.includes("localhost");
+    config.S3_SECRET_KEY &&
+    config.S3_BUCKET &&
+    isValidHttpUrl(config.S3_ENDPOINT) &&
+    !String(config.S3_ENDPOINT).includes("localhost") &&
+    !["dummy", "none", "-"].includes(
+      String(config.S3_ENDPOINT).trim().toLowerCase(),
+    ),
+);
+const useS3Storage = config.NODE_ENV !== "development" && isS3Configured;
 
-const s3Storage = multerS3({
-  s3: s3,
-  bucket: config.S3_BUCKET,
-  // Supabase S3 Compatibility does NOT support ACLs like 'public-read'.
-  // Privacy is handled at the bucket level in Supabase Dashboard.
-  metadata: function (req, file, cb) {
-    cb(null, { fieldName: file.fieldname });
-  },
-  key: function (req, file, cb) {
-    const folder = req.query.folder || "misc";
-    // Multer parses file names as latin1 by default. Convert to utf8.
-    let utf8Name = file.originalname;
-    try {
-      utf8Name = Buffer.from(file.originalname, "latin1").toString("utf8");
-    } catch (e) {}
+let s3Storage = null;
+if (useS3Storage) {
+  const s3 = new S3Client({
+    endpoint: config.S3_ENDPOINT,
+    region: config.S3_REGION,
+    credentials: {
+      accessKeyId: config.S3_ACCESS_KEY,
+      secretAccessKey: config.S3_SECRET_KEY,
+    },
+    forcePathStyle: true,
+  });
 
-    // Sanitize filename: Remove non-alphanumeric/dot/dash characters to be ultra-safe for S3
-    // This avoids characters like % from encodeURIComponent which some S3 layers reject in keys
-    const extension = path.extname(utf8Name);
-    const baseName = path
-      .basename(utf8Name, extension)
-      .replace(/[^a-zA-Z0-9]/g, "_"); // Replace Thai/Special chars with underscores
+  s3Storage = multerS3({
+    s3: s3,
+    bucket: config.S3_BUCKET,
+    // Supabase S3 Compatibility does NOT support ACLs like 'public-read'.
+    // Privacy is handled at the bucket level in Supabase Dashboard.
+    metadata: function (req, file, cb) {
+      cb(null, { fieldName: file.fieldname });
+    },
+    key: function (req, file, cb) {
+      const folder = req.query.folder || "misc";
+      // Multer parses file names as latin1 by default. Convert to utf8.
+      let utf8Name = file.originalname;
+      try {
+        utf8Name = Buffer.from(file.originalname, "latin1").toString("utf8");
+      } catch (e) {}
 
-    const safeName = `${baseName}${extension}`;
-    cb(null, `${folder}/${Date.now().toString()}-${safeName}`);
-  },
-  contentType: multerS3.AUTO_CONTENT_TYPE,
-});
+      // Sanitize filename: Remove non-alphanumeric/dot/dash characters to be ultra-safe for S3
+      // This avoids characters like % from encodeURIComponent which some S3 layers reject in keys
+      const extension = path.extname(utf8Name);
+      const baseName = path
+        .basename(utf8Name, extension)
+        .replace(/[^a-zA-Z0-9]/g, "_"); // Replace Thai/Special chars with underscores
+
+      const safeName = `${baseName}${extension}`;
+      cb(null, `${folder}/${Date.now().toString()}-${safeName}`);
+    },
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+  });
+}
 
 const localStorage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -80,7 +97,7 @@ const localStorage = multer.diskStorage({
 });
 
 export const upload = multer({
-  storage: isS3Configured ? s3Storage : localStorage,
+  storage: useS3Storage ? s3Storage : localStorage,
   limits: {
     fileSize: 1024 * 1024 * 15, // 15MB for embroidery/AI files
   },

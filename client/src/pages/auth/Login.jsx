@@ -15,7 +15,6 @@ export default function Login() {
   const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated && user) {
       navigate("/", { replace: true });
@@ -38,37 +37,37 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo & Header */}
-        <div className="text-center mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-pastel-blue to-pastel-pink rounded-3xl shadow-xl shadow-indigo-200/50 mb-4">
-            <HiOutlineCube className="w-10 h-10 text-white" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-indigo-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md animate-erp-in">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-600 to-indigo-500 rounded-lg shadow-xl shadow-indigo-200/50 mb-4">
+            <HiOutlineCube className="w-9 h-9 text-white" />
           </div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">
-            Boon<span className="text-pastel-blue">raksa</span>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight">
+            Boon<span className="text-indigo-600">raksa</span>
           </h1>
-          <p className="text-slate-500 font-medium mt-2">
+          <p className="text-slate-500 text-[12px] font-bold mt-1.5">
             ระบบจัดการโรงงานเสื้อผ้า
           </p>
         </div>
 
-        {/* Login Form */}
-        <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 p-8 md:p-10 border border-slate-100 animate-in fade-in slide-in-from-bottom-8 duration-700">
-          <h2 className="text-2xl font-bold text-slate-800 mb-6">
+        {/* Form Card */}
+        <div className="bg-white rounded-lg shadow-2xl shadow-slate-200/50 p-6 md:p-8 border border-slate-100">
+          <h2 className="text-lg font-black text-slate-800 mb-5">
             เข้าสู่ระบบ
           </h2>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
-              <HiOutlineExclamationCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm font-medium text-red-600">{error}</p>
+            <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-md flex items-start gap-2.5">
+              <HiOutlineExclamationCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] font-bold text-red-600">{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-600 ml-1">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-600 ml-0.5">
                 ชื่อผู้ใช้
               </label>
               <input
@@ -76,14 +75,14 @@ export default function Login() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value.trim())}
                 required
-                className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all text-slate-800 font-medium"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all text-slate-800 text-[13px] font-bold"
                 placeholder="กรอกชื่อผู้ใช้"
                 disabled={loading}
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-600 ml-1">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-600 ml-0.5">
                 รหัสผ่าน
               </label>
               <input
@@ -91,7 +90,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value.trim())}
                 required
-                className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all text-slate-800 font-medium"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all text-slate-800 text-[13px] font-bold"
                 placeholder="กรอกรหัสผ่าน"
                 disabled={loading}
               />
@@ -100,42 +99,38 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full py-4 rounded-2xl font-bold text-white text-lg flex items-center justify-center gap-2 transition-all shadow-xl mt-8 ${
+              className={`w-full py-3 rounded-md font-black text-white text-sm flex items-center justify-center gap-2 transition-all shadow-lg mt-6 ${
                 loading
                   ? "bg-slate-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-indigo-600 to-pastel-blue hover:from-indigo-700 hover:to-indigo-600 hover:shadow-2xl hover:-translate-y-0.5 active:scale-95"
+                  : "bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98]"
               }`}
             >
               {loading ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   กำลังเข้าสู่ระบบ...
                 </>
               ) : (
                 <>
                   เข้าสู่ระบบ
-                  <HiOutlineArrowRight className="w-5 h-5" />
+                  <HiOutlineArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
 
           {/* Demo Credentials */}
-          <div className="mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+          <div className="mt-6 p-3 bg-slate-50 rounded-md border border-slate-100">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
               ข้อมูลสำหรับล็อกอินทดสอบ
             </p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
               <div>
-                <span className="text-slate-500 font-medium">
-                  ชื่อผู้ใช้ (Username):
-                </span>
+                <span className="text-slate-500 font-medium">Username:</span>
                 <p className="font-mono font-bold text-slate-700">admin</p>
               </div>
               <div>
-                <span className="text-slate-500 font-medium">
-                  รหัสผ่าน (Password):
-                </span>
+                <span className="text-slate-500 font-medium">Password:</span>
                 <p className="font-mono font-bold text-slate-700">
                   password123
                 </p>
@@ -144,7 +139,7 @@ export default function Login() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-slate-400 mt-6 font-medium">
+        <p className="text-center text-[10px] text-slate-400 mt-5 font-medium">
           © 2026 Boonraksa System. All rights reserved.
         </p>
       </div>

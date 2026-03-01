@@ -34,7 +34,7 @@ const CustomerProofSheet = () => {
 
   return (
     <div className="bg-slate-100 min-h-screen py-10 px-4 print:bg-white print:p-0">
-      <div className="max-w-4xl mx-auto bg-white shadow-2xl rounded-[2rem] overflow-hidden print:shadow-none print:rounded-none">
+      <div className="max-w-4xl mx-auto bg-white shadow-2xl rounded-lg overflow-hidden print:shadow-none print:rounded-none">
         {/* Header */}
         <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
           <div>
@@ -47,7 +47,7 @@ const CustomerProofSheet = () => {
           </div>
           <button
             onClick={() => window.print()}
-            className="bg-white/10 hover:bg-white/20 p-3 rounded-2xl transition-all print:hidden"
+            className="bg-white/10 hover:bg-white/20 p-3 rounded-md transition-all print:hidden"
           >
             <HiOutlinePrinter className="w-6 h-6" />
           </button>
@@ -83,7 +83,7 @@ const CustomerProofSheet = () => {
             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
               🛒 สรุปรายการสินค้า
             </h3>
-            <div className="bg-slate-50 rounded-3xl p-6">
+            <div className="bg-slate-50 rounded-lg p-6">
               <table className="w-full">
                 <thead>
                   <tr className="text-[10px] font-black text-slate-400 uppercase border-b border-slate-200">
@@ -123,7 +123,7 @@ const CustomerProofSheet = () => {
               {order.positions?.map((pos, idx) => (
                 <div
                   key={idx}
-                  className="bg-white border-2 border-slate-50 rounded-3xl p-6 shadow-sm flex flex-col gap-4"
+                  className="bg-white border-2 border-slate-50 rounded-lg p-6 shadow-sm flex flex-col gap-4"
                 >
                   <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-50">
                     <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-black">
@@ -135,7 +135,7 @@ const CustomerProofSheet = () => {
                   </div>
 
                   {/* Mockup Image Large */}
-                  <div className="aspect-[4/3] bg-slate-50 rounded-2xl overflow-hidden border border-slate-100">
+                  <div className="aspect-[4/3] bg-slate-50 rounded-md overflow-hidden border border-slate-100">
                     {pos.mockupUrl ? (
                       <img
                         src={pos.mockupUrl}
@@ -183,7 +183,7 @@ const CustomerProofSheet = () => {
           </div>
 
           {/* Section 4: Finance (Optional based on Sales preference) */}
-          <div className="bg-slate-900 rounded-3xl p-8 text-white flex flex-wrap items-center justify-between gap-6">
+          <div className="bg-slate-900 rounded-lg p-8 text-white flex flex-wrap items-center justify-between gap-6">
             <div>
               <p className="text-[10px] font-black text-indigo-400 uppercase mb-1">
                 ยอดรวมทั้งหมด

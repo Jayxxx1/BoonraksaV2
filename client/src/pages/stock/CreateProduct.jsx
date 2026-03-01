@@ -135,11 +135,7 @@ export default function CreateProduct() {
 
     setIsSubmitting(true);
     try {
-      await api.post(
-        "/stock/receive",
-        { items },
-        { headers: getAuthHeader() },
-      );
+      await api.post("/stock/receive", { items }, { headers: getAuthHeader() });
       alert("บันทึกสต็อกเรียบร้อยแล้ว");
       navigate("/");
     } catch (err) {
@@ -181,9 +177,9 @@ export default function CreateProduct() {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-10">
       <button
         onClick={() => setViewMode("ADD_STOCK")}
-        className="group bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 hover:border-indigo-200 hover:bg-slate-50 transition-all flex flex-col items-center text-center space-y-4"
+        className="group bg-white p-10 rounded-lg border border-slate-100 shadow-xl shadow-slate-200/50 hover:border-indigo-200 hover:bg-slate-50 transition-all flex flex-col items-center text-center space-y-4"
       >
-        <div className="w-20 h-20 bg-indigo-50 text-indigo-500 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform">
+        <div className="w-20 h-20 bg-indigo-50 text-indigo-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
           <HiOutlineCube className="w-10 h-10" />
         </div>
         <div>
@@ -198,9 +194,9 @@ export default function CreateProduct() {
 
       <button
         onClick={() => setViewMode("NEW_PRODUCT")}
-        className="group bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 hover:border-rose-200 hover:bg-slate-50 transition-all flex flex-col items-center text-center space-y-4"
+        className="group bg-white p-10 rounded-lg border border-slate-100 shadow-xl shadow-slate-200/50 hover:border-rose-200 hover:bg-slate-50 transition-all flex flex-col items-center text-center space-y-4"
       >
-        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform">
+        <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
           <HiOutlineSparkles className="w-10 h-10" />
         </div>
         <div>
@@ -217,13 +213,13 @@ export default function CreateProduct() {
 
   const renderAddStock = () => (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm space-y-6">
+      <div className="bg-white p-8 rounded-lg border border-slate-100 shadow-sm space-y-6">
         <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
           <HiOutlineCube className="text-indigo-500" />
           ค้นหาสินค้าที่เข้าเพิ่ม
         </h2>
         <select
-          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-100 transition-all font-bold text-lg"
+          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-md outline-none focus:ring-4 focus:ring-indigo-100 transition-all font-bold text-lg"
           value={selectedProductId}
           onChange={(e) => setSelectedProductId(e.target.value)}
         >
@@ -237,7 +233,7 @@ export default function CreateProduct() {
       </div>
 
       {selectedProduct && (
-        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border border-slate-100 shadow-sm overflow-hidden">
           <div className="p-8 border-b border-slate-50">
             <h2 className="text-lg font-bold text-slate-800">
               จำนวนที่รับเข้า: {selectedProduct.name}
@@ -303,7 +299,7 @@ export default function CreateProduct() {
             <button
               onClick={handleAddStockSubmit}
               disabled={isSubmitting}
-              className="px-12 py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
+              className="px-12 py-4 bg-indigo-600 text-white rounded-md font-black text-lg shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
             >
               {isSubmitting ? "กำลังบันทึก..." : "ยืนยันการเติมสต็อก"}
             </button>
@@ -319,7 +315,7 @@ export default function CreateProduct() {
       className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500"
     >
       {/* Basic Info */}
-      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8 md:p-10">
+      <div className="bg-white rounded-lg border border-slate-100 shadow-sm p-8 md:p-10">
         <h2 className="text-lg font-bold text-slate-800 mb-6 border-l-4 border-rose-400 pl-4">
           ข้อมูลสินค้าใหม่
         </h2>
@@ -334,7 +330,7 @@ export default function CreateProduct() {
               name="name"
               value={formData.name}
               onChange={handleInputChange}
-              className="w-full px-5 py-3 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-rose-50"
+              className="w-full px-5 py-3 bg-slate-50/50 border border-slate-200 rounded-md focus:ring-4 focus:ring-rose-50"
               placeholder="เช่น เสื้อโปโลคอจีน ลายปักบัว"
             />
           </div>
@@ -348,7 +344,7 @@ export default function CreateProduct() {
               name="categoryId"
               value={formData.categoryId}
               onChange={handleInputChange}
-              className="w-full px-5 py-3 bg-slate-50/50 border border-slate-200 rounded-2xl appearance-none"
+              className="w-full px-5 py-3 bg-slate-50/50 border border-slate-200 rounded-md appearance-none"
             >
               <option value="">เลือกหมวดหมู่</option>
               {categories.map((c) => (
@@ -364,14 +360,14 @@ export default function CreateProduct() {
               รูปภาพสินค้า
             </label>
             <div
-              className={`relative border-2 border-dashed rounded-3xl transition-all flex flex-col items-center justify-center p-8 ${formData.imageUrl ? "border-emerald-200 bg-emerald-50/30" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}
+              className={`relative border-2 border-dashed rounded-lg transition-all flex flex-col items-center justify-center p-8 ${formData.imageUrl ? "border-emerald-200 bg-emerald-50/30" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}
             >
               {formData.imageUrl ? (
                 <div className="relative w-40 h-40 group">
                   <img
                     src={formData.imageUrl}
                     alt="preview"
-                    className="w-full h-full object-cover rounded-2xl shadow-lg"
+                    className="w-full h-full object-cover rounded-md shadow-lg"
                   />
                   <button
                     type="button"
@@ -384,7 +380,7 @@ export default function CreateProduct() {
               ) : (
                 <label className="cursor-pointer flex flex-col items-center gap-2">
                   <div
-                    className={`w-12 h-12 rounded-2xl flex items-center justify-center ${uploading ? "bg-indigo-50" : "bg-white shadow-sm"}`}
+                    className={`w-12 h-12 rounded-md flex items-center justify-center ${uploading ? "bg-indigo-50" : "bg-white shadow-sm"}`}
                   >
                     <HiOutlineCloudArrowUp
                       className={`w-6 h-6 ${uploading ? "animate-bounce text-indigo-500" : "text-slate-400"}`}
@@ -413,7 +409,7 @@ export default function CreateProduct() {
               name="codePrefix"
               value={formData.codePrefix}
               onChange={handleInputChange}
-              className="w-full px-5 py-3 bg-slate-50/50 border border-slate-200 rounded-2xl"
+              className="w-full px-5 py-3 bg-slate-50/50 border border-slate-200 rounded-md"
               placeholder="A101"
             />
             <div className="mt-4 opacity-50">
@@ -425,7 +421,7 @@ export default function CreateProduct() {
                 value={formData.description}
                 onChange={handleInputChange}
                 rows="3"
-                className="w-full px-5 py-3 bg-slate-50/50 border border-slate-200 rounded-2xl resize-none mt-2"
+                className="w-full px-5 py-3 bg-slate-50/50 border border-slate-200 rounded-md resize-none mt-2"
               />
             </div>
           </div>
@@ -433,7 +429,7 @@ export default function CreateProduct() {
       </div>
 
       {/* Variants */}
-      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-100 shadow-sm overflow-hidden">
         <div className="p-8 border-b border-slate-50 flex justify-between items-center">
           <h2 className="text-lg font-bold text-slate-800">
             จัดการสต็อกและราคาเริ่มต้น
@@ -545,7 +541,7 @@ export default function CreateProduct() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="px-12 py-5 bg-slate-900 text-white rounded-3xl font-black text-xl shadow-2xl hover:bg-rose-600 transition-all disabled:opacity-50"
+          className="px-12 py-5 bg-slate-900 text-white rounded-lg font-black text-xl shadow-2xl hover:bg-rose-600 transition-all disabled:opacity-50"
         >
           {isSubmitting ? "กำลังบันทึก..." : "ยืนยันการเพิ่มสินค้าใหม่"}
         </button>
@@ -561,7 +557,7 @@ export default function CreateProduct() {
             onClick={() =>
               viewMode === "MENU" ? navigate("/") : setViewMode("MENU")
             }
-            className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-indigo-600 transition-all shadow-sm"
+            className="p-3 bg-white border border-slate-200 rounded-md text-slate-400 hover:text-indigo-600 transition-all shadow-sm"
           >
             <HiOutlineArrowLeft className="w-6 h-6" />
           </button>

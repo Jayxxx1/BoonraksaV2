@@ -4,6 +4,7 @@ import {
   HiOutlineCurrencyDollar,
   HiOutlineTrash,
 } from "react-icons/hi2";
+import ImagePreviewModal from "../../../../components/Common/ImagePreviewModal";
 
 const PaymentSection = ({
   draftImages,
@@ -27,6 +28,8 @@ const PaymentSection = ({
   requireQuotation,
   setRequireQuotation,
 }) => {
+  const [previewImage, setPreviewImage] = React.useState(null);
+
   const handlePaste = (e, uploadType) => {
     const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
@@ -43,68 +46,80 @@ const PaymentSection = ({
     }
   };
 
+  const recommendedPaidAmount = isDirectSale
+    ? totals.finalTotal
+    : totals.finalTotal * 0.5;
+  const balanceDue = Math.max(0, Number(totals.balance || 0));
+  const formatMoney = (value) =>
+    Number(value || 0).toLocaleString("th-TH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
   return (
     <div className="space-y-6">
       {/* 4. Attachments (Mockups) */}
-      <div
-        className="erp-card shadow-sm"
-        onPaste={(e) => handlePaste(e, "draft")}
-      >
-        <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <HiOutlinePhoto className="w-5 h-5 text-indigo-600" />
-            <h3 className="font-bold text-slate-800 text-sm">
-              รูปภาพวางแบบให้ลูกค้า (Paste Here)
-            </h3>
-          </div>
-          <div className="relative">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={onUploadDraft}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-            />
-            <button
-              type="button"
-              className="erp-button erp-button-secondary py-1.5 text-xs"
-              disabled={uploadingDraft}
-            >
-              {uploadingDraft ? "..." : "Upload Images"}
-            </button>
-          </div>
-        </div>
-        <div className="p-5">
-          {draftImages.length > 0 ? (
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-              {draftImages.map((img, idx) => (
-                <div
-                  key={idx}
-                  className="aspect-square bg-slate-50 rounded-lg border border-slate-100 overflow-hidden group relative shadow-inner"
-                >
-                  <img
-                    src={img}
-                    className="w-full h-full object-cover"
-                    alt={`mockup-${idx}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDraftImages(draftImages.filter((_, i) => i !== idx))
-                    }
-                    className="absolute top-1 right-1 p-1 bg-rose-500 text-white rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <HiOutlineTrash className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+      {!isDirectSale && (
+        <div
+          className="erp-card shadow-sm"
+          onPaste={(e) => handlePaste(e, "draft")}
+        >
+          <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <HiOutlinePhoto className="w-5 h-5 text-indigo-600" />
+              <h3 className="font-bold text-slate-800 text-sm">
+                รูปภาพวางแบบให้ลูกค้า (Paste Here)
+              </h3>
             </div>
-          ) : (
-            <p className="text-[10px] font-bold text-slate-400 text-center py-4">
-              อัปโหลดรูปภาพแบบเพื่อให้ลูกค้าคอนเฟิร์ม (รองรับ Ctrl+V)
-            </p>
-          )}
+            <div className="relative">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onUploadDraft}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+              <button
+                type="button"
+                className="erp-button erp-button-secondary py-1.5 text-xs"
+                disabled={uploadingDraft}
+              >
+                {uploadingDraft ? "..." : "Upload Images"}
+              </button>
+            </div>
+          </div>
+          <div className="p-5">
+            {draftImages.length > 0 ? (
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+                {draftImages.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="aspect-square bg-slate-50 rounded-lg border border-slate-100 overflow-hidden group relative shadow-inner"
+                  >
+                    <img
+                      src={img}
+                      className="w-full h-full object-cover"
+                      alt={`mockup-${idx}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDraftImages(draftImages.filter((_, i) => i !== idx))
+                      }
+                      className="absolute top-1 right-1 p-1 bg-rose-500 text-white rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <HiOutlineTrash className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] font-bold text-slate-400 text-center py-4">
+                อัปโหลดรูปภาพแบบเพื่อให้ลูกค้าคอนเฟิร์ม (รองรับ Ctrl+V)
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Payment Info Card */}
       <div className="erp-card shadow-sm border-t-4 border-t-emerald-500">
@@ -222,16 +237,16 @@ const PaymentSection = ({
                 className="erp-input py-2 text-lg font-black text-emerald-600 bg-emerald-50"
               />
               <p className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-tighter">
-                {isDirectSale ? "Direct sale requires full payment: ฿" : "ขั้นต่ำที่แนะนำ (50%): ฿"}
-                {Math.round(
-                  isDirectSale ? totals.finalTotal : totals.finalTotal * 0.5,
-                ).toLocaleString()}
+                {isDirectSale
+                  ? "ยอดชำระรวม (100%): "
+                  : "ขั้นต่ำที่แนะนำ (50%): "}
+                &#3647;{formatMoney(recommendedPaidAmount)}
               </p>
             </div>
             <div className="space-y-1">
               <label className="erp-label">ยอดคงเหลือค้างชำระ</label>
               <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-lg text-lg font-black text-rose-600 flex justify-between items-center">
-                <span>฿{totals.balance.toLocaleString()}</span>
+                <span>&#3647;{formatMoney(balanceDue)}</span>
                 <span className="text-[9px] font-bold uppercase tracking-tighter opacity-70">
                   รอการชำระ
                 </span>
@@ -239,31 +254,67 @@ const PaymentSection = ({
             </div>
           </div>
 
-          <div className="relative" onPaste={(e) => handlePaste(e, "slip")}>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={onUploadSlip}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-            />
-            <button
-              type="button"
-              className={`erp-button w-full py-2.5 text-xs font-bold border-2 border-dashed ${
-                depositSlipUrl
-                  ? "bg-white border-emerald-300 text-emerald-600"
-                  : "bg-slate-50 border-slate-200 text-slate-400"
-              }`}
-              disabled={isUploadingSlip}
-            >
-              {isUploadingSlip
-                ? "กำลังอัปโหลด..."
-                : depositSlipUrl
-                  ? "เปลี่ยนสลิป (Change Slip / Paste New)"
-                  : "+ อัปโหลดสลิปโอนเงิน (Upload Slip / Paste)"}
-            </button>
+          {/* Slip Upload + Preview */}
+          <div className="space-y-3" onPaste={(e) => handlePaste(e, "slip")}>
+            <div className="relative">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onUploadSlip}
+                className="absolute inset-0 opacity-0 cursor-pointer z-10"
+              />
+              <button
+                type="button"
+                className={`erp-button w-full py-2.5 text-xs font-bold border-2 border-dashed ${
+                  depositSlipUrl
+                    ? "bg-white border-emerald-300 text-emerald-600"
+                    : "bg-slate-50 border-slate-200 text-slate-400"
+                }`}
+                disabled={isUploadingSlip}
+              >
+                {isUploadingSlip
+                  ? "กำลังอัปโหลด..."
+                  : depositSlipUrl
+                    ? "เปลี่ยนสลิป (Change Slip / Paste New)"
+                    : "+ อัปโหลดสลิปโอนเงิน (Upload Slip / Paste)"}
+              </button>
+            </div>
+
+            {/* Slip Image Preview */}
+            {depositSlipUrl && (
+              <div className="animate-erp-card">
+                <div
+                  className="relative group rounded-lg border-2 border-emerald-200 bg-emerald-50/30 overflow-hidden cursor-pointer"
+                  onClick={() => setPreviewImage(depositSlipUrl)}
+                >
+                  <img
+                    src={depositSlipUrl}
+                    alt="Payment Slip Preview"
+                    className="w-full max-h-[200px] object-contain bg-white"
+                  />
+                  <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
+                    <p className="text-white font-black text-xs">
+                      คลิกเพื่อดูขนาดเต็ม
+                    </p>
+                    <p className="text-white/70 text-[10px] mt-1">
+                      Click to view full size
+                    </p>
+                  </div>
+                  <div className="absolute top-2 right-2 bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm animate-erp-pop">
+                    ✓ Uploaded
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      <ImagePreviewModal
+        isOpen={!!previewImage}
+        onClose={() => setPreviewImage(null)}
+        imageUrl={previewImage}
+      />
     </div>
   );
 };

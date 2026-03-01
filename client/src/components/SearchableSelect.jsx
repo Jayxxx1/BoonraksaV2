@@ -57,7 +57,7 @@ export default function SearchableSelect({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all outline-none text-left flex items-center justify-between"
+        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 transition-all outline-none text-left flex items-center justify-between"
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {imageKey && selected?.[imageKey] && (
@@ -82,7 +82,7 @@ export default function SearchableSelect({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-[200] w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-80 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="absolute z-[200] w-full mt-2 bg-white border border-slate-200 rounded-md shadow-2xl max-h-80 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           {/* Search Input */}
           <div className="p-3 border-b border-slate-100 sticky top-0 bg-white">
             <div className="relative">

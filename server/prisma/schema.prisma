@@ -267,6 +267,7 @@ model Order {
 
   artworkUrl String? // รูป Artwork จาก Graphic
   embroideryFileUrl  String?   // ไฟล์ .EMB เดิม (Legacy)
+  embroideryFileUrls String[]  @default([]) // ไฟล์ .EMB หลักของงาน (Digitizer, สูงสุด 15)
   trackingNo String? // เลขพัสดุ
   notes      String? // หมายเหตุจากออเดอร์
   cancelReason String? // เหตุผลการยกเลิก

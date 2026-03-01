@@ -149,8 +149,19 @@ export const claimTask = asyncHandler(async (req, res) => {
 
 export const updateSpecs = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const order = await orderService.updateSpecs(id, req.body, req.user);
-  sendSuccess(res, { order }, "อัปเดตสเปกงานเรียบร้อย");
+  try {
+    const order = await orderService.updateSpecs(id, req.body, req.user);
+    sendSuccess(res, { order }, "อัปเดตสเปกงานเรียบร้อย");
+  } catch (error) {
+    if (error.message === "EMBROIDERY_FILES_LIMIT_EXCEEDED") {
+      return sendError(
+        res,
+        "EMBROIDERY_FILES_LIMIT_EXCEEDED",
+        "สามารถอัปโหลดไฟล์ .emb ได้สูงสุด 15 ไฟล์",
+      );
+    }
+    throw error;
+  }
 });
 
 export const updatePurchasingInfo = asyncHandler(async (req, res) => {
@@ -276,8 +287,26 @@ export const downloadPDF = asyncHandler(async (req, res) => {
 
 export const uploadEmbroidery = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const order = await orderService.uploadEmbroidery(id, req.body, req.user);
-  sendSuccess(res, { order }, "บันทึกและส่งต่อฝ่ายกราฟิกเรียบร้อยแล้ว");
+  try {
+    const order = await orderService.uploadEmbroidery(id, req.body, req.user);
+    sendSuccess(res, { order }, "บันทึกและส่งต่อฝ่ายกราฟิกเรียบร้อยแล้ว");
+  } catch (error) {
+    if (error.message === "EMBROIDERY_FILE_REQUIRED") {
+      return sendError(
+        res,
+        "EMBROIDERY_FILE_REQUIRED",
+        "กรุณาอัปโหลดไฟล์ .emb อย่างน้อย 1 ไฟล์ก่อนส่งมอบงาน",
+      );
+    }
+    if (error.message === "EMBROIDERY_FILES_LIMIT_EXCEEDED") {
+      return sendError(
+        res,
+        "EMBROIDERY_FILES_LIMIT_EXCEEDED",
+        "สามารถอัปโหลดไฟล์ .emb ได้สูงสุด 15 ไฟล์",
+      );
+    }
+    throw error;
+  }
 });
 
 /**

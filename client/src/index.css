@@ -11,7 +11,7 @@
   --color-primary-light: #1e293b; /* Slate 800 */
   --color-accent: #4f46e5; /* Indigo 600 */
   --color-accent-light: #f8fafc; /* Slate 50 */
-  
+
   /* Status Colors */
   --color-success: #10b981; /* Emerald 500 */
   --color-warning: #f59e0b; /* Amber 500 */
@@ -26,7 +26,7 @@
 
 @theme {
   --font-sans: "Inter", "Sarabun", ui-sans-serif, system-ui, sans-serif;
-  
+
   --color-erp-navy: var(--color-primary);
   --color-erp-slate: var(--color-primary-light);
   --color-erp-accent: var(--color-accent);
@@ -40,17 +40,25 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  h1 { @apply text-xl font-bold tracking-tight text-slate-800 mb-4; }
-  h2 { @apply text-lg font-bold tracking-tight text-slate-800 mb-3; }
-  h3 { @apply text-base font-bold tracking-tight text-slate-800 mb-2; }
-  h4 { @apply text-sm font-bold tracking-tight text-slate-800 mb-1; }
+  h1 {
+    @apply text-xl font-bold tracking-tight text-slate-800 mb-4;
+  }
+  h2 {
+    @apply text-lg font-bold tracking-tight text-slate-800 mb-3;
+  }
+  h3 {
+    @apply text-base font-bold tracking-tight text-slate-800 mb-2;
+  }
+  h4 {
+    @apply text-sm font-bold tracking-tight text-slate-800 mb-1;
+  }
 }
 
 @layer components {
   .erp-card {
     @apply bg-white border border-slate-200 rounded-[var(--radius-erp)] shadow-[var(--shadow-erp)] transition-all duration-200;
   }
-  
+
   .erp-card-hover {
     @apply hover:shadow-[var(--shadow-erp-hover)] hover:border-slate-300;
   }
@@ -102,6 +110,118 @@
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight;
   }
 
+  /* ── Page Header ── */
+  .erp-page-header {
+    @apply mb-5 flex flex-col md:flex-row md:items-center justify-between gap-3;
+  }
+
+  .erp-page-title {
+    @apply text-xl font-black text-slate-900 tracking-tight flex items-center gap-2.5;
+  }
+
+  .erp-page-subtitle {
+    @apply text-slate-500 text-[12px] font-medium pl-3.5;
+  }
+
+  .erp-title-accent {
+    @apply w-1 h-6 bg-indigo-600 rounded-full shrink-0;
+  }
+
+  /* ── Tab Pills ── */
+  .erp-tab-container {
+    @apply flex bg-slate-100/80 p-1 rounded-lg w-fit border border-slate-200/50;
+  }
+
+  .erp-tab {
+    @apply px-3.5 py-1.5 rounded-md text-[11px] font-black transition-all duration-200 cursor-pointer;
+  }
+
+  .erp-tab-active {
+    @apply bg-white text-indigo-600 shadow-sm;
+  }
+
+  .erp-tab-inactive {
+    @apply text-slate-500 hover:text-slate-800;
+  }
+
+  /* ── Filter Bar ── */
+  .erp-filter-bar {
+    @apply bg-white rounded-lg border border-slate-200/60 shadow-[var(--shadow-erp)] p-3.5 mb-5;
+  }
+
+  .erp-search-input {
+    @apply w-full pl-9 pr-4 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600/5 focus:border-indigo-500 focus:bg-white transition-all text-[13px] font-bold placeholder:text-slate-400;
+  }
+
+  /* ── Table Container ── */
+  .erp-table-container {
+    @apply bg-white rounded-lg border border-slate-200/60 shadow-[var(--shadow-erp)] overflow-hidden;
+  }
+
+  /* ── Status Badge (unified) ── */
+  .erp-status-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight border;
+  }
+
+  /* ── Mobile Card ── */
+  .erp-mobile-card {
+    @apply block bg-white p-3 rounded-lg border border-slate-200 shadow-[var(--shadow-erp)] transition-all active:scale-[0.98];
+  }
+
+  .erp-mobile-card-urgent {
+    @apply border-rose-200 bg-rose-50/20;
+  }
+
+  /* ── Empty State ── */
+  .erp-empty-state {
+    @apply bg-white rounded-lg border border-dashed border-slate-200 p-10 text-center;
+  }
+
+  /* ── Loading Spinner ── */
+  .erp-spinner {
+    @apply w-10 h-10 border-[3px] border-slate-100 border-t-indigo-600 rounded-full animate-spin;
+  }
+
+  /* ── Action Buttons in tables ── */
+  .erp-action-btn {
+    @apply inline-flex items-center justify-center px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-[10.5px] font-black transition-all shadow-sm active:scale-95;
+  }
+
+  /* ── Urgent indicator ── */
+  .erp-urgent-tag {
+    @apply inline-flex items-center gap-1 px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8.5px] font-black uppercase rounded;
+  }
+
+  .erp-pre-tag {
+    @apply inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8.5px] font-black uppercase rounded border border-amber-200;
+  }
+
+  /* ── Section Dividers ── */
+  .erp-section {
+    @apply bg-white rounded-lg border border-slate-200 shadow-[var(--shadow-erp)] p-4;
+  }
+
+  .erp-section-title {
+    @apply text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3;
+  }
+
+  /* ── View Toggle ── */
+  .erp-view-toggle {
+    @apply flex bg-white border border-slate-200 rounded-lg p-0.5 shadow-sm;
+  }
+
+  .erp-view-toggle-btn {
+    @apply px-3 py-1.5 rounded-md text-[11px] font-black transition-all;
+  }
+
+  .erp-view-toggle-active {
+    @apply bg-slate-900 text-white shadow-sm;
+  }
+
+  .erp-view-toggle-inactive {
+    @apply text-slate-500 hover:text-slate-800;
+  }
+
   /* Scrollbar Polish */
   ::-webkit-scrollbar {
     @apply w-1 h-1;
@@ -116,13 +236,319 @@
   }
 }
 
-/* Animations - Subtle */
+/* ═══════════════════════════════════════════════
+   ANIMATIONS — Micro-interactions & Polish
+   ═══════════════════════════════════════════════ */
+
+/* ── Core Page Transitions ── */
 @keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Modal Animations ── */
+@keyframes modalBackdropIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.animate-erp-in {
-  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+@keyframes modalScaleIn {
+  from { opacity: 0; transform: scale(0.92) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
+@keyframes modalScaleOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.92) translateY(10px); }
+}
+
+/* ── Card & Element Effects ── */
+@keyframes cardEntrance {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes popIn {
+  0% { opacity: 0; transform: scale(0.5); }
+  50% { transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ── Status & Feedback ── */
+@keyframes successPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+}
+
+@keyframes dangerPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
+@keyframes warningPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes checkDraw {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@keyframes badgeBounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+  50% { box-shadow: 0 0 12px 2px rgba(79, 70, 229, 0.15); }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes progressFill {
+  from { width: 0%; }
+}
+
+@keyframes tableRowIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes tooltipIn {
+  from { opacity: 0; transform: translateY(4px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ═══════════════════════════════════════════════
+   UTILITY CLASSES
+   ═══════════════════════════════════════════════ */
+
+/* Core transitions */
+.animate-erp-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-erp-slide-up {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-erp-slide-down {
+  animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-erp-slide-right {
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-erp-slide-left {
+  animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Modal system */
+.animate-erp-backdrop {
+  animation: modalBackdropIn 0.2s ease-out both;
+}
+
+.animate-erp-modal {
+  animation: modalScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-erp-scale-in {
+  animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Card & list effects */
+.animate-erp-card {
+  animation: cardEntrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-erp-pop {
+  animation: popIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Staggered children animation */
+.animate-stagger > * {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.animate-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.animate-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.animate-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.animate-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.animate-stagger > *:nth-child(6) { animation-delay: 200ms; }
+.animate-stagger > *:nth-child(7) { animation-delay: 240ms; }
+.animate-stagger > *:nth-child(8) { animation-delay: 280ms; }
+.animate-stagger > *:nth-child(9) { animation-delay: 320ms; }
+.animate-stagger > *:nth-child(10) { animation-delay: 360ms; }
+
+/* Status pulses */
+.animate-success-pulse {
+  animation: successPulse 2s ease-in-out infinite;
+}
+
+.animate-danger-pulse {
+  animation: dangerPulse 2s ease-in-out infinite;
+}
+
+.animate-warning-pulse {
+  animation: warningPulse 2s ease-in-out infinite;
+}
+
+/* Skeleton loading shimmer */
+.animate-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Floating effect for empty states */
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Badge notification bounce */
+.animate-badge-bounce {
+  animation: badgeBounce 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Interactive glow on focus/active */
+.animate-glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* Number counter entrance */
+.animate-count-up {
+  animation: countUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Progress bar fill */
+.animate-progress {
+  animation: progressFill 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Table row entrance */
+.animate-row-in {
+  animation: tableRowIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Tooltip */
+.animate-tooltip {
+  animation: tooltipIn 0.15s ease-out both;
+}
+
+/* ── Enhanced Interactive States ── */
+
+/* Card hover lift */
+.erp-card-interactive {
+  @apply transition-all duration-300 cursor-pointer;
+}
+.erp-card-interactive:hover {
+  @apply shadow-md -translate-y-0.5 border-indigo-200;
+}
+
+/* Button press ripple effect */
+.erp-button-glow:hover {
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+.erp-button-glow:active {
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+/* Focus ring for inputs */
+.erp-focus-ring:focus-within {
+  @apply ring-2 ring-indigo-600/10 border-indigo-400;
+}
+
+/* Table row hover highlight */
+.erp-row-highlight {
+  @apply transition-colors duration-150;
+}
+.erp-row-highlight:hover {
+  @apply bg-indigo-50/40;
+}
+
+/* Status indicator dot (live) */
+.erp-status-dot {
+  @apply relative;
+}
+.erp-status-dot::before {
+  content: '';
+  @apply absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500;
+  animation: successPulse 2s ease-in-out infinite;
+}
+
+/* Gradient text for emphasis */
+.erp-gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600;
+}
+
+/* Smooth number transition */
+.erp-number-transition {
+  @apply transition-all duration-500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Modal backdrop blur transition */
+.erp-modal-overlay {
+  @apply fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm;
+  animation: modalBackdropIn 0.2s ease-out both;
+}
+
+.erp-modal-content {
+  @apply bg-white rounded-lg shadow-2xl;
+  animation: modalScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Toast notification */
+.erp-toast {
+  @apply fixed bottom-6 right-6 z-[200] px-4 py-3 rounded-lg shadow-xl border text-[12px] font-bold;
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Progress bar */
+.erp-progress-bar {
+  @apply h-1.5 rounded-full overflow-hidden bg-slate-100;
+}
+.erp-progress-bar > div {
+  @apply h-full rounded-full transition-all duration-700 ease-out;
+}

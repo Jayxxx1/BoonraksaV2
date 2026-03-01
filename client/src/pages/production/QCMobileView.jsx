@@ -36,65 +36,64 @@ export default function QCTaskBoard() {
 
   if (loading)
     return (
-      <div className="p-8 text-center text-slate-400">
-        กำลังโหลดรายการ QC...
+      <div className="flex flex-col items-center justify-center min-h-[60vh] animate-erp-in">
+        <div className="erp-spinner"></div>
+        <p className="text-slate-500 text-[12px] font-bold mt-4">
+          กำลังโหลดรายการ QC...
+        </p>
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
-      <div className="bg-teal-600 p-8 rounded-b-[3rem] shadow-xl text-white mb-8">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <h1 className="text-3xl font-black flex items-center gap-3">
-              <HiOutlineCheckBadge className="w-10 h-10" />
+    <div className="min-h-screen bg-[#F8FAFC] pb-20">
+      <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-5 animate-erp-in">
+        {/* ── Page Header ── */}
+        <div className="erp-page-header mb-5">
+          <div className="space-y-0.5">
+            <h1 className="erp-page-title">
+              <div className="erp-title-accent"></div>
+              <HiOutlineCheckBadge className="w-5 h-5 text-indigo-600" />
               แผนกตรวจสอบคุณภาพ (QC)
             </h1>
-            <p className="text-teal-100 font-medium">
+            <p className="erp-page-subtitle">
               ตรวจสอบชิ้นงานที่ผลิตเสร็จแล้ว ก่อนส่งไปยังฝ่ายจัดส่ง
             </p>
           </div>
-
-          <div className="flex bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 shadow-inner">
+          <div className="erp-tab-container">
             {[
-              { id: "me", label: "งานของฉัน", color: "bg-teal-500" },
-              { id: "available", label: "รอตรวจ QC", color: "bg-emerald-500" },
-              { id: "history", label: "ประวัติสำเร็จ", color: "bg-amber-500" },
+              { id: "me", label: "งานของฉัน" },
+              { id: "available", label: "รอตรวจ QC" },
+              { id: "history", label: "ประวัติสำเร็จ" },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setViewTab(tab.id)}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                  viewTab === tab.id
-                    ? `${tab.color} text-white shadow-lg`
-                    : "text-teal-100 hover:text-white"
-                }`}
+                className={`erp-tab ${viewTab === tab.id ? "erp-tab-active" : "erp-tab-inactive"}`}
               >
                 {tab.label}
               </button>
             ))}
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* ── Table ── */}
+        <div className="erp-table-container">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="erp-table">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-400 uppercase tracking-wider">
-                  <th className="px-6 py-4">รายละเอียดงาน</th>
-                  <th className="px-6 py-4">สถานะ</th>
-                  <th className="px-6 py-4">ผู้ตรวจ QC</th>
-                  <th className="px-6 py-4 text-right">ดำเนินการ</th>
+                <tr>
+                  <th>รายละเอียดงาน</th>
+                  <th>สถานะ</th>
+                  <th>ผู้ตรวจ QC</th>
+                  <th className="text-right">ดำเนินการ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {orders.length === 0 ? (
                   <tr>
                     <td
                       colSpan="4"
-                      className="px-6 py-12 text-center text-slate-300 italic font-medium"
+                      className="px-3 py-10 text-center text-slate-400 text-[12px] font-bold"
                     >
                       ไม่มีรายการงานในหน้านี้
                     </td>
@@ -103,18 +102,16 @@ export default function QCTaskBoard() {
                   orders.map((order) => (
                     <tr
                       key={order.id}
-                      className="hover:bg-teal-50/20 transition-colors"
+                      className="hover:bg-slate-50/80 transition-colors group"
                     >
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-black text-slate-800">
+                            <span className="text-[12.5px] font-black text-slate-900">
                               {order.jobId}
                             </span>
                             {order.isUrgent && (
-                              <span className="text-[9px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded uppercase animate-pulse">
-                                งานด่วน
-                              </span>
+                              <span className="erp-urgent-tag">ด่วน</span>
                             )}
                           </div>
                           <span className="text-[11px] font-bold text-slate-500">
@@ -122,12 +119,12 @@ export default function QCTaskBoard() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-2.5">
                         <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                          className={`erp-status-badge ${
                             order.status === "QC_PASSED"
-                              ? "bg-emerald-100 text-emerald-600"
-                              : "bg-orange-100 text-orange-600"
+                              ? "bg-emerald-100 text-emerald-600 border-emerald-200"
+                              : "bg-orange-100 text-orange-600 border-orange-200"
                           }`}
                         >
                           {{
@@ -137,7 +134,7 @@ export default function QCTaskBoard() {
                           }[order.status] || order.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-2.5">
                         {order.qc ? (
                           <span className="text-[11px] font-bold text-emerald-600">
                             {order.qc.name}
@@ -148,10 +145,10 @@ export default function QCTaskBoard() {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-3 py-2.5 text-right">
                         <Link
                           to={`/order/${order.id}`}
-                          className="inline-flex items-center justify-center px-4 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-black hover:bg-teal-600 transition-all shadow-sm"
+                          className="erp-action-btn"
                         >
                           ตรวจสอบงาน
                         </Link>
@@ -165,10 +162,10 @@ export default function QCTaskBoard() {
         </div>
       </div>
 
-      {/* Mobile Floating Action Button */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2">
-        <button className="w-16 h-16 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center ring-8 ring-white">
-          <HiOutlineQrCode className="w-8 h-8" />
+      {/* Mobile FAB */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 lg:hidden">
+        <button className="w-14 h-14 bg-slate-900 text-white rounded-lg shadow-2xl flex items-center justify-center ring-4 ring-white">
+          <HiOutlineQrCode className="w-7 h-7" />
         </button>
       </div>
     </div>

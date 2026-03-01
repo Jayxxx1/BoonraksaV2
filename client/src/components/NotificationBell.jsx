@@ -73,7 +73,7 @@ const NotificationBell = () => {
             className="fixed inset-0 z-[70]"
             onClick={() => setIsOpen(false)}
           ></div>
-          <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[80] overflow-hidden animate-in slide-in-from-top-2 duration-200">
+          <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-md shadow-2xl z-[80] overflow-hidden animate-in slide-in-from-top-2 duration-200">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <h3 className="font-bold text-slate-800 text-sm">การแจ้งเตือน</h3>
               {unreadCount > 0 && (
